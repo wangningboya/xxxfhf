@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  构建期 Maven 配置（只在 Docker 构建阶段使用，不参与运行）。
+
+  为什么需要：服务器在境内，直连 Maven Central 拉 150–200MB 依赖通常要几分钟，
+  网络抖动时还会直接超时失败，让「第一次 docker compose up 构建」变成碰运气。
+
+  为什么 mirrorOf 写 central 而不是 *：
+  `*` 会把所有仓库（含将来可能加的私服、公司 Nexus）一并劫持到阿里云，
+  到时候私服里的包会「莫名拉不到」。只镜像 central 最安全，覆盖面已经够——
+  本项目全部依赖（Spring Boot 4.1.2 / MyBatis-Plus 3.5.18 / jjwt）都在 Central 上。
+-->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 https://maven.apache.org/xsd/settings-1.0.0.xsd">
+
+    <mirrors>
+        <mirror>
+            <id>aliyun-central</id>
+            <name>阿里云公共仓库（代理 Maven Central）</name>
+            <url>https://maven.aliyun.com/repository/public</url>
+            <mirrorOf>central</mirrorOf>
+        </mirror>
+    </mirrors>
+
+</settings>

@@ -1,0 +1,40 @@
+<view class="page">
+  <scroll-view class="tabs" scroll-x enable-flex>
+    <view
+      class="tab {{status === item.key ? 'tab-active' : ''}}"
+      wx:for="{{tabs}}"
+      wx:key="key"
+      data-key="{{item.key}}"
+      bindtap="onSwitchTab"
+    >
+      {{item.label}}
+    </view>
+  </scroll-view>
+
+  <view class="empty" wx:if="{{!loading && !list.length}}">
+    <view class="empty-title">还没有订单</view>
+    <view class="empty-desc">回首页选餐下单吧</view>
+  </view>
+
+  <view class="order" wx:for="{{list}}" wx:key="orderId" data-id="{{item.orderId}}" bindtap="onOpen">
+    <view class="order-head">
+      <text class="order-no">{{item.orderNo}}</text>
+      <text class="order-status status-{{item.status}}">{{item.statusLabel}}</text>
+    </view>
+    <view class="order-summary">{{item.summary}}</view>
+    <view class="order-reason" wx:if="{{item.status === 'rejected' && item.rejectReason}}">
+      拒单原因：{{item.rejectReason}}
+    </view>
+    <view class="order-cancel" wx:if="{{item.cancelRequested}}">已提交取消申请，等待商家处理</view>
+    <view class="order-foot">
+      <text class="order-date">供餐日 {{item.serveDate}} · {{item.qty}} 份</text>
+      <text class="order-amount">¥{{item.totalText}}</text>
+    </view>
+    <view class="order-code" wx:if="{{item.pickupCode && (item.status === 'accepted' || item.status === 'making' || item.status === 'ready')}}">
+      取餐码 {{item.pickupCode}}
+    </view>
+  </view>
+
+  <view class="tip" wx:if="{{loading}}">加载中…</view>
+  <view class="tip" wx:elif="{{finished && list.length}}">没有更多了</view>
+</view>

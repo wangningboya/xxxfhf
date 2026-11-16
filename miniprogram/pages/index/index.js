@@ -1,0 +1,328 @@
+const app = getApp();
+const { request } = require('../../utils/request');
+const { yuan, dateStr, addDays, dayLabel } = require('../../utils/format');
+const cartUtil = require('../../utils/cart');
+
+Page({
+  data: {
+    loading: true,
+    shopName: '本店',
+    shopNotice: '',
+    serveTimeText: '',
+    cutoffTime: '',
+    /** pending / approved / rejected */
+    auditStatus: 'pending',
+    rejectReason: '',
+    auditTitle: '',
+    auditDesc: '',
+    showAuditCard: false,
+    reapplyLoading: false,
+    /** 还没填昵称时弹填写浮层：商家审核列表靠昵称认人 */
+    needNickName: false,
+    nickNameInput: '',
+    savingNickName: false,
+
+    /* ---------------- 菜单 ---------------- */
+    /** 两个供餐日：明天可下单、后天只读（需求 4.5） */
+    dates: [],
+    activeDate: '',
+    menu: { orderable: false, cutoff: false, closed: false, items: [] },
+    menuLoading: false,
+    /** 菜单项展示用（价格已转成元，避免 wxml 里做除法） */
+    viewItems: [],
+    cartCount: 0,
+    cartAmountText: '0.00',
+  },
+
+  onLoad(options) {
+    // 群卡片的 shareTicket 在 onLoad 的 options 里，留给 bootstrap 尝试绑定群
+    this.shareOptions = options || {};
+  },
+
+  onShow() {
+    this.refreshCartBar();
+    if (this.loadingNow) {
+      return;
+    }
+    this.loadingNow = true;
+    this.init();
+  },
+
+  init() {
+    const today = dateStr();
+    const tomorrow = addDays(today, 1);
+    const dayAfter = addDays(today, 2);
+    this.setData({
+      dates: [
+        { date: tomorrow, label: dayLabel(tomorrow, today, tomorrow) },
+        { date: dayAfter, label: dayLabel(dayAfter, today, tomorrow) },
+      ],
+    });
+
+    app
+      .bootstrap(this.shareOptions)
+      .then((me) => {
+        if (!me || !me.accessGranted) {
+          // 不是本店群里的人：直接进引导页，首页不渲染内容
+          wx.reLaunch({ url: '/pages/no-access/index' });
+          return null;
+        }
+        this.applyMe(me);
+        return app.loadConfig();
+      })
+      .then((config) => {
+        if (config) {
+          this.applyConfig(config);
+        }
+        const active = this.data.activeDate || (this.data.dates[0] && this.data.dates[0].date) || '';
+        this.setData({ loading: false, activeDate: active });
+        return this.loadMenu(active);
+      })
+      .catch((err) => {
+        this.setData({ loading: false });
+        app.toastError(err);
+      })
+      .then(() => {
+        this.loadingNow = false;
+      });
+  },
+
+  applyMe(me) {
+    const status = me.auditStatus || 'pending';
+    let title = '';
+    let desc = '';
+
+    if (status === 'pending') {
+      title = '已提交申请，等待商家审核';
+      desc = '审核通过后即可下单。商家审核后回到本页会自动更新。';
+    } else if (status === 'rejected') {
+      title = '审核未通过';
+      desc = me.rejectReason || '请联系群管理员了解原因。';
+    }
+
+    this.setData({
+      auditStatus: status,
+      rejectReason: me.rejectReason || '',
+      auditTitle: title,
+      auditDesc: desc,
+      showAuditCard: status !== 'approved',
+      // 微信已不返回真实昵称，只能靠用户自己填一次；没填就弹浮层
+      needNickName: !me.nickName,
+    });
+  },
+
+  applyConfig(config) {
+    this.setData({
+      shopName: config.shopName || '本店',
+      shopNotice: config.shopNotice || '',
+      serveTimeText: config.serveTimeText || '',
+      cutoffTime: config.cutoffTime || '',
+    });
+  },
+
+  /* ==================== 菜单 ==================== */
+
+  loadMenu(date) {
+    if (!date) {
+      return Promise.resolve();
+    }
+    this.setData({ menuLoading: true });
+    return request({ url: '/menu?serveDate=' + date })
+      .then((menu) => {
+        const viewItems = (menu.items || []).map((item) => ({
+          comboId: item.comboId,
+          name: item.name,
+          cover: item.cover,
+          price: Number(item.price || 0),
+          priceText: yuan(item.price),
+          dishesText: (item.dishes || []).map((d) => d.name + '×' + d.qty).join('、'),
+          hasSpec: (item.specGroups || []).length > 0,
+          // 不限量时 remainQty 为 null，文案要区分「不限量」和「还剩 N 份」
+          remainText: item.remainQty === null || item.remainQty === undefined
+            ? '不限量'
+            : (item.remainQty > 0 ? '剩 ' + item.remainQty + ' 份' : '已售完'),
+          soldOut: item.remainQty !== null && item.remainQty !== undefined && item.remainQty <= 0,
+        }));
+        this.setData({ menu, viewItems });
+      })
+      .catch((err) => {
+        app.toastError(err);
+      })
+      .then(() => {
+        this.setData({ menuLoading: false });
+      });
+  },
+
+  /** 切换供餐日。后天只能看不能买，但仍要能看。 */
+  onSwitchDate(e) {
+    const date = e.currentTarget.dataset.date;
+    if (!date || date === this.data.activeDate) {
+      return;
+    }
+    const cart = cartUtil.load();
+    if (cart.items.length && cart.serveDate && cart.serveDate !== date) {
+      wx.showModal({
+        title: '切换供餐日',
+        content: '购物车里是另一个供餐日的餐，切换后需要重新选，继续吗？',
+        success: (res) => {
+          if (!res.confirm) {
+            return;
+          }
+          cartUtil.clear();
+          this.refreshCartBar();
+          this.setData({ activeDate: date });
+          this.loadMenu(date);
+        },
+      });
+      return;
+    }
+    this.setData({ activeDate: date });
+    this.loadMenu(date);
+  },
+
+  /** 点卡片进详情：规格只能在那里选 */
+  onOpenCombo(e) {
+    const comboId = e.currentTarget.dataset.id;
+    wx.navigateTo({
+      url: '/pages/combo/detail?comboId=' + comboId + '&serveDate=' + this.data.activeDate,
+    });
+  },
+
+  /**
+   * 快速加购。
+   *
+   * 有规格组的盒饭不允许直接加 —— 规格必须让用户看到并选，否则做出来是错的。
+   * 没有规格组的就直接 +1，省一次跳转。
+   */
+  onQuickAdd(e) {
+    const comboId = e.currentTarget.dataset.id;
+    const item = this.data.viewItems.find((v) => v.comboId === comboId);
+    if (!item) {
+      return;
+    }
+    if (!this.data.menu.orderable) {
+      wx.showToast({
+        title: this.data.menu.closed ? '该供餐日暂停供应' : '当前不可下单',
+        icon: 'none',
+      });
+      return;
+    }
+    if (item.soldOut) {
+      wx.showToast({ title: '已售完', icon: 'none' });
+      return;
+    }
+    if (item.hasSpec) {
+      this.onOpenCombo(e);
+      return;
+    }
+    this.addToCart({
+      comboId,
+      name: item.name,
+      cover: item.cover,
+      price: item.price,
+      qty: 1,
+      optionIds: [],
+      specDeltas: [],
+      specText: '',
+    });
+  },
+
+  addToCart(line) {
+    let cart = cartUtil.load();
+    if (cart.serveDate && cart.serveDate !== this.data.activeDate) {
+      cart = cartUtil.empty();
+    }
+    const next = cartUtil.addLine(cart, line);
+    next.serveDate = this.data.activeDate;
+    cartUtil.save(next);
+    this.refreshCartBar();
+    wx.showToast({ title: '已加入', icon: 'success', duration: 800 });
+  },
+
+  refreshCartBar() {
+    const cart = cartUtil.load();
+    this.setData({
+      cartCount: cartUtil.count(cart),
+      cartAmountText: yuan(cartUtil.goodsAmount(cart)),
+    });
+  },
+
+  /* ==================== 导航 ==================== */
+
+  onOpenCart() {
+    if (!this.data.cartCount) {
+      wx.showToast({ title: '还没有选餐', icon: 'none' });
+      return;
+    }
+    wx.navigateTo({ url: '/pages/cart/index' });
+  },
+
+  onOpenMine() {
+    wx.navigateTo({ url: '/pages/mine/index' });
+  },
+
+  onOpenOrders() {
+    wx.navigateTo({ url: '/pages/order/list' });
+  },
+
+  /* ==================== 审核 / 昵称 ==================== */
+
+  /** 被驳回后重新提交申请 */
+  onReapply() {
+    if (this.data.reapplyLoading) {
+      return;
+    }
+    this.setData({ reapplyLoading: true });
+
+    request({ url: '/auth/reapply', method: 'POST' })
+      .then(() => {
+        wx.showToast({ title: '已重新提交', icon: 'success' });
+        return app.refreshMe();
+      })
+      .then((me) => {
+        this.applyMe(me);
+      })
+      .catch((err) => {
+        app.toastError(err);
+      })
+      .then(() => {
+        this.setData({ reapplyLoading: false });
+      });
+  },
+
+  /**
+   * 昵称输入。
+   *
+   * `type="nickname"` 的输入框，用户点键盘上方「使用微信昵称」时只保证触发 blur / change，
+   * 手打时才有 input，所以三种事件都接同一个处理函数，删掉任何一种都会漏值。
+   */
+  onNickNameInput(e) {
+    this.setData({ nickNameInput: (e.detail && e.detail.value) || '' });
+  },
+
+  /** 保存昵称。成功即关浮层（applyMe 会重新判断是否需要填）。 */
+  onSaveNickName() {
+    if (this.data.savingNickName) {
+      return;
+    }
+    const nickName = (this.data.nickNameInput || '').trim();
+    if (!nickName) {
+      wx.showToast({ title: '请填写昵称', icon: 'none' });
+      return;
+    }
+
+    this.setData({ savingNickName: true });
+    request({ url: '/auth/nickname', method: 'POST', data: { nickName } })
+      .then(() => app.refreshMe())
+      .then((me) => {
+        this.applyMe(me);
+        wx.showToast({ title: '已保存', icon: 'success' });
+      })
+      .catch((err) => {
+        app.toastError(err);
+      })
+      .then(() => {
+        this.setData({ savingNickName: false });
+      });
+  },
+});

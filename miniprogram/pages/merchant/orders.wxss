@@ -1,0 +1,176 @@
+@import "./merchant.wxss";
+
+.page {
+  padding: 24rpx;
+}
+
+.filters {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16rpx;
+}
+
+.date-pick {
+  background: #ffffff;
+  border-radius: 14rpx;
+  padding: 16rpx 24rpx;
+  font-size: 26rpx;
+  color: #1a1a1a;
+}
+
+.search {
+  flex: 1;
+  margin-left: 16rpx;
+}
+
+.search-input {
+  height: 68rpx;
+  background: #ffffff;
+  border-radius: 14rpx;
+  padding: 0 24rpx;
+  font-size: 26rpx;
+  box-sizing: border-box;
+}
+
+.tabs {
+  white-space: nowrap;
+  padding: 8rpx 0 16rpx;
+}
+
+.tab {
+  display: inline-block;
+  padding: 12rpx 24rpx;
+  margin-right: 14rpx;
+  border-radius: 26rpx;
+  background: #ffffff;
+  color: #6a6a6a;
+  font-size: 26rpx;
+}
+
+.tab-active {
+  background: #ff9f1c;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.order {
+  background: #ffffff;
+  border-radius: 20rpx;
+  padding: 24rpx 28rpx;
+  margin-bottom: 20rpx;
+}
+
+.order-warn {
+  background: #fff8f7;
+  border: 1rpx solid #f5c6c2;
+}
+
+.order-head {
+  display: flex;
+  align-items: center;
+}
+
+.check {
+  width: 44rpx;
+  height: 44rpx;
+  border-radius: 10rpx;
+  border: 2rpx solid #d8d8d8;
+  margin-right: 16rpx;
+  font-size: 26rpx;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.check-on {
+  background: #ff9f1c;
+  border-color: #ff9f1c;
+}
+
+.check-off {
+  background: #f5f6f8;
+  border-color: #eceef1;
+}
+
+.order-name {
+  flex: 1;
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.order-status {
+  font-size: 26rpx;
+  color: #8a8a8a;
+}
+
+.order-summary {
+  margin-top: 14rpx;
+  font-size: 28rpx;
+  color: #1a1a1a;
+  line-height: 1.5;
+}
+
+.order-meta {
+  margin-top: 10rpx;
+  font-size: 22rpx;
+  color: #9a9a9a;
+}
+
+.badges {
+  margin-top: 14rpx;
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.badge {
+  font-size: 20rpx;
+  color: #6a6a6a;
+  background: #f5f6f8;
+  border-radius: 8rpx;
+  padding: 4rpx 12rpx;
+  margin-right: 12rpx;
+  margin-bottom: 8rpx;
+}
+
+.badge-red {
+  background: #fdecec;
+  color: #c0392b;
+}
+
+.badge-warn {
+  background: #fff8e6;
+  color: #a86b00;
+}
+
+.order-foot {
+  margin-top: 14rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.order-phone {
+  font-size: 24rpx;
+  color: #8a8a8a;
+}
+
+.order-amount {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #e8442e;
+}
+
+.tip {
+  text-align: center;
+  font-size: 24rpx;
+  color: #b0b0b0;
+  padding: 24rpx 0;
+}
+
+.accept {
+  flex: 1;
+  margin-left: 16rpx;
+}

@@ -1,0 +1,47 @@
+<view class="page">
+  <view class="card">
+    <view class="field">
+      <input class="field-input" placeholder="搜索盒饭名称" placeholder-class="ph"
+             value="{{keyword}}" bindinput="onKeyword" />
+    </view>
+    <view class="chips" style="margin-top:16rpx">
+      <view class="chip {{status === '' ? 'chip-active' : ''}}" data-status="" bindtap="onStatus">全部</view>
+      <view class="chip {{status === 'on' ? 'chip-active' : ''}}" data-status="on" bindtap="onStatus">已上架</view>
+      <view class="chip {{status === 'off' ? 'chip-active' : ''}}" data-status="off" bindtap="onStatus">已下架</view>
+    </view>
+  </view>
+
+  <view wx:if="{{loading}}" class="empty"><view class="empty-title">加载中…</view></view>
+
+  <view wx:for="{{combos}}" wx:key="id" class="card">
+    <view class="combo-head">
+      <image wx:if="{{item.cover}}" class="combo-cover" src="{{item.cover}}" mode="aspectFill" />
+      <view class="combo-main">
+        <view class="combo-name">
+          {{item.name}}
+          <text class="badge {{item.status === 'on' ? 'badge-on' : ''}}">
+            {{item.status === 'on' ? '在售' : '下架'}}
+          </text>
+        </view>
+        <view class="combo-price">¥{{item.priceText}}</view>
+        <view class="muted">{{item.dishesText || '未配置菜品'}}</view>
+        <view class="muted" wx:if="{{item.specCount > 0}}">启用 {{item.specCount}} 个规格组</view>
+      </view>
+    </view>
+    <view class="ops">
+      <text class="op" data-index="{{index}}" bindtap="onEdit">编辑</text>
+      <text class="op" data-index="{{index}}" bindtap="onToggle">{{item.status === 'on' ? '下架' : '上架'}}</text>
+      <text class="op op-danger" data-index="{{index}}" bindtap="onDelete">删除</text>
+    </view>
+  </view>
+
+  <view wx:if="{{!loading && combos.length === 0}}" class="empty">
+    <view class="empty-title">还没有盒饭</view>
+    <view class="empty-desc">盒饭是卖给顾客的那一份，先建盒饭再排每日菜单</view>
+  </view>
+
+  <view class="bottom-gap"></view>
+  <view class="bottom-bar">
+    <view class="btn" bindtap="onNew">新增盒饭</view>
+  </view>
+</view>

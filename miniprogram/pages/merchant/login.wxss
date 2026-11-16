@@ -1,0 +1,28 @@
+@import "./merchant.wxss";
+
+.hero {
+  padding: 48rpx 8rpx 36rpx;
+}
+
+.hero-title {
+  font-size: 44rpx;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.hero-desc {
+  margin-top: 14rpx;
+  font-size: 26rpx;
+  color: #8a8a8a;
+}
+
+.login {
+  margin-top: 40rpx;
+}
+
+.back {
+  margin-top: 32rpx;
+  text-align: center;
+  font-size: 26rpx;
+  color: #8a8a8a;
+}

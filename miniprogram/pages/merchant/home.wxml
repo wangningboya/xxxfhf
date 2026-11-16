@@ -1,0 +1,85 @@
+<view class="page">
+  <view class="head">
+    <view class="head-name">{{displayName}}</view>
+    <view class="head-sub">供餐日 {{serveDate}} · {{cutoffText}}</view>
+  </view>
+
+  <view class="stats">
+    <view class="stat" data-url="/pages/merchant/orders?status=pending_accept" bindtap="onGo">
+      <view class="stat-num">{{pendingAccept}}</view>
+      <view class="stat-label">待接单</view>
+    </view>
+    <view class="stat" data-url="/pages/merchant/audit" bindtap="onGo">
+      <view class="stat-num">{{pendingAudit}}</view>
+      <view class="stat-label">待审核</view>
+    </view>
+    <view class="stat" data-url="/pages/merchant/menu" bindtap="onGo">
+      <view class="stat-num">{{comboCount}}</view>
+      <view class="stat-label">明日盒饭</view>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="row">
+      <text class="row-label">供餐日状态</text>
+      <text class="row-value">{{closed ? '已暂停供应' : '正常供应'}}</text>
+    </view>
+    <view class="row" bindtap="onToggleClosed">
+      <text class="row-label">{{closed ? '恢复供应' : '暂停供应'}}</text>
+      <text class="row-value muted">点此切换 ›</text>
+    </view>
+  </view>
+
+  <view class="grid">
+    <view wx:if="{{can.order}}" class="grid-item" data-url="/pages/merchant/orders" bindtap="onGo">
+      <view class="grid-title">接单</view>
+      <view class="grid-desc">批量接单与推进状态</view>
+    </view>
+    <view wx:if="{{can.order}}" class="grid-item" data-url="/pages/merchant/proxy-order" bindtap="onGo">
+      <view class="grid-title">代客下单</view>
+      <view class="grid-desc">替顾客补单</view>
+    </view>
+    <view wx:if="{{can.pickup}}" class="grid-item" data-url="/pages/merchant/pickup" bindtap="onGo">
+      <view class="grid-title">取餐核销</view>
+      <view class="grid-desc">输 4 位码完成订单</view>
+    </view>
+    <view wx:if="{{can.prep}}" class="grid-item" data-url="/pages/merchant/prep" bindtap="onGo">
+      <view class="grid-title">备菜</view>
+      <view class="grid-desc">按菜品与区域汇总</view>
+    </view>
+    <view wx:if="{{can.finance}}" class="grid-item" data-url="/pages/merchant/finance" bindtap="onGo">
+      <view class="grid-title">对账</view>
+      <view class="grid-desc">应收、已收、未收</view>
+    </view>
+    <view wx:if="{{can.audit}}" class="grid-item" data-url="/pages/merchant/audit" bindtap="onGo">
+      <view class="grid-title">用户审核</view>
+      <view class="grid-desc">通过、驳回、发邀请码</view>
+    </view>
+    <view wx:if="{{can.users}}" class="grid-item" data-url="/pages/merchant/users" bindtap="onGo">
+      <view class="grid-title">用户与地址</view>
+      <view class="grid-desc">代维护收货地址</view>
+    </view>
+    <view wx:if="{{can.regions}}" class="grid-item" data-url="/pages/merchant/regions" bindtap="onGo">
+      <view class="grid-title">区域管理</view>
+      <view class="grid-desc">配送区域与排序</view>
+    </view>
+    <view wx:if="{{can.dishes}}" class="grid-item" data-url="/pages/merchant/dishes" bindtap="onGo">
+      <view class="grid-title">菜品库</view>
+      <view class="grid-desc">原料菜增删改</view>
+    </view>
+    <view wx:if="{{can.combos}}" class="grid-item" data-url="/pages/merchant/combos" bindtap="onGo">
+      <view class="grid-title">盒饭管理</view>
+      <view class="grid-desc">组成、定价、上下架</view>
+    </view>
+    <view wx:if="{{can.menu}}" class="grid-item" data-url="/pages/merchant/menu" bindtap="onGo">
+      <view class="grid-title">每日菜单</view>
+      <view class="grid-desc">选盒饭、设份数、发布</view>
+    </view>
+    <view wx:if="{{can.config}}" class="grid-item" data-url="/pages/merchant/config" bindtap="onGo">
+      <view class="grid-title">配置</view>
+      <view class="grid-desc">截单时间、收款码等</view>
+    </view>
+  </view>
+
+  <view class="logout" bindtap="onLogout">退出商家端</view>
+</view>

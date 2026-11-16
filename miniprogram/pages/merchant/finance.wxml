@@ -1,0 +1,41 @@
+<view class="page">
+  <view class="card">
+    <view class="field">
+      <text class="field-label">供餐日</text>
+      <picker mode="date" value="{{serveDate}}" bindchange="onDateChange">
+        <view class="field-input">{{serveDate}} ›</view>
+      </picker>
+    </view>
+    <view class="muted">共 {{orderCount}} 单。数字只看，改动在订单详情里做。</view>
+  </view>
+
+  <view class="buckets">
+    <view wx:for="{{buckets}}" wx:key="key"
+          class="bucket {{detailBucket === item.key ? 'bucket-on' : ''}}"
+          data-bucket="{{item.key}}" bindtap="onBucket">
+      <view class="bucket-label">{{item.label}}</view>
+      <view class="bucket-amount">¥{{item.amountText}}</view>
+      <view class="bucket-count">{{item.count}} 单</view>
+      <view class="bucket-hint">{{item.hint}}</view>
+    </view>
+  </view>
+
+  <view wx:if="{{detailBucket}}" class="card">
+    <view class="card-title">{{detailTitle}}</view>
+    <view wx:if="{{detailLoading}}" class="muted">加载中…</view>
+    <view wx:elif="{{detail.length === 0}}" class="muted">这一栏没有订单</view>
+    <view wx:for="{{detail}}" wx:key="orderNo" class="line">
+      <view class="line-head">
+        <text class="line-no">{{item.orderNo}}</text>
+        <text class="line-amount">¥{{item.totalText}}</text>
+      </view>
+      <view class="muted">{{item.contactName}} · {{item.deliveryType}}</view>
+      <view class="muted">{{item.statusLabel}} / {{item.payStatusLabel}}</view>
+      <view class="muted">{{item.items}}</view>
+    </view>
+  </view>
+
+  <view wx:if="{{!detailBucket}}" class="muted" style="text-align:center">
+    点任意一栏查看对应订单明细
+  </view>
+</view>

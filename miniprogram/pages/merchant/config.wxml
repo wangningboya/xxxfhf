@@ -1,0 +1,60 @@
+<view class="page">
+  <view class="card">
+    <view class="card-title">店铺</view>
+    <view class="field">
+      <text class="field-label">名称</text>
+      <input class="field-input" value="{{config.shopName}}" data-field="shopName" placeholder="店铺名称" placeholder-class="ph" bindinput="onInput" />
+    </view>
+    <view class="field">
+      <text class="field-label">公告</text>
+      <input class="field-input" value="{{config.shopNotice}}" data-field="shopNotice" placeholder="首页滚动展示" placeholder-class="ph" bindinput="onInput" />
+    </view>
+    <view class="field">
+      <text class="field-label">供餐时段</text>
+      <input class="field-input" value="{{config.serveTimeText}}" data-field="serveTimeText" placeholder="如 午饭前" placeholder-class="ph" bindinput="onInput" />
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="card-title">下单规则</view>
+    <picker mode="time" value="{{config.cutoffTime}}" bindchange="onTimeChange">
+      <view class="field">
+        <text class="field-label">截单时间</text>
+        <text class="field-input">{{config.cutoffTime || '请选择'}} ▾</text>
+      </view>
+    </picker>
+    <view class="field">
+      <text class="field-label">配送费(元)</text>
+      <input class="field-input" type="digit" value="{{deliveryFeeYuan}}" placeholder="0.00" placeholder-class="ph" bindinput="onFeeInput" />
+    </view>
+    <view class="field">
+      <text class="field-label">释放分钟</text>
+      <input class="field-input" type="number" value="{{config.prepayReleaseMinutes}}" data-field="prepayReleaseMinutes" placeholder="30" placeholder-class="ph" bindinput="onInput" />
+    </view>
+    <view class="note">超过该分钟数仍未确认收款，订单份数会被释放（订单仍保留）</view>
+  </view>
+
+  <view class="card">
+    <view class="card-title">自取时段</view>
+    <textarea
+      class="slots"
+      value="{{slotsText}}"
+      placeholder="一行一个，例如：&#10;11:00-11:30&#10;11:30-12:00"
+      placeholder-class="ph"
+      maxlength="500"
+      bindinput="onSlotsInput"
+    />
+    <view class="note">全局一套，所有供餐日通用；不限每个时段的份数</view>
+  </view>
+
+  <view class="card">
+    <view class="card-title">收款码</view>
+    <image class="qr" wx:if="{{config.payQrCode}}" src="{{config.payQrCode}}" mode="aspectFit" bindtap="onUploadQr" />
+    <view class="qr-empty" wx:else bindtap="onUploadQr">点击上传收款码</view>
+    <view class="note">用户下单后在订单页看到它，转完点「我已完成转账」</view>
+  </view>
+
+  <view class="save {{saving ? 'btn-disabled' : ''}}" bindtap="onSave">
+    {{saving ? '保存中…' : '保存配置'}}
+  </view>
+</view>

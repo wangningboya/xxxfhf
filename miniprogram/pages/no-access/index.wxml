@@ -1,0 +1,38 @@
+<view class="page">
+  <view class="badge">
+    <text class="badge-text">需准入</text>
+  </view>
+
+  <view class="title">需要先加入本店的服务群</view>
+  <view class="desc">
+    你还没有取得本店的准入资格。如果你就在群里，请从群里的分享卡片重新进入；也可以向商家索要邀请码。
+  </view>
+
+  <view class="form-card">
+    <view class="form-label">输入邀请码</view>
+    <input
+      class="form-input"
+      type="text"
+      maxlength="8"
+      placeholder="8 位字母数字"
+      placeholder-class="form-placeholder"
+      value="{{code}}"
+      bindinput="onCodeInput"
+      confirm-type="done"
+      bindconfirm="onSubmit"
+    />
+    <button
+      class="submit-btn"
+      loading="{{submitting}}"
+      disabled="{{submitting}}"
+      bindtap="onSubmit"
+    >
+      验证并进入
+    </button>
+  </view>
+
+  <view class="tips">
+    <view class="tips-line">邀请码一次性使用，过期后需向商家重新索取。</view>
+    <view class="tips-line" wx:if="{{loginFailed}}">微信登录失败，请退出小程序后重新进入。</view>
+  </view>
+</view>

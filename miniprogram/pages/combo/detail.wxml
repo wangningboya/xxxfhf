@@ -1,0 +1,59 @@
+<view class="page" wx:if="{{!loading && item}}">
+  <image class="cover" wx:if="{{item.cover}}" src="{{item.cover}}" mode="aspectFill" />
+  <view class="cover cover-empty" wx:else>暂无图片</view>
+
+  <view class="card">
+    <view class="title-row">
+      <view class="name">{{item.name}}</view>
+      <view class="price">¥{{priceText}}</view>
+    </view>
+    <view class="dishes" wx:if="{{dishesText}}">含：{{dishesText}}</view>
+    <view class="remain">
+      剩余
+      <text wx:if="{{item.remainQty === null || item.remainQty === undefined}}">不限量</text>
+      <text wx:else>{{item.remainQty}} 份</text>
+    </view>
+  </view>
+
+  <view class="card" wx:for="{{groups}}" wx:key="name" wx:for-index="gi" wx:for-item="group">
+    <view class="group-head">
+      <text class="group-name">{{group.name}}</text>
+      <text class="group-tag">{{group.required ? '必选' : '可选'}}</text>
+    </view>
+    <view class="options">
+      <view
+        class="option {{selected[gi] === opt.optionId ? 'option-active' : ''}}"
+        wx:for="{{group.options}}"
+        wx:for-item="opt"
+        wx:key="optionId"
+        data-group="{{gi}}"
+        data-id="{{opt.optionId}}"
+        bindtap="onSelectOption"
+      >
+        <text>{{opt.name}}</text>
+        <text class="option-delta" wx:if="{{opt.deltaText}}">{{opt.deltaText}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="qty-row">
+    <text class="qty-label">份数</text>
+    <view class="stepper">
+      <view class="step {{qty <= 1 ? 'step-disabled' : ''}}" bindtap="onMinus">−</view>
+      <view class="step-value">{{qty}}</view>
+      <view class="step {{qty >= maxQty ? 'step-disabled' : ''}}" bindtap="onPlus">＋</view>
+    </view>
+  </view>
+
+  <view class="bottom-gap"></view>
+
+  <view class="bottom-bar">
+    <view class="total">
+      <text class="total-label">合计</text>
+      <text class="total-amount">¥{{totalText}}</text>
+    </view>
+    <view class="add-btn {{orderable ? '' : 'add-btn-disabled'}}" bindtap="onAdd">
+      {{orderable ? '加入购物车' : '当前不可下单'}}
+    </view>
+  </view>
+</view>

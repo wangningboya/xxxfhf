@@ -1,0 +1,92 @@
+@import "./merchant.wxss";
+
+.pick {
+  color: #1a1a1a;
+}
+
+.code-card {
+  background: #ffffff;
+  border-radius: 20rpx;
+  padding: 48rpx 32rpx 36rpx;
+  margin-bottom: 24rpx;
+  position: relative;
+}
+
+.code-title {
+  text-align: center;
+  font-size: 28rpx;
+  color: #6a6a6a;
+}
+
+.code-boxes {
+  display: flex;
+  justify-content: center;
+  margin-top: 32rpx;
+}
+
+.box {
+  width: 100rpx;
+  height: 120rpx;
+  margin: 0 12rpx;
+  border-radius: 16rpx;
+  background: #f5f6f8;
+  border: 2rpx solid #f5f6f8;
+  font-size: 56rpx;
+  font-weight: 700;
+  color: #1a1a1a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.box-on {
+  border-color: #ff9f1c;
+  background: #fff8ef;
+}
+
+/* 真正的输入框藏在格子后面，视觉上用格子 */
+.hidden-input {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 140rpx;
+  opacity: 0;
+}
+
+.code-hint {
+  margin-top: 28rpx;
+  text-align: center;
+  font-size: 24rpx;
+  color: #b0b0b0;
+}
+
+.result {
+  background: #ffffff;
+  border-radius: 20rpx;
+  padding: 32rpx;
+}
+
+.result-ok {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #2e9e5b;
+  margin-bottom: 20rpx;
+}
+
+.result-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 26rpx;
+  color: #6a6a6a;
+  padding: 10rpx 0;
+}
+
+.result-items {
+  margin-top: 16rpx;
+  padding-top: 16rpx;
+  border-top: 1rpx solid #f2f3f5;
+  font-size: 26rpx;
+  color: #1a1a1a;
+  line-height: 1.8;
+}

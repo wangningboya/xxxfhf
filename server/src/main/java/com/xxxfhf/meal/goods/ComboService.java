@@ -1,0 +1,264 @@
+package com.xxxfhf.meal.goods;
+
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.xxxfhf.meal.common.BizException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * 盒饭维护（售卖层）：用户真正下单买的东西。
+ *
+ * 金额一律整数**分**。商家在界面上按元填写，换算在前端做（元 × 100 取整），
+ * 服务端只认分 —— 让小数进库是将来对不上账的根源。
+ */
+@Service
+public class ComboService {
+
+    private static final Logger log = LoggerFactory.getLogger(ComboService.class);
+
+    /** 价格上限 9999.99 元。单份盒饭不可能过万，超过这个数一定是把小数量级填错了。 */
+    private static final int MAX_PRICE_CENT = 999999;
+
+    private final ComboMapper comboMapper;
+    private final DishMapper dishMapper;
+    private final SpecGroupMapper specGroupMapper;
+    /**
+     * 查「这个盒饭是否出现在历史订单里」用 JdbcTemplate 直接查 JSON 列。
+     *
+     * 为什么不注入 OrderMapper：goods 包反向依赖 order 包会让两个域互相咬住，
+     * 后续拆模块时第一个卡住的就是这里。这条 SQL 只服务于删除前的存在性判断，
+     * 没有任何业务逻辑，用 JdbcTemplate 更轻。
+     */
+    private final JdbcTemplate jdbcTemplate;
+
+    public ComboService(ComboMapper comboMapper, DishMapper dishMapper,
+                        SpecGroupMapper specGroupMapper, JdbcTemplate jdbcTemplate) {
+        this.comboMapper = comboMapper;
+        this.dishMapper = dishMapper;
+        this.specGroupMapper = specGroupMapper;
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    /** 盒饭列表（商家端）：上下架的都要看得到，否则没法重新上架。 */
+    public List<Combo> list(String keyword, String status) {
+        String kw = keyword == null ? "" : keyword.trim();
+        return comboMapper.selectList(Wrappers.<Combo>lambdaQuery()
+                .like(!kw.isEmpty(), Combo::getName, kw)
+                .eq(status != null && !status.isBlank(), Combo::getStatus, status)
+                .orderByAsc(Combo::getSort)
+                .orderByAsc(Combo::getName));
+    }
+
+    /** 上架中的盒饭（用户端「全部菜单」用）。下架即彻底隐藏。 */
+    public List<Combo> listOnSale() {
+        return comboMapper.selectList(Wrappers.<Combo>lambdaQuery()
+                .eq(Combo::getStatus, GoodsStatus.ON)
+                .orderByAsc(Combo::getSort)
+                .orderByAsc(Combo::getName));
+    }
+
+    /** 全部盒饭（含下架），菜单管理页组装列表用。 */
+    public List<Combo> listAll() {
+        return list(null, null);
+    }
+
+    public Combo detail(String id) {
+        return require(id);
+    }
+
+    @Transactional
+    public Combo save(ComboCommand cmd) {
+        String name = requireName(cmd.name());
+        int price = requirePrice(cmd.price());
+        List<ComboDish> dishes = normalizeDishes(cmd.dishes());
+        List<String> specGroupIds = normalizeSpecGroupIds(cmd.specGroupIds());
+
+        boolean creating = cmd.id() == null || cmd.id().isBlank();
+        Combo combo;
+        if (creating) {
+            combo = new Combo();
+            // 新建默认下架：先把组成和价格配好再上架，避免半成品直接出现在用户端
+            combo.setStatus(GoodsStatus.OFF);
+            combo.setSort(cmd.sort() == null ? 0 : cmd.sort());
+        } else {
+            combo = require(cmd.id());
+            if (cmd.sort() != null) {
+                combo.setSort(cmd.sort());
+            }
+        }
+
+        combo.setName(name);
+        combo.setCover(trimToNull(cmd.cover()));
+        combo.setDesc(trimToNull(cmd.desc()));
+        combo.setPrice(price);
+        combo.setDishes(dishes);
+        combo.setSpecGroupIds(specGroupIds);
+        combo.setCategoryId(trimToNull(cmd.categoryId()));
+
+        if (creating) {
+            comboMapper.insert(combo);
+            log.info("新增盒饭 id={} name={} price={}分", combo.getId(), name, price);
+        } else {
+            comboMapper.updateById(combo);
+            log.info("编辑盒饭 id={} name={} price={}分", combo.getId(), name, price);
+        }
+        return combo;
+    }
+
+    /** 上架 / 下架。下架不影响已下单的订单（订单存的是快照）。 */
+    @Transactional
+    public Combo updateStatus(String id, String status) {
+        if (!GoodsStatus.ON.equals(status) && !GoodsStatus.OFF.equals(status)) {
+            throw BizException.param("状态只能是 on 或 off");
+        }
+        Combo combo = require(id);
+        combo.setStatus(status);
+        comboMapper.updateById(combo);
+        log.info("盒饭状态变更 id={} -> {}", id, status);
+        return combo;
+    }
+
+    /**
+     * 删除。**历史订单引用过的盒饭只能下架不能删除** ——
+     * 订单明细里虽然存了快照，但删掉整份盒饭会让「这个盒饭卖过多少」永久失去追溯入口。
+     */
+    @Transactional
+    public void delete(String id) {
+        Combo combo = require(id);
+        Integer used = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM `order` WHERE items LIKE ?", Integer.class, "%" + id + "%");
+        if (used != null && used > 0) {
+            throw BizException.conflict("「" + combo.getName() + "」已被 " + used
+                    + " 笔历史订单引用，只能下架不能删除");
+        }
+        comboMapper.deleteById(id);
+        log.info("删除盒饭 id={} name={}", id, combo.getName());
+    }
+
+    public Combo require(String id) {
+        Combo combo = id == null ? null : comboMapper.selectById(id);
+        if (combo == null) {
+            throw BizException.notFound("盒饭不存在");
+        }
+        return combo;
+    }
+
+    /**
+     * 组成菜品清洗。
+     *
+     * 三个要点：
+     * 1. **菜名从菜品库取，不信前端传的 name** —— 否则前端可以往订单快照里写任意文字
+     * 2. 同一个菜不能出现两次（份数用 qty 表达即可），重复多半是误操作
+     * 3. 停用的菜品不能**新加进**盒饭；但已在盒饭里的允许保留，否则商家改个价格都会被拦
+     */
+    private List<ComboDish> normalizeDishes(List<ComboDish> raw) {
+        if (raw == null || raw.isEmpty()) {
+            throw BizException.param("盒饭至少要包含一道菜");
+        }
+        Map<String, Dish> cache = new HashMap<>();
+        List<ComboDish> result = new ArrayList<>(raw.size());
+        Set<String> seen = new HashSet<>();
+
+        for (ComboDish item : raw) {
+            String dishId = item == null || item.dishId() == null ? "" : item.dishId().trim();
+            if (dishId.isEmpty()) {
+                throw BizException.param("组成菜品缺少菜品 ID");
+            }
+            if (!seen.add(dishId)) {
+                throw BizException.param("同一道菜不能重复添加，份数请用加减号调整");
+            }
+            Dish dish = cache.computeIfAbsent(dishId, dishMapper::selectById);
+            if (dish == null) {
+                throw BizException.param("菜品不存在或已被删除：" + dishId);
+            }
+            if (GoodsStatus.DISABLED.equals(dish.getStatus())) {
+                throw BizException.param("「" + dish.getName() + "」已停用，不能加入盒饭");
+            }
+            int qty = item.qtyOrDefault();
+            if (qty > 99) {
+                throw BizException.param("单个菜品份数最多 99 份");
+            }
+            result.add(new ComboDish(dish.getId(), dish.getName(), qty));
+        }
+        return result;
+    }
+
+    /** 规格组只能是启用中的；停用组不允许被新启用（停用会把引用一起解除）。 */
+    private List<String> normalizeSpecGroupIds(List<String> raw) {
+        if (raw == null || raw.isEmpty()) {
+            return new ArrayList<>();
+        }
+        List<String> result = new ArrayList<>(raw.size());
+        Set<String> seen = new HashSet<>();
+        for (String id : raw) {
+            String specGroupId = id == null ? "" : id.trim();
+            if (specGroupId.isEmpty() || !seen.add(specGroupId)) {
+                continue;
+            }
+            SpecGroup group = specGroupMapper.selectById(specGroupId);
+            if (group == null) {
+                throw BizException.param("规格组不存在：" + specGroupId);
+            }
+            if (!GoodsStatus.ENABLED.equals(group.getStatus())) {
+                throw BizException.param("「" + group.getName() + "」已停用，不能启用");
+            }
+            result.add(specGroupId);
+        }
+        return result;
+    }
+
+    private static String requireName(String raw) {
+        String name = raw == null ? "" : raw.trim();
+        if (name.isEmpty()) {
+            throw BizException.param("请填写盒饭名称");
+        }
+        if (name.length() > 64) {
+            throw BizException.param("盒饭名称最多 64 个字");
+        }
+        return name;
+    }
+
+    private static int requirePrice(Integer price) {
+        if (price == null) {
+            throw BizException.param("请填写盒饭价格");
+        }
+        if (price < 0) {
+            throw BizException.param("价格不能为负数");
+        }
+        if (price > MAX_PRICE_CENT) {
+            throw BizException.param("价格不能超过 9999.99 元，请检查是否填错数量级");
+        }
+        return price;
+    }
+
+    private static String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    /**
+     * 保存入参。
+     *
+     * @param price        整数**分**，前端负责从元换算
+     * @param dishes       只需传 dishId 与 qty；name 由服务端按菜品库回填
+     * @param specGroupIds 启用的规格组；空数组表示这份盒饭没有规格
+     * @param sort         编辑时传 null 表示不修改排序
+     */
+    public record ComboCommand(String id, String name, String cover, String desc, Integer price,
+                               List<ComboDish> dishes, List<String> specGroupIds,
+                               String categoryId, Integer sort) {
+    }
+}

@@ -1,0 +1,39 @@
+<view class="page">
+  <view class="card">
+    <view class="field">
+      <text class="field-label">供餐日</text>
+      <picker mode="date" value="{{serveDate}}" bindchange="onDateChange">
+        <view class="field-input pick">{{serveDate}} ▾</view>
+      </picker>
+    </view>
+  </view>
+
+  <view class="code-card">
+    <view class="code-title">输入顾客的 4 位取餐码</view>
+    <view class="code-boxes">
+      <view class="box {{boxes[0] ? 'box-on' : ''}}">{{boxes[0]}}</view>
+      <view class="box {{boxes[1] ? 'box-on' : ''}}">{{boxes[1]}}</view>
+      <view class="box {{boxes[2] ? 'box-on' : ''}}">{{boxes[2]}}</view>
+      <view class="box {{boxes[3] ? 'box-on' : ''}}">{{boxes[3]}}</view>
+    </view>
+    <input
+      class="hidden-input"
+      type="number"
+      focus
+      value="{{code}}"
+      maxlength="4"
+      bindinput="onCodeInput"
+    />
+    <view class="code-hint">输满 4 位自动核销</view>
+  </view>
+
+  <view class="result" wx:if="{{result}}">
+    <view class="result-ok">已核销</view>
+    <view class="result-row"><text>订单号</text><text>{{result.orderNo}}</text></view>
+    <view class="result-row" wx:if="{{result.pickupSlot}}"><text>取餐时段</text><text>{{result.pickupSlot}}</text></view>
+    <view class="result-row"><text>金额</text><text>¥{{resultTotalText}}</text></view>
+    <view class="result-items">
+      <view wx:for="{{result.items}}" wx:key="name">{{item.name}} ×{{item.qty}}</view>
+    </view>
+  </view>
+</view>

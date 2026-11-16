@@ -1,0 +1,43 @@
+<view class="page">
+  <view class="head">
+    <text class="head-date">供餐日 {{serveDate}}</text>
+    <text class="head-clear" wx:if="{{lines.length}}" bindtap="onClear">清空</text>
+  </view>
+
+  <view class="empty" wx:if="{{!lines.length}}">
+    <view class="empty-title">购物车是空的</view>
+    <view class="empty-btn" bindtap="onBackToMenu">去选餐</view>
+  </view>
+
+  <view class="list" wx:else>
+    <view class="line" wx:for="{{lines}}" wx:key="key">
+      <image class="line-cover" wx:if="{{item.cover}}" src="{{item.cover}}" mode="aspectFill" />
+      <view class="line-cover line-cover-empty" wx:else></view>
+
+      <view class="line-body">
+        <view class="line-name">{{item.name}}</view>
+        <view class="line-spec" wx:if="{{item.specText}}">{{item.specText}}</view>
+        <view class="line-foot">
+          <text class="line-price">¥{{item.lineText}}</text>
+          <view class="stepper">
+            <view class="step" data-key="{{item.key}}" bindtap="onMinus">−</view>
+            <view class="step-value">{{item.qty}}</view>
+            <view class="step" data-key="{{item.key}}" bindtap="onPlus">＋</view>
+          </view>
+        </view>
+      </view>
+
+      <view class="line-remove" data-key="{{item.key}}" bindtap="onRemove">删除</view>
+    </view>
+  </view>
+
+  <view class="bottom-gap" wx:if="{{lines.length}}"></view>
+
+  <view class="bottom-bar" wx:if="{{lines.length}}">
+    <view class="total">
+      <text class="total-label">共 {{count}} 份</text>
+      <text class="total-amount">¥{{amountText}}</text>
+    </view>
+    <view class="checkout" bindtap="onCheckout">去结算</view>
+  </view>
+</view>

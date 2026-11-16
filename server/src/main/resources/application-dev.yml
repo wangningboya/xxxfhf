@@ -1,0 +1,40 @@
+# =============================================================================
+# 开发环境（application.yml 里的默认值，本地不设 SPRING_PROFILES_ACTIVE 就走这里）
+#
+#   特点：连本机 MySQL、把 SQL 全文打到控制台、放开网页后台跨域。
+#   密钥类允许为空串——AppProperties 启动时会明确告警缺哪个变量，
+#   而不是像 prod 那样在占位符解析阶段就崩掉（本地报错要能看懂）。
+# =============================================================================
+
+spring:
+  datasource:
+    # 库名与账号默认值与 deploy/.env 保持一致（本机容器 meal-mysql 上就是这个库）。
+    # 密码不写进这个文件：它会被提交进仓库，而 deploy/.env 已在 .gitignore 里。
+    # 本地启动前先设 APP_DB_PASSWORD，或执行 deploy 目录下的本地启动脚本。
+    url: "${APP_DB_URL:jdbc:mysql://127.0.0.1:3306/xxxfhf?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}"
+    username: ${APP_DB_USER:xxxfhf}
+    password: ${APP_DB_PASSWORD:}
+
+mybatis-plus:
+  configuration:
+    # SQL 打到控制台。**光配这一行不够**：Slf4jImpl 用的是 mapper 全限定名做 logger
+    # （com.xxxfhf.meal.user.UserMapper.selectById），若 com.xxxfhf.meal 仍是 INFO，
+    # DEBUG 级 SQL 会被直接过滤掉——现象是「配了 log-impl 却一条 SQL 都看不到」。
+    # 所以下方 logging.level 必须同时给 DEBUG，两者是一套。
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+
+logging:
+  level:
+    com.xxxfhf.meal: DEBUG
+
+app:
+  jwt:
+    secret: ${APP_JWT_SECRET:}
+  wx:
+    app-id: ${APP_WX_APP_ID:}
+    app-secret: ${APP_WX_APP_SECRET:}
+  upload:
+    dir: ${APP_UPLOAD_DIR:./data/upload}
+  web:
+    # 仅网页后台本地开发需要；生产同域反代，见 application-prod.yml
+    allowed-origins: ${APP_ALLOWED_ORIGINS:http://localhost:5173}

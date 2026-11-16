@@ -1,0 +1,58 @@
+@import "./merchant.wxss";
+
+.region-name {
+  font-size: 30rpx;
+  color: #1a1a1a;
+  font-weight: 600;
+  margin-bottom: 8rpx;
+}
+
+.badge {
+  margin-left: 12rpx;
+  font-size: 22rpx;
+  font-weight: 400;
+  padding: 4rpx 14rpx;
+  border-radius: 18rpx;
+  background: #f0f0f0;
+  color: #a8a8a8;
+}
+
+.badge-on {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.ops {
+  display: flex;
+  margin-top: 14rpx;
+  padding-top: 14rpx;
+  border-top: 1rpx solid #f4f5f7;
+}
+
+.op {
+  font-size: 26rpx;
+  color: #4a6fa5;
+  margin-right: 40rpx;
+}
+
+.op-danger {
+  color: #c0392b;
+}
+
+.form-ops {
+  display: flex;
+  margin-top: 24rpx;
+}
+
+.form-ops .btn {
+  flex: 1;
+  margin-right: 20rpx;
+}
+
+.form-ops .btn:last-child {
+  margin-right: 0;
+}
+
+.bottom-bar .btn {
+  flex: 1;
+}

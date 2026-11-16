@@ -1,0 +1,161 @@
+@import "./merchant.wxss";
+
+.invite {
+  background: #ffffff;
+  border-radius: 20rpx;
+  padding: 24rpx 28rpx;
+  margin-bottom: 20rpx;
+}
+
+.invite-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.invite-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.invite-more {
+  font-size: 24rpx;
+  color: #9a9a9a;
+}
+
+.invite-body {
+  margin-top: 20rpx;
+}
+
+.invite-desc {
+  font-size: 24rpx;
+  color: #9a9a9a;
+  line-height: 1.6;
+  margin-bottom: 16rpx;
+}
+
+.invite-list {
+  margin-bottom: 16rpx;
+}
+
+.invite-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14rpx 0;
+  border-bottom: 1rpx solid #f4f5f7;
+}
+
+.invite-code {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #1a1a1a;
+  letter-spacing: 4rpx;
+}
+
+.invite-status {
+  font-size: 22rpx;
+  color: #9a9a9a;
+}
+
+.search {
+  margin-bottom: 16rpx;
+}
+
+.search-input {
+  height: 68rpx;
+  background: #ffffff;
+  border-radius: 14rpx;
+  padding: 0 24rpx;
+  font-size: 26rpx;
+  box-sizing: border-box;
+}
+
+.tabs {
+  white-space: nowrap;
+  padding-bottom: 16rpx;
+}
+
+.tab {
+  display: inline-block;
+  padding: 12rpx 26rpx;
+  margin-right: 14rpx;
+  border-radius: 26rpx;
+  background: #ffffff;
+  color: #6a6a6a;
+  font-size: 26rpx;
+}
+
+.tab-active {
+  background: #ff9f1c;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.user {
+  background: #ffffff;
+  border-radius: 20rpx;
+  padding: 24rpx 28rpx;
+  margin-bottom: 20rpx;
+}
+
+.user-head {
+  display: flex;
+  align-items: center;
+}
+
+.avatar {
+  width: 88rpx;
+  height: 88rpx;
+  border-radius: 50%;
+  background: #f0f1f3;
+  flex-shrink: 0;
+}
+
+.avatar-empty {
+  background: #eceef1;
+}
+
+.user-info {
+  flex: 1;
+  padding-left: 20rpx;
+}
+
+.user-name {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.user-sub {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: #9a9a9a;
+}
+
+.user-reason {
+  margin-top: 14rpx;
+  font-size: 24rpx;
+  color: #c0392b;
+}
+
+.user-actions {
+  margin-top: 20rpx;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.small {
+  height: 64rpx;
+  font-size: 26rpx;
+  padding: 0 32rpx;
+  margin-left: 16rpx;
+}
+
+.tip {
+  text-align: center;
+  font-size: 24rpx;
+  color: #b0b0b0;
+  padding: 24rpx 0;
+}

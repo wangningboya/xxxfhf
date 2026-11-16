@@ -1,0 +1,38 @@
+# =============================================================================
+# 生产环境（Dockerfile ENV + docker-compose 双重强制，不依赖人工记得设）
+#
+#   与 dev 的三处硬差异：
+#     1. 数据库 url / 账号 / 密码、JWT 密钥、微信凭据 **都不给默认值**。
+#        ${APP_DB_PASSWORD:} 这种写法会把「忘配」变成「用空密码连上了」，
+#        必须让它在启动时直接失败（Could not resolve placeholder），
+#        而不是安静地跑起来。
+#     2. SQL 不进日志。订单、手机号都在 SQL 参数里，日志等于明文泄露。
+#     3. 不注册 CORS。生产前后端同域反代（Nginx /api/** → app），不需要跨域。
+# =============================================================================
+
+spring:
+  datasource:
+    url: ${APP_DB_URL}
+    username: ${APP_DB_USER}
+    password: ${APP_DB_PASSWORD}
+
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
+
+logging:
+  level:
+    com.xxxfhf.meal: INFO
+
+app:
+  jwt:
+    secret: ${APP_JWT_SECRET}
+  wx:
+    app-id: ${APP_WX_APP_ID}
+    app-secret: ${APP_WX_APP_SECRET}
+  upload:
+    dir: ${APP_UPLOAD_DIR:/data/upload}
+  web:
+    # 空列表 = WebMvcConfig 里直接 return，不注册任何 CORS 映射。
+    # 留空而不是删掉这行：删了会落回 AppProperties 的类默认值 localhost:5173。
+    allowed-origins: []

@@ -1,0 +1,112 @@
+<view class="page">
+  <view class="invite">
+    <view class="invite-head" bindtap="onToggleInvite">
+      <text class="invite-title">邀请码</text>
+      <text class="invite-more">{{showInvite ? '收起' : '展开'}} ›</text>
+    </view>
+    <view class="invite-body" wx:if="{{showInvite}}">
+      <view class="invite-desc">群里没有群卡片、或者对方不在群里时，用邀请码放行。一次性、有有效期。</view>
+      <view class="invite-list" wx:if="{{inviteCodes.length}}">
+        <view
+          class="invite-item"
+          wx:for="{{inviteCodes}}"
+          wx:key="code"
+          data-code="{{item.code}}"
+          bindtap="onCopyCode"
+        >
+          <text class="invite-code">{{item.code}}</text>
+          <text class="invite-status">{{item.status === 'unused' ? '未使用' : '已使用'}}</text>
+        </view>
+      </view>
+      <view class="btn" bindtap="onCreateInvite">{{creating ? '生成中…' : '生成邀请码'}}</view>
+    </view>
+  </view>
+
+  <view class="search">
+    <input
+      class="search-input"
+      value="{{keyword}}"
+      placeholder="搜昵称 / 手机号"
+      placeholder-class="ph"
+      confirm-type="search"
+      bindinput="onKeywordInput"
+      bindconfirm="onSearch"
+    />
+  </view>
+
+  <scroll-view class="tabs" scroll-x enable-flex>
+    <view
+      class="tab {{auditStatus === item.key ? 'tab-active' : ''}}"
+      wx:for="{{tabs}}"
+      wx:key="key"
+      data-key="{{item.key}}"
+      bindtap="onSwitchTab"
+    >
+      {{item.label}}
+    </view>
+  </scroll-view>
+
+  <view class="empty" wx:if="{{!loading && !list.length}}">
+    <view class="empty-title">这里没有人</view>
+    <view class="empty-desc">群成员首次进入就会出现在「待审核」</view>
+  </view>
+
+  <view class="user" wx:for="{{list}}" wx:key="userId">
+    <view class="user-head">
+      <image class="avatar" wx:if="{{item.avatarUrl}}" src="{{item.avatarUrl}}" mode="aspectFill" />
+      <view class="avatar avatar-empty" wx:else></view>
+      <view class="user-info">
+        <view class="user-name">{{item.nickName}}</view>
+        <view class="user-sub">
+          <text wx:if="{{item.phone}}">{{item.phone}}</text>
+          <text wx:else>未填手机号</text>
+          <text wx:if="{{item.accessVia}}"> · 通过{{item.accessVia === 'group' ? '群' : '邀请码'}}进入</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="user-reason" wx:if="{{item.rejectReason}}">驳回原因：{{item.rejectReason}}</view>
+
+    <view class="user-actions">
+      <view
+        class="btn btn-ghost small"
+        wx:if="{{item.auditStatus === 'rejected' || item.auditStatus === 'disabled'}}"
+        data-id="{{item.userId}}"
+        data-action="enable"
+        bindtap="onAudit"
+      >
+        恢复
+      </view>
+      <view
+        class="btn btn-ghost small"
+        wx:if="{{item.auditStatus === 'approved'}}"
+        data-id="{{item.userId}}"
+        data-action="disable"
+        bindtap="onAudit"
+      >
+        停用
+      </view>
+      <view
+        class="btn btn-ghost small"
+        wx:if="{{item.auditStatus === 'pending'}}"
+        data-id="{{item.userId}}"
+        data-action="reject"
+        bindtap="onAudit"
+      >
+        驳回
+      </view>
+      <view
+        class="btn small"
+        wx:if="{{item.auditStatus === 'pending'}}"
+        data-id="{{item.userId}}"
+        data-action="approve"
+        bindtap="onAudit"
+      >
+        通过
+      </view>
+    </view>
+  </view>
+
+  <view class="tip" wx:if="{{loading}}">加载中…</view>
+  <view class="tip" wx:elif="{{finished && list.length}}">没有更多了</view>
+</view>

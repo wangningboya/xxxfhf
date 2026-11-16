@@ -1,0 +1,84 @@
+<view class="page">
+  <view class="card">
+    <view class="field">
+      <text class="field-label">供餐日</text>
+      <picker mode="date" value="{{serveDate}}" bindchange="onDateChange">
+        <view class="field-input">{{serveDate}} ▾</view>
+      </picker>
+    </view>
+    <view class="row">
+      <text class="row-label">计入订单</text>
+      <text class="row-value">{{view.orderCount || 0}} 单</text>
+    </view>
+    <view class="muted-note">只统计已接单及之后，待接单与已取消不备料</view>
+  </view>
+
+  <view class="tabs">
+    <view class="tab {{tab === 'dish' ? 'tab-active' : ''}}" data-tab="dish" bindtap="onSwitchTab">
+      按菜品
+    </view>
+    <view class="tab {{tab === 'region' ? 'tab-active' : ''}}" data-tab="region" bindtap="onSwitchTab">
+      按区域
+    </view>
+  </view>
+
+  <block wx:if="{{tab === 'dish'}}">
+    <view class="empty" wx:if="{{!loading && !dishes.length}}">
+      <view class="empty-title">这一天还没有要备的菜</view>
+      <view class="empty-desc">等有订单接单后再来看</view>
+    </view>
+    <view class="card" wx:if="{{dishes.length}}">
+      <view class="dish" wx:for="{{dishes}}" wx:key="key">
+        <view class="dish-main">
+          <view class="dish-name">
+            {{item.name}}
+            <text class="dish-group" wx:if="{{item.groupName}}">{{item.groupName}}</text>
+          </view>
+          <view class="dish-sub" wx:if="{{item.comboNames}}">{{item.comboNames}}</view>
+        </view>
+        <view class="dish-qty">{{item.qty}}</view>
+      </view>
+    </view>
+  </block>
+
+  <block wx:if="{{tab === 'region'}}">
+    <view class="empty" wx:if="{{!loading && !regions.length}}">
+      <view class="empty-title">这一天还没有配送订单</view>
+      <view class="empty-desc">自取订单也会单独列一栏</view>
+    </view>
+    <view class="card region" wx:for="{{regions}}" wx:key="regionName">
+      <view class="region-head">
+        <view class="region-name">
+          {{item.regionName}}
+          <text class="region-flag" wx:if="{{item.selfPickup}}">自取</text>
+        </view>
+        <view class="region-qty">{{item.qty}} 份 / {{item.orderCount}} 单</view>
+      </view>
+
+      <view class="region-items">
+        <text class="region-item" wx:for="{{item.items}}" wx:for-item="it" wx:key="name">
+          {{it.name}}×{{it.qty}}
+        </text>
+      </view>
+
+      <view class="slots" wx:if="{{item.slots && item.slots.length}}">
+        <text class="slot" wx:for="{{item.slots}}" wx:for-item="s" wx:key="slot">
+          {{s.slot}} · {{s.qty}} 份
+        </text>
+      </view>
+
+      <view class="contacts" wx:if="{{item.contacts && item.contacts.length}}">
+        <view
+          class="contact"
+          wx:for="{{item.contacts}}"
+          wx:for-item="c"
+          wx:key="phone"
+          data-phone="{{c.phone}}"
+          bindtap="onCall"
+        >
+          {{c.contactName}} {{c.phone}} · {{c.detail}}
+        </view>
+      </view>
+    </view>
+  </block>
+</view>

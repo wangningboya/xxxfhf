@@ -1,0 +1,77 @@
+# =============================================================================
+# 公共配置：dev 与 prod 都一样的东西放这里
+#
+#   环境差异全部在 application-dev.yml / application-prod.yml，本文件不出现
+#   任何「只在某一环境成立」的值（数据库地址、日志级别、跨域来源等）。
+#
+#   激活方式：环境变量 SPRING_PROFILES_ACTIVE=dev|prod
+#     - 默认 dev：本地 IDE 或 mvn spring-boot:run 直接能跑
+#     - 镜像里强制 prod：Dockerfile 有 ENV SPRING_PROFILES_ACTIVE=prod，
+#       docker-compose 再显式传一次。生产漏配也绝不会落回 dev。
+# =============================================================================
+
+server:
+  port: 8080
+  shutdown: graceful
+  # 不暴露任何额外错误细节
+  error:
+    include-message: never
+    include-stacktrace: never
+    include-binding-errors: never
+
+spring:
+  application:
+    name: meal-order
+  profiles:
+    # 没显式指定时按 dev 跑。生产靠 Dockerfile/compose 覆盖，不靠这里
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
+
+  # 连接池参数两个环境一致，差异只在 url/账号密码（见 dev/prod 文件）
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      pool-name: meal-hikari
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 3000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    banner: false
+    db-config:
+      # 主键统一 32 位 UUID 字符串，与建表脚本的 VARCHAR(32) 一致
+      id-type: assign_uuid
+
+app:
+  jwt:
+    expire-days: ${APP_JWT_EXPIRE_DAYS:7}
+  wx:
+    code2session-url: https://api.weixin.qq.com/sns/jscode2session
+    timeout-seconds: 5
+  upload:
+    url-prefix: /upload
+    max-size-mb: 5
+  schedule:
+    # 每 5 分钟；要更精确改 0 * * * * *
+    prepay-release-cron: "${APP_PREPAY_RELEASE_CRON:0 */5 * * * *}"
+    enabled: ${APP_SCHEDULE_ENABLED:true}
+  admin:
+    # 商家初始账号：库里没有该 username 时创建一次，已存在则不覆盖
+    init-username: ${APP_ADMIN_USERNAME:admin}
+    init-password: ${APP_ADMIN_PASSWORD:admin}
+    init-enabled: ${APP_ADMIN_INIT_ENABLED:true}
+
+logging:
+  # 文件输出与滚动策略统一由 logback-spring.xml 控制，此处不再重复配置
+  level:
+    root: INFO

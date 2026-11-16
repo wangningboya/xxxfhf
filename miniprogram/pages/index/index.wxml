@@ -1,0 +1,109 @@
+<view class="page">
+  <view class="topbar">
+    <view class="shop-name">{{shopName}}</view>
+    <view class="top-actions">
+      <text class="top-link" bindtap="onOpenOrders">我的订单</text>
+      <text class="top-link" bindtap="onOpenMine">我的</text>
+    </view>
+  </view>
+
+  <view class="shop-card">
+    <view class="shop-notice" wx:if="{{shopNotice}}">{{shopNotice}}</view>
+    <view class="shop-meta">
+      <text wx:if="{{serveTimeText}}">供餐：{{serveTimeText}}</text>
+      <text wx:if="{{cutoffTime}}"> · 前一天 {{cutoffTime}} 截单</text>
+    </view>
+  </view>
+
+  <view class="audit-card" wx:if="{{showAuditCard}}">
+    <view class="audit-title">{{auditTitle}}</view>
+    <view class="audit-desc">{{auditDesc}}</view>
+    <button
+      class="audit-btn"
+      wx:if="{{auditStatus === 'rejected'}}"
+      loading="{{reapplyLoading}}"
+      bindtap="onReapply"
+    >
+      重新提交申请
+    </button>
+  </view>
+
+  <!-- 供餐日：明天可下单，后天只读 -->
+  <view class="date-tabs">
+    <view
+      class="date-tab {{activeDate === item.date ? 'date-tab-active' : ''}}"
+      wx:for="{{dates}}"
+      wx:key="date"
+      data-date="{{item.date}}"
+      bindtap="onSwitchDate"
+    >
+      <view class="date-tab-label">{{item.label}}</view>
+      <view class="date-tab-sub">{{item.date}}</view>
+    </view>
+  </view>
+
+  <view class="banner banner-warn" wx:if="{{menu.closed}}">该供餐日门店暂停供应</view>
+  <view class="banner banner-warn" wx:elif="{{menu.cutoff}}">今日已截单，0 点后可继续下单</view>
+  <view class="banner" wx:elif="{{!menu.orderable}}">该日菜单仅供浏览，明天才开放下单</view>
+
+  <view class="menu-empty" wx:if="{{!menuLoading && !viewItems.length}}">
+    <view class="menu-empty-title">这个供餐日还没有菜单</view>
+    <view class="menu-empty-desc">商家发布后就能看到，也可以先看看后天的。</view>
+  </view>
+
+  <view class="menu-list">
+    <view class="menu-item" wx:for="{{viewItems}}" wx:key="comboId">
+      <image class="menu-cover" wx:if="{{item.cover}}" src="{{item.cover}}" mode="aspectFill" />
+      <view class="menu-cover menu-cover-empty" wx:else>暂无图</view>
+
+      <view class="menu-body" data-id="{{item.comboId}}" bindtap="onOpenCombo">
+        <view class="menu-name">{{item.name}}</view>
+        <view class="menu-dishes" wx:if="{{item.dishesText}}">{{item.dishesText}}</view>
+        <view class="menu-foot">
+          <text class="menu-price">¥{{item.priceText}}</text>
+          <text class="menu-remain">{{item.remainText}}</text>
+        </view>
+      </view>
+
+      <view class="menu-add-wrap">
+        <view
+          class="menu-add {{item.soldOut || !menu.orderable ? 'menu-add-disabled' : ''}}"
+          data-id="{{item.comboId}}"
+          bindtap="onQuickAdd"
+        >
+          {{item.hasSpec ? '选规格' : '＋'}}
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view class="cart-gap"></view>
+
+  <view class="cart-bar" wx:if="{{cartCount > 0}}">
+    <view class="cart-info" bindtap="onOpenCart">
+      <text class="cart-count">{{cartCount}} 份</text>
+      <text class="cart-amount">¥{{cartAmountText}}</text>
+    </view>
+    <view class="cart-go" bindtap="onOpenCart">去结算</view>
+  </view>
+
+  <!-- 昵称填写：微信不再返回真实昵称，只能由用户自己点选或手填一次 -->
+  <view class="nick-mask" wx:if="{{needNickName}}">
+    <view class="nick-panel">
+      <view class="nick-title">先留个称呼</view>
+      <view class="nick-desc">商家审核时靠它认出你，填一次就好。</view>
+      <input
+        class="nick-input"
+        type="nickname"
+        value="{{nickNameInput}}"
+        placeholder="点击可一键填入微信昵称"
+        placeholder-class="nick-placeholder"
+        maxlength="32"
+        bindinput="onNickNameInput"
+        bindblur="onNickNameInput"
+        bindchange="onNickNameInput"
+      />
+      <button class="nick-btn" loading="{{savingNickName}}" bindtap="onSaveNickName">保存</button>
+    </view>
+  </view>
+</view>

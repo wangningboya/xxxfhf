@@ -1,0 +1,137 @@
+page {
+  background: #f5f6f8;
+}
+
+.page {
+  padding: 0 24rpx 40rpx;
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+.tabs {
+  white-space: nowrap;
+  padding: 20rpx 0;
+}
+
+.tab {
+  display: inline-block;
+  padding: 12rpx 26rpx;
+  margin-right: 16rpx;
+  border-radius: 28rpx;
+  background: #ffffff;
+  color: #6a6a6a;
+  font-size: 26rpx;
+}
+
+.tab-active {
+  background: #ff9f1c;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.empty {
+  background: #ffffff;
+  border-radius: 20rpx;
+  padding: 80rpx 32rpx;
+  text-align: center;
+}
+
+.empty-title {
+  font-size: 30rpx;
+  color: #1a1a1a;
+}
+
+.empty-desc {
+  margin-top: 12rpx;
+  font-size: 26rpx;
+  color: #9a9a9a;
+}
+
+.order {
+  background: #ffffff;
+  border-radius: 20rpx;
+  padding: 28rpx;
+  margin-bottom: 20rpx;
+}
+
+.order-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.order-no {
+  font-size: 24rpx;
+  color: #b0b0b0;
+}
+
+.order-status {
+  font-size: 26rpx;
+  color: #4a4a4a;
+}
+
+.status-pending_accept {
+  color: #d97600;
+}
+
+.status-ready {
+  color: #2e9e5b;
+  font-weight: 600;
+}
+
+.status-rejected,
+.status-cancelled {
+  color: #a8a8a8;
+}
+
+.order-summary {
+  margin-top: 16rpx;
+  font-size: 30rpx;
+  color: #1a1a1a;
+  line-height: 1.5;
+}
+
+.order-reason {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  color: #d9534f;
+  line-height: 1.5;
+}
+
+.order-cancel {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  color: #a86b00;
+}
+
+.order-foot {
+  margin-top: 18rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.order-date {
+  font-size: 24rpx;
+  color: #9a9a9a;
+}
+
+.order-amount {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #e8442e;
+}
+
+.order-code {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  color: #ff9f1c;
+  font-weight: 600;
+}
+
+.tip {
+  text-align: center;
+  font-size: 24rpx;
+  color: #b0b0b0;
+  padding: 24rpx 0;
+}

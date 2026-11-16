@@ -1,0 +1,88 @@
+<view class="page">
+  <view class="filters">
+    <picker mode="date" value="{{serveDate}}" bindchange="onDateChange">
+      <view class="date-pick">{{serveDate}} ▾</view>
+    </picker>
+    <view class="search">
+      <input
+        class="search-input"
+        value="{{keyword}}"
+        placeholder="搜昵称 / 手机号"
+        placeholder-class="ph"
+        confirm-type="search"
+        bindinput="onKeywordInput"
+        bindconfirm="onSearch"
+      />
+    </view>
+  </view>
+
+  <scroll-view class="tabs" scroll-x enable-flex>
+    <view
+      class="tab {{status === item.key ? 'tab-active' : ''}}"
+      wx:for="{{tabs}}"
+      wx:key="key"
+      data-key="{{item.key}}"
+      bindtap="onSwitchTab"
+    >
+      {{item.label}}
+    </view>
+  </scroll-view>
+
+  <view class="empty" wx:if="{{!loading && !list.length}}">
+    <view class="empty-title">这一天没有符合条件的订单</view>
+    <view class="empty-desc">换个日期或状态看看</view>
+  </view>
+
+  <view
+    class="order {{item.stockReleased ? 'order-warn' : ''}}"
+    wx:for="{{list}}"
+    wx:key="orderId"
+    data-id="{{item.orderId}}"
+    bindtap="onOpen"
+  >
+    <view class="order-head">
+      <view
+        class="check {{selected[item.orderId] ? 'check-on' : ''}} {{item.selectable ? '' : 'check-off'}}"
+        data-id="{{item.orderId}}"
+        data-selectable="{{item.selectable}}"
+        catchtap="onToggle"
+      >
+        {{selected[item.orderId] ? '✓' : ''}}
+      </view>
+      <view class="order-name">{{item.userNickName}}</view>
+      <view class="order-status">{{item.statusLabel}}</view>
+    </view>
+
+    <view class="order-summary">{{item.summary}}</view>
+
+    <view class="order-meta">
+      <text>{{item.orderNo}}</text>
+      <text wx:if="{{item.pickupCode}}"> · 码 {{item.pickupCode}}</text>
+      <text wx:if="{{item.pickupSlot}}"> · {{item.pickupSlot}}</text>
+      <text wx:if="{{item.deliveryType === 'delivery'}}"> · 配送到 {{item.regionName}}</text>
+      <text wx:else> · 自取</text>
+    </view>
+
+    <view class="badges">
+      <text class="badge badge-red" wx:if="{{item.stockReleased}}">份数已释放</text>
+      <text class="badge badge-warn" wx:if="{{item.cancelRequested}}">用户申请取消</text>
+      <text class="badge">{{item.payStatusLabel}}</text>
+    </view>
+
+    <view class="order-foot">
+      <text class="order-phone" wx:if="{{item.userPhone}}">{{item.userPhone}}</text>
+      <text class="order-amount">¥{{item.totalText}}</text>
+    </view>
+  </view>
+
+  <view class="tip" wx:if="{{loading}}">加载中…</view>
+  <view class="tip" wx:elif="{{finished && list.length}}">没有更多了</view>
+
+  <view class="bottom-gap" wx:if="{{selectedCount > 0}}"></view>
+  <view class="bottom-bar" wx:if="{{selectedCount > 0}}">
+    <view class="btn btn-ghost" bindtap="onSelectAll">全选 / 取消</view>
+    <view class="btn accept" bindtap="onAccept">
+      {{accepting ? '处理中…' : acceptText}}
+    </view>
+  </view>
+</view>

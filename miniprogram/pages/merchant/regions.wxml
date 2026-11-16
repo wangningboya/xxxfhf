@@ -1,0 +1,59 @@
+<view class="page">
+  <view wx:if="{{loading}}" class="empty"><view class="empty-title">加载中…</view></view>
+
+  <view wx:for="{{regions}}" wx:key="id" class="card">
+    <view class="row">
+      <view>
+        <view class="region-name">
+          {{item.name}}
+          <text class="badge {{item.status === 'enabled' ? 'badge-on' : ''}}">
+            {{item.status === 'enabled' ? '启用' : '停用'}}
+          </text>
+        </view>
+        <view class="muted" wx:if="{{item.remark}}">{{item.remark}}</view>
+      </view>
+      <text class="muted">排序 {{item.sort || 0}}</text>
+    </view>
+    <view class="ops">
+      <text class="op" data-index="{{index}}" bindtap="onEdit">改名</text>
+      <text class="op" data-index="{{index}}" bindtap="onToggle">
+        {{item.status === 'enabled' ? '停用' : '启用'}}
+      </text>
+      <text class="op op-danger" data-index="{{index}}" bindtap="onDelete">删除</text>
+    </view>
+  </view>
+
+  <view wx:if="{{!loading && regions.length === 0}}" class="empty">
+    <view class="empty-title">还没有区域</view>
+    <view class="empty-desc">先建区域，地址才能挂上去，备菜才能按区域汇总</view>
+  </view>
+
+  <!-- 表单 -->
+  <view wx:if="{{form}}" class="card">
+    <view class="card-title">{{form.id ? '编辑区域' : '新增区域'}}</view>
+    <view class="field">
+      <text class="field-label">名称</text>
+      <input class="field-input" placeholder="如：A 栋 / 研发中心" placeholder-class="ph"
+             value="{{form.name}}" data-key="name" bindinput="onInput" />
+    </view>
+    <view class="field">
+      <text class="field-label">备注</text>
+      <input class="field-input" placeholder="可填范围说明（可不填）" placeholder-class="ph"
+             value="{{form.remark}}" data-key="remark" bindinput="onInput" />
+    </view>
+    <view class="field">
+      <text class="field-label">排序</text>
+      <input class="field-input" type="number" placeholder="数字越小越靠前" placeholder-class="ph"
+             value="{{form.sort}}" data-key="sort" bindinput="onInput" />
+    </view>
+    <view class="form-ops">
+      <view class="btn btn-ghost" bindtap="onCancel">取消</view>
+      <view class="btn" bindtap="onSave">{{saving ? '保存中…' : '保存'}}</view>
+    </view>
+  </view>
+
+  <view class="bottom-gap" wx:if="{{form}}"></view>
+  <view class="bottom-bar" wx:if="{{!form}}">
+    <view class="btn" bindtap="onNew">新增区域</view>
+  </view>
+</view>

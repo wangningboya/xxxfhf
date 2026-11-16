@@ -1,0 +1,51 @@
+@import "./merchant.wxss";
+
+.note {
+  font-size: 22rpx;
+  color: #9a9a9a;
+  line-height: 1.6;
+  padding: 8rpx 0 4rpx;
+}
+
+.slots {
+  width: 100%;
+  height: 200rpx;
+  background: #f5f6f8;
+  border-radius: 12rpx;
+  padding: 20rpx;
+  font-size: 28rpx;
+  line-height: 1.6;
+  box-sizing: border-box;
+}
+
+.qr {
+  width: 320rpx;
+  height: 320rpx;
+  display: block;
+  margin: 0 auto;
+  background: #f5f6f8;
+  border-radius: 12rpx;
+}
+
+.qr-empty {
+  height: 200rpx;
+  border: 2rpx dashed #e0e0e0;
+  border-radius: 12rpx;
+  color: #b0b0b0;
+  font-size: 26rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.save {
+  height: 92rpx;
+  border-radius: 46rpx;
+  background: #ff9f1c;
+  color: #ffffff;
+  font-size: 30rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 8rpx 0 40rpx;
+}

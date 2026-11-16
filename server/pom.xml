@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.1.2</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.xxxfhf</groupId>
+    <artifactId>meal-order-server</artifactId>
+    <version>0.1.0</version>
+    <name>meal-order-server</name>
+    <description>群内点餐小程序服务端</description>
+
+    <properties>
+        <!-- 若改用 JDK 25，只需把下面两处改成 25（java.version 与 Dockerfile 的 FROM 镜像） -->
+        <java.version>17</java.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <mybatis-plus.version>3.5.18</mybatis-plus.version>
+        <jjwt.version>0.12.6</jjwt.version>
+    </properties>
+
+    <dependencies>
+        <!-- Boot 4 里 Web MVC 的 starter 已改名，不是 spring-boot-starter-web -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webmvc</artifactId>
+        </dependency>
+
+        <!-- jakarta.validation：参数校验（Boot 4 是 Jakarta EE 11） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!--
+          MyBatis-Plus：Boot 4 必须用 boot4 starter。
+          严禁误用 mybatis-plus-boot-starter / mybatis-plus-spring-boot3-starter，否则自动配置不生效。
+        -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-spring-boot4-starter</artifactId>
+            <version>${mybatis-plus.version}</version>
+        </dependency>
+
+        <!--
+          分页插件的内置依赖：自 3.5.9 起 JSqlParser 被拆出主包，
+          只引 starter 会在第一次执行分页查询时抛 NoClassDefFoundError（而不是启动失败，很难提前发现）。
+          M1 的用户列表、邀请码列表都用了分页，必须在这里显式声明，版本与主包保持一致。
+        -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-jsqlparser</artifactId>
+            <version>${mybatis-plus.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!--
+          Excel 导出（备菜 / 对账）。选型时定为 EasyExcel：API 简洁、流式写入省内存。
+          注意它传递依赖 POI 与 ehcache，版本由它自己带；不覆盖这些版本，
+          覆盖会引入「编译通过、运行时报 NoSuchMethodError」这类更难查的问题。
+        -->
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>easyexcel</artifactId>
+            <version>4.0.3</version>
+        </dependency>
+
+        <!-- 只用 BCrypt，不引整套 Spring Security（令牌校验由自写拦截器完成） -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-crypto</artifactId>
+        </dependency>
+
+        <!--
+          JWT：用 gson 序列化插件，不用 jjwt-jackson。
+          原因：jjwt-jackson 传递依赖 Jackson 2（com.fasterxml.jackson），而本项目运行在 Jackson 3（tools.jackson）上，
+          两者共存会带来版本与类冲突风险。gson 是独立实现，与本项目 JSON 栈无交集。
+        -->
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-api</artifactId>
+            <version>${jjwt.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <version>${jjwt.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-gson</artifactId>
+            <version>${jjwt.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>app</finalName>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

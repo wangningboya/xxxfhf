@@ -1,0 +1,44 @@
+/* 后台公共样式：各页面重复度高的表格/工具条收敛到这里，避免每页抄一遍 */
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  color: #1f2a37;
+  background: #f5f6f8;
+}
+
+.page-card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.toolbar-right {
+  margin-left: auto;
+  display: flex;
+  gap: 10px;
+}
+
+.muted {
+  color: #9aa1ab;
+  font-size: 12px;
+}
+
+.price {
+  color: #c2410c;
+  font-weight: 600;
+}
+
+.pager {
+  margin-top: 14px;
+  display: flex;
+  justify-content: flex-end;
+}

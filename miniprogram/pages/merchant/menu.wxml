@@ -1,0 +1,70 @@
+<view class="page">
+  <view class="card">
+    <view class="field">
+      <text class="field-label">供餐日</text>
+      <picker mode="date" value="{{serveDate}}" bindchange="onDateChange">
+        <view class="field-input">{{serveDate}} ▾</view>
+      </picker>
+    </view>
+    <view class="row">
+      <text class="row-label">当天状态</text>
+      <text class="row-value">
+        {{closed ? '暂停供应' : '正常供应'}}
+        <text class="muted"> · 已选 {{pickedCount}} 个</text>
+      </text>
+    </view>
+    <view class="row" bindtap="onToggleClosed">
+      <text class="row-label">{{closed ? '恢复供应' : '暂停供应'}}</text>
+      <text class="row-value muted">点此切换 ›</text>
+    </view>
+  </view>
+
+  <view class="hint" wx:if="{{cutoff}}">这一天已截单，改动不影响已下的订单</view>
+
+  <view class="empty" wx:if="{{!loading && !combos.length}}">
+    <view class="empty-title">还没有上架的盒饭</view>
+    <view class="empty-desc">先去盒饭管理里上架，再来排菜单</view>
+  </view>
+
+  <view
+    class="combo {{picked[item.comboId] ? 'combo-on' : ''}}"
+    wx:for="{{combos}}"
+    wx:key="comboId"
+    data-id="{{item.comboId}}"
+    bindtap="onToggle"
+  >
+    <view class="combo-head">
+      <view class="check {{picked[item.comboId] ? 'check-on' : ''}}">
+        {{picked[item.comboId] ? '✓' : ''}}
+      </view>
+      <view class="combo-main">
+        <view class="combo-name">{{item.name}}</view>
+        <view class="combo-dishes" wx:if="{{item.dishesText}}">{{item.dishesText}}</view>
+      </view>
+      <view class="combo-price">¥{{item.priceText}}</view>
+    </view>
+
+    <view class="limit" wx:if="{{picked[item.comboId]}}" catchtap="noop">
+      <text class="limit-label">份数上限</text>
+      <input
+        class="limit-input"
+        type="number"
+        value="{{picked[item.comboId].limitQty}}"
+        placeholder="留空 = 不限量"
+        placeholder-class="ph"
+        data-id="{{item.comboId}}"
+        bindinput="onLimitInput"
+      />
+    </view>
+  </view>
+
+  <view class="unpublish" bindtap="onUnpublish">撤下这一天菜单</view>
+
+  <view class="bottom-gap"></view>
+
+  <view class="bottom-bar">
+    <view class="btn btn-ghost" bindtap="onCopy">复制上一份</view>
+    <view class="btn btn-ghost" bindtap="onSave">{{saving ? '保存中…' : '保存'}}</view>
+    <view class="btn" bindtap="onPublish">发布</view>
+  </view>
+</view>

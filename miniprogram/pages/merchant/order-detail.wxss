@@ -1,0 +1,118 @@
+@import "./merchant.wxss";
+
+.head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.name {
+  font-size: 34rpx;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.status {
+  font-size: 26rpx;
+  color: #ff9f1c;
+}
+
+.meta {
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  color: #9a9a9a;
+}
+
+.warn-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #c0392b;
+}
+
+.warn-desc {
+  margin-top: 10rpx;
+  font-size: 26rpx;
+  color: #c0392b;
+  line-height: 1.6;
+}
+
+.handle {
+  display: flex;
+  margin-top: 24rpx;
+}
+
+.handle .btn {
+  flex: 1;
+  margin-left: 16rpx;
+}
+
+.handle .btn:first-child {
+  margin-left: 0;
+}
+
+.item {
+  display: flex;
+  align-items: flex-start;
+  padding: 14rpx 0;
+  border-bottom: 1rpx solid #f7f8fa;
+}
+
+.item:last-child {
+  border-bottom: none;
+}
+
+.item-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.item-name {
+  font-size: 28rpx;
+  color: #1a1a1a;
+}
+
+.item-sub {
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  color: #9a9a9a;
+  line-height: 1.5;
+}
+
+.item-price {
+  font-size: 28rpx;
+  color: #1a1a1a;
+  padding-left: 16rpx;
+}
+
+.total-row {
+  margin-top: 12rpx;
+  padding-top: 20rpx;
+  border-top: 1rpx solid #f2f3f5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 28rpx;
+  color: #1a1a1a;
+}
+
+.total-amount {
+  font-size: 34rpx;
+  font-weight: 600;
+  color: #e8442e;
+}
+
+.code {
+  font-size: 34rpx;
+  font-weight: 700;
+  color: #ff9f1c;
+  letter-spacing: 6rpx;
+}
+
+.bottom-bar .btn {
+  flex: 1;
+  margin-left: 16rpx;
+}
+
+.bottom-bar .btn:first-child {
+  margin-left: 0;
+}

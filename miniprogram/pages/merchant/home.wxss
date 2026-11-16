@@ -1,0 +1,85 @@
+@import "./merchant.wxss";
+
+.head {
+  padding: 24rpx 8rpx 28rpx;
+}
+
+.head-name {
+  font-size: 40rpx;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.head-sub {
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  color: #9a9a9a;
+}
+
+.stats {
+  display: flex;
+  margin-bottom: 24rpx;
+}
+
+.stat {
+  flex: 1;
+  background: #ffffff;
+  border-radius: 20rpx;
+  padding: 28rpx 0;
+  text-align: center;
+  margin-right: 16rpx;
+}
+
+.stat:last-child {
+  margin-right: 0;
+}
+
+.stat-num {
+  font-size: 44rpx;
+  font-weight: 700;
+  color: #ff9f1c;
+}
+
+.stat-label {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: #8a8a8a;
+}
+
+.grid {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.grid-item {
+  width: calc(50% - 10rpx);
+  background: #ffffff;
+  border-radius: 20rpx;
+  padding: 28rpx;
+  margin-bottom: 20rpx;
+  box-sizing: border-box;
+}
+
+.grid-item:nth-child(odd) {
+  margin-right: 20rpx;
+}
+
+.grid-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.grid-desc {
+  margin-top: 10rpx;
+  font-size: 22rpx;
+  color: #9a9a9a;
+}
+
+.logout {
+  margin-top: 24rpx;
+  text-align: center;
+  font-size: 26rpx;
+  color: #a8a8a8;
+  padding: 24rpx 0;
+}

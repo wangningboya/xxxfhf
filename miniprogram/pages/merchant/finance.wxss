@@ -1,0 +1,73 @@
+@import "./merchant.wxss";
+
+.buckets {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+.bucket {
+  width: 48.5%;
+  background: #ffffff;
+  border-radius: 20rpx;
+  padding: 24rpx;
+  margin-bottom: 22rpx;
+  box-sizing: border-box;
+  border: 2rpx solid transparent;
+}
+
+.bucket-on {
+  border-color: #ff9f1c;
+}
+
+.bucket-label {
+  font-size: 26rpx;
+  color: #6a6a6a;
+  margin-bottom: 10rpx;
+}
+
+.bucket-amount {
+  font-size: 36rpx;
+  color: #1a1a1a;
+  font-weight: 600;
+  margin-bottom: 8rpx;
+}
+
+.bucket-count {
+  font-size: 24rpx;
+  color: #d97600;
+  margin-bottom: 6rpx;
+}
+
+.bucket-hint {
+  font-size: 22rpx;
+  color: #b0b0b0;
+  line-height: 1.5;
+}
+
+.line {
+  padding: 18rpx 0;
+  border-bottom: 1rpx solid #f4f5f7;
+}
+
+.line:last-child {
+  border-bottom: none;
+}
+
+.line-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6rpx;
+}
+
+.line-no {
+  font-size: 28rpx;
+  color: #1a1a1a;
+  font-weight: 600;
+}
+
+.line-amount {
+  font-size: 28rpx;
+  color: #d97600;
+}

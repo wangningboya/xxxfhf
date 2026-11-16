@@ -1,0 +1,35 @@
+# ---------- 密钥与本地配置（绝不提交） ----------
+.env
+.env.*
+!.env.example
+server/.env
+deploy/.env
+deploy/nginx/conf.d/https.conf
+
+# ---------- 证书 ----------
+deploy/nginx/certs/*
+!deploy/nginx/certs/.gitkeep
+
+# ---------- 后端构建与运行时产物 ----------
+server/target/
+server/logs/
+server/data/
+*.log
+
+# ---------- 小程序 ----------
+miniprogram/node_modules/
+miniprogram/miniprogram_npm/
+
+# ---------- IDE / 系统 ----------
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.DS_Store
+Thumbs.db
+
+# ---------- 保留项目文档 ----------
+!需求文档.md
+!技术文档.md
+!小程序项目档案.md

@@ -1,0 +1,106 @@
+@import "./merchant.wxss";
+
+.cover-field {
+  align-items: flex-start;
+  padding: 18rpx 0;
+}
+
+.cover-box {
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.cover-img {
+  width: 160rpx;
+  height: 160rpx;
+  border-radius: 14rpx;
+  background: #f5f6f8;
+}
+
+.cover-add {
+  width: 160rpx;
+  height: 160rpx;
+  border-radius: 14rpx;
+  border: 1rpx dashed #d8d8d8;
+  color: #9a9a9a;
+  font-size: 26rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cover-del {
+  margin-left: 24rpx;
+  font-size: 24rpx;
+  color: #c0392b;
+}
+
+.dish {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18rpx 0;
+  border-bottom: 1rpx solid #f4f5f7;
+}
+
+.dish:last-child {
+  border-bottom: none;
+}
+
+.dish-left {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.check {
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 50%;
+  border: 2rpx solid #d8d8d8;
+  margin-right: 20rpx;
+  color: #ffffff;
+  font-size: 24rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.check-on {
+  background: #ff9f1c;
+  border-color: #ff9f1c;
+}
+
+.dish-name {
+  font-size: 28rpx;
+  color: #1a1a1a;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+}
+
+.step {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 50%;
+  background: #f5f6f8;
+  color: #4a4a4a;
+  font-size: 30rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.step-num {
+  min-width: 60rpx;
+  text-align: center;
+  font-size: 28rpx;
+}
+
+.bottom-bar .btn {
+  flex: 1;
+}

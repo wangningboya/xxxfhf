@@ -1,0 +1,73 @@
+<view class="page">
+  <view class="card">
+    <view class="field">
+      <input class="field-input" placeholder="搜索菜品名称" placeholder-class="ph"
+             value="{{keyword}}" bindinput="onKeyword" />
+    </view>
+    <view class="chips" style="margin-top:16rpx">
+      <view class="chip {{status === '' ? 'chip-active' : ''}}" data-status="" bindtap="onStatus">全部</view>
+      <view class="chip {{status === 'enabled' ? 'chip-active' : ''}}" data-status="enabled" bindtap="onStatus">启用</view>
+      <view class="chip {{status === 'disabled' ? 'chip-active' : ''}}" data-status="disabled" bindtap="onStatus">停用</view>
+    </view>
+  </view>
+
+  <view wx:if="{{loading}}" class="empty"><view class="empty-title">加载中…</view></view>
+
+  <view wx:for="{{dishes}}" wx:key="id" class="card">
+    <view class="dish-row">
+      <image wx:if="{{item.image}}" class="dish-img" src="{{item.image}}" mode="aspectFill" />
+      <view class="dish-main">
+        <view class="dish-name">
+          {{item.name}}
+          <text class="badge {{item.status === 'enabled' ? 'badge-on' : ''}}">
+            {{item.status === 'enabled' ? '启用' : '停用'}}
+          </text>
+        </view>
+        <view class="muted">排序 {{item.sort || 0}}</view>
+      </view>
+    </view>
+    <view class="ops">
+      <text class="op" data-index="{{index}}" bindtap="onEdit">编辑</text>
+      <text class="op" data-index="{{index}}" bindtap="onToggle">
+        {{item.status === 'enabled' ? '停用' : '启用'}}
+      </text>
+      <text class="op op-danger" data-index="{{index}}" bindtap="onDelete">删除</text>
+    </view>
+  </view>
+
+  <view wx:if="{{!loading && dishes.length === 0}}" class="empty">
+    <view class="empty-title">还没有菜品</view>
+    <view class="empty-desc">菜品是原料层（如红烧肉、米饭），盒饭由若干菜品组成</view>
+  </view>
+
+  <!-- 表单 -->
+  <view wx:if="{{form}}" class="card">
+    <view class="card-title">{{form.id ? '编辑菜品' : '新增菜品'}}</view>
+    <view class="field">
+      <text class="field-label">名称</text>
+      <input class="field-input" placeholder="如：红烧肉" placeholder-class="ph"
+             value="{{form.name}}" data-key="name" bindinput="onInput" />
+    </view>
+    <view class="field">
+      <text class="field-label">排序</text>
+      <input class="field-input" type="number" placeholder="数字小的排前面（可不填）" placeholder-class="ph"
+             value="{{form.sort}}" data-key="sort" bindinput="onInput" />
+    </view>
+    <view class="field">
+      <text class="field-label">图片</text>
+      <view class="img-box">
+        <image wx:if="{{form.image}}" class="dish-img" src="{{form.image}}" mode="aspectFill" bindtap="onChooseImage" />
+        <view wx:else class="img-add" bindtap="onChooseImage">{{uploading ? '上传中…' : '＋ 上传'}}</view>
+      </view>
+    </view>
+    <view class="form-ops">
+      <view class="btn btn-ghost" bindtap="onCancel">取消</view>
+      <view class="btn" bindtap="onSave">{{saving ? '保存中…' : '保存'}}</view>
+    </view>
+  </view>
+
+  <view class="bottom-gap" wx:if="{{form}}"></view>
+  <view class="bottom-bar" wx:if="{{!form}}">
+    <view class="btn" bindtap="onNew">新增菜品</view>
+  </view>
+</view>

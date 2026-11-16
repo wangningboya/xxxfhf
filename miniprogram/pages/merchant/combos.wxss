@@ -1,0 +1,68 @@
+@import "./merchant.wxss";
+
+.combo-head {
+  display: flex;
+}
+
+.combo-cover {
+  width: 150rpx;
+  height: 150rpx;
+  border-radius: 14rpx;
+  margin-right: 24rpx;
+  background: #f5f6f8;
+  flex-shrink: 0;
+}
+
+.combo-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.combo-name {
+  font-size: 30rpx;
+  color: #1a1a1a;
+  font-weight: 600;
+  margin-bottom: 8rpx;
+}
+
+.combo-price {
+  font-size: 30rpx;
+  color: #d97600;
+  margin-bottom: 8rpx;
+}
+
+.badge {
+  margin-left: 12rpx;
+  font-size: 22rpx;
+  font-weight: 400;
+  padding: 4rpx 14rpx;
+  border-radius: 18rpx;
+  background: #f0f0f0;
+  color: #a8a8a8;
+}
+
+.badge-on {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.ops {
+  display: flex;
+  margin-top: 20rpx;
+  padding-top: 16rpx;
+  border-top: 1rpx solid #f4f5f7;
+}
+
+.op {
+  font-size: 26rpx;
+  color: #4a6fa5;
+  margin-right: 40rpx;
+}
+
+.op-danger {
+  color: #c0392b;
+}
+
+.bottom-bar .btn {
+  flex: 1;
+}

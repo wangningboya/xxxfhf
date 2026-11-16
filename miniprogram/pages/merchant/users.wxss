@@ -1,0 +1,100 @@
+@import "./merchant.wxss";
+
+.user-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.user-name {
+  font-size: 30rpx;
+  color: #1a1a1a;
+  font-weight: 600;
+  margin-bottom: 6rpx;
+}
+
+.addr-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 20rpx 0 8rpx;
+  padding-top: 20rpx;
+  border-top: 1rpx solid #f4f5f7;
+}
+
+.addr-add {
+  font-size: 26rpx;
+  color: #d97600;
+}
+
+.addr {
+  background: #fafbfc;
+  border-radius: 14rpx;
+  padding: 20rpx;
+  margin-top: 16rpx;
+}
+
+.addr-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8rpx;
+}
+
+.addr-region {
+  font-size: 26rpx;
+  color: #d97600;
+  background: #fff3e0;
+  padding: 4rpx 16rpx;
+  border-radius: 20rpx;
+}
+
+.addr-status {
+  font-size: 24rpx;
+  color: #a8a8a8;
+}
+
+.addr-on {
+  color: #2e7d32;
+}
+
+.addr-detail {
+  font-size: 28rpx;
+  color: #1a1a1a;
+  margin-bottom: 6rpx;
+}
+
+.addr-ops {
+  display: flex;
+  margin-top: 14rpx;
+}
+
+.op {
+  font-size: 24rpx;
+  color: #4a6fa5;
+  margin-right: 32rpx;
+}
+
+.op-danger {
+  color: #c0392b;
+}
+
+.form {
+  margin-top: 24rpx;
+  padding-top: 12rpx;
+  border-top: 1rpx dashed #e6e6e6;
+}
+
+.form-ops {
+  display: flex;
+  margin-top: 24rpx;
+}
+
+.form-ops .btn {
+  flex: 1;
+  margin-right: 20rpx;
+}
+
+.form-ops .btn:last-child {
+  margin-right: 0;
+}

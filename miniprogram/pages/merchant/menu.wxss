@@ -1,0 +1,113 @@
+@import "./merchant.wxss";
+
+.hint {
+  font-size: 24rpx;
+  color: #a86b00;
+  background: #fff8e6;
+  border-radius: 12rpx;
+  padding: 16rpx 24rpx;
+  margin-bottom: 20rpx;
+}
+
+.combo {
+  background: #ffffff;
+  border-radius: 20rpx;
+  padding: 24rpx 28rpx;
+  margin-bottom: 18rpx;
+  border: 1rpx solid #ffffff;
+}
+
+.combo-on {
+  border-color: #ffd9a8;
+}
+
+.combo-head {
+  display: flex;
+  align-items: center;
+}
+
+.check {
+  width: 44rpx;
+  height: 44rpx;
+  border-radius: 10rpx;
+  border: 2rpx solid #d8d8d8;
+  margin-right: 18rpx;
+  font-size: 26rpx;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.check-on {
+  background: #ff9f1c;
+  border-color: #ff9f1c;
+}
+
+.combo-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.combo-name {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.combo-dishes {
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  color: #9a9a9a;
+  line-height: 1.5;
+}
+
+.combo-price {
+  font-size: 28rpx;
+  color: #e8442e;
+  padding-left: 16rpx;
+}
+
+.limit {
+  margin-top: 18rpx;
+  padding-top: 18rpx;
+  border-top: 1rpx solid #f4f5f7;
+  display: flex;
+  align-items: center;
+}
+
+.limit-label {
+  font-size: 26rpx;
+  color: #6a6a6a;
+  width: 170rpx;
+}
+
+.limit-input {
+  flex: 1;
+  height: 68rpx;
+  background: #f5f6f8;
+  border-radius: 12rpx;
+  padding: 0 20rpx;
+  font-size: 26rpx;
+  box-sizing: border-box;
+}
+
+.unpublish {
+  margin-top: 8rpx;
+  text-align: center;
+  font-size: 26rpx;
+  color: #a8a8a8;
+  padding: 16rpx 0;
+}
+
+.bottom-bar .btn {
+  flex: 1;
+  margin-left: 14rpx;
+  padding: 0;
+}
+
+.bottom-bar .btn:first-child {
+  margin-left: 0;
+}

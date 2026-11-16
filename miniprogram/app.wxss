@@ -1,0 +1,22 @@
+/* 全局基础样式。页面级样式各自写在 page.wxss 里，这里只放真正通用的东西。 */
+page {
+  font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  font-size: 28rpx;
+  color: #1a1a1a;
+  -webkit-font-smoothing: antialiased;
+}
+
+view,
+text,
+button,
+input {
+  box-sizing: border-box;
+}
+
+button {
+  padding: 0;
+  margin: 0;
+  line-height: normal;
+  background: transparent;
+}

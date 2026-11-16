@@ -1,0 +1,159 @@
+<view class="page">
+  <view class="card">
+    <view class="card-title">供餐日</view>
+    <view class="row">
+      <text class="row-label">日期</text>
+      <text class="row-value">{{serveDate}}（明天）</text>
+    </view>
+    <view class="muted">代客下单不受截单时间限制，但停业与剩余份数照样校验。</view>
+  </view>
+
+  <!-- 用户 -->
+  <view class="card">
+    <view class="card-title">下单用户</view>
+    <block wx:if="{{selectedUser}}">
+      <view class="row">
+        <text class="row-label">已选</text>
+        <text class="row-value">{{selectedUser.nickName || '未填昵称'}} {{selectedUser.phone || ''}}</text>
+      </view>
+      <view class="row" bindtap="clearUser">
+        <text class="row-label">重新选择</text>
+        <text class="row-value muted">点此更换 ›</text>
+      </view>
+    </block>
+    <block wx:else>
+      <view class="field">
+        <input class="field-input" placeholder="搜索昵称或手机号" placeholder-class="ph"
+               value="{{userKeyword}}" bindinput="onKeyword" />
+      </view>
+      <view wx:if="{{userLoading}}" class="muted">加载中…</view>
+      <view wx:elif="{{users.length === 0}}" class="muted">没有匹配的已通过用户</view>
+      <view wx:for="{{users}}" wx:key="userId" class="row" data-index="{{index}}" bindtap="onPickUser">
+        <view>
+          <view class="row-value" style="text-align:left">{{item.nickName || '未填昵称'}}</view>
+          <view class="muted">{{item.phone || '无手机号'}}</view>
+        </view>
+        <text class="muted">选择 ›</text>
+      </view>
+    </block>
+  </view>
+
+  <!-- 盒饭 -->
+  <view class="card">
+    <view class="card-title">选择盒饭</view>
+    <view wx:if="{{menuLoading}}" class="muted">加载中…</view>
+    <view wx:elif="{{menuItems.length === 0}}" class="muted">明天还没有发布菜单</view>
+    <view wx:for="{{menuItems}}" wx:key="comboId" class="item">
+      <view class="item-main">
+        <view class="item-name">{{item.name}}</view>
+        <view class="muted">{{item.dishesText}}</view>
+        <view class="muted" wx:if="{{item.remainQty !== null}}">剩余 {{item.remainQty}} 份</view>
+      </view>
+      <view class="item-right">
+        <view class="item-price">¥{{item.priceText}}</view>
+        <view class="mini-btn {{item.soldOut ? 'mini-btn-off' : ''}}"
+              data-index="{{index}}" bindtap="onOpenItem">
+          {{item.soldOut ? '售罄' : '选择'}}
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 已选 -->
+  <view class="card" wx:if="{{lines.length > 0}}">
+    <view class="card-title">已选 {{lines.length}} 项</view>
+    <view wx:for="{{lines}}" wx:key="key" class="row">
+      <view>
+        <view class="row-value" style="text-align:left">{{item.name}} × {{item.qty}}</view>
+        <view class="muted" wx:if="{{item.specText}}">{{item.specText}}</view>
+      </view>
+      <view class="line-right">
+        <text class="row-value">¥{{item.amountText}}</text>
+        <text class="del" data-index="{{index}}" bindtap="onRemoveLine">删除</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 交付 -->
+  <view class="card">
+    <view class="card-title">取餐方式</view>
+    <view class="tabs">
+      <view class="tab {{deliveryType === 'pickup' ? 'tab-on' : ''}}"
+            data-type="pickup" bindtap="onDeliveryType">到店自取</view>
+      <view class="tab {{deliveryType === 'delivery' ? 'tab-on' : ''}}"
+            data-type="delivery" bindtap="onDeliveryType">配送到地址</view>
+    </view>
+
+    <block wx:if="{{deliveryType === 'pickup'}}">
+      <view wx:if="{{slots.length === 0}}" class="muted">商家还没有配置自取时段，可先下单再与顾客约时间</view>
+      <view wx:else class="chips">
+        <view wx:for="{{slots}}" wx:key="*this"
+              class="chip {{pickupSlot === item ? 'chip-active' : ''}}"
+              data-index="{{index}}" bindtap="onPickSlot">{{item}}</view>
+      </view>
+    </block>
+
+    <block wx:else>
+      <view wx:if="{{!selectedUser}}" class="muted">先选用户，才能列出他的收货地址</view>
+      <view wx:elif="{{addresses.length === 0}}" class="muted" bindtap="onGoAddress">
+        该用户还没有可用地址，点此去维护 ›
+      </view>
+      <view wx:else>
+        <view wx:for="{{addresses}}" wx:key="id" class="row"
+              data-index="{{index}}" bindtap="onPickAddress">
+          <view>
+            <view class="row-value" style="text-align:left">{{item.regionName}} · {{item.contactName}}</view>
+            <view class="muted">{{item.detail}}</view>
+          </view>
+          <text class="tick" wx:if="{{addressId === item.id}}">✓</text>
+        </view>
+      </view>
+    </block>
+  </view>
+
+  <view class="card">
+    <view class="card-title">备注</view>
+    <textarea class="remark" placeholder="口味、忌口、送达要求等（可不填）" placeholder-class="ph"
+              value="{{remark}}" bindinput="onRemark" maxlength="200" />
+  </view>
+
+  <view class="bottom-gap"></view>
+  <view class="bottom-bar">
+    <view class="total">合计 <text class="total-num">¥{{totalText}}</text></view>
+    <view class="btn" bindtap="onSubmit">{{submitting ? '提交中…' : '确认代下单'}}</view>
+  </view>
+
+  <!-- 规格弹层 -->
+  <view wx:if="{{editing}}" class="mask" bindtap="onCloseEdit"></view>
+  <view wx:if="{{editing}}" class="sheet">
+    <view class="sheet-head">
+      <view class="sheet-name">{{editing.name}}</view>
+      <view class="sheet-close" bindtap="onCloseEdit">×</view>
+    </view>
+
+    <view wx:for="{{editing.groups}}" wx:key="name" wx:for-item="group" class="group">
+      <view class="group-name">{{group.name}}{{group.required ? '（必选）' : '（可选）'}}</view>
+      <view class="chips">
+        <view wx:for="{{group.options}}" wx:key="optionId" wx:for-item="opt"
+              class="chip {{opt.checked ? 'chip-active' : ''}}"
+              data-group="{{group.name}}" data-option="{{opt.optionId}}" bindtap="onPickOption">
+          {{opt.name}}{{opt.deltaText ? ' ' + opt.deltaText : ''}}
+        </view>
+      </view>
+    </view>
+
+    <view class="qty-row">
+      <text class="row-label">份数</text>
+      <view class="stepper">
+        <view class="step" data-step="-1" bindtap="onQty">−</view>
+        <view class="step-num">{{editQty}}</view>
+        <view class="step" data-step="1" bindtap="onQty">＋</view>
+      </view>
+    </view>
+
+    <view class="sheet-foot">
+      <view class="total">小计 <text class="total-num">¥{{editPriceText}}</text></view>
+      <view class="btn" bindtap="onConfirmEdit">加入清单</view>
+    </view>
+  </view>
+</view>

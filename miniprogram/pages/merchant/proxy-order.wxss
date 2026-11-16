@@ -1,0 +1,210 @@
+@import "./merchant.wxss";
+
+.item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid #f4f5f7;
+}
+
+.item:last-child {
+  border-bottom: none;
+}
+
+.item-main {
+  flex: 1;
+  padding-right: 20rpx;
+}
+
+.item-name {
+  font-size: 30rpx;
+  color: #1a1a1a;
+  font-weight: 600;
+  margin-bottom: 8rpx;
+}
+
+.item-right {
+  text-align: right;
+}
+
+.item-price {
+  font-size: 30rpx;
+  color: #d97600;
+  margin-bottom: 12rpx;
+}
+
+.mini-btn {
+  display: inline-block;
+  padding: 8rpx 26rpx;
+  border-radius: 26rpx;
+  background: #ff9f1c;
+  color: #ffffff;
+  font-size: 24rpx;
+}
+
+.mini-btn-off {
+  background: #e6e6e6;
+  color: #a8a8a8;
+}
+
+.line-right {
+  display: flex;
+  align-items: center;
+}
+
+.del {
+  margin-left: 20rpx;
+  font-size: 24rpx;
+  color: #c0392b;
+}
+
+.tabs {
+  display: flex;
+  margin-bottom: 20rpx;
+}
+
+.tab {
+  flex: 1;
+  text-align: center;
+  padding: 18rpx 0;
+  font-size: 28rpx;
+  color: #6a6a6a;
+  background: #f5f6f8;
+}
+
+.tab:first-child {
+  border-radius: 12rpx 0 0 12rpx;
+}
+
+.tab:last-child {
+  border-radius: 0 12rpx 12rpx 0;
+}
+
+.tab-on {
+  background: #fff3e0;
+  color: #d97600;
+  font-weight: 600;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.tick {
+  color: #d97600;
+  font-size: 32rpx;
+}
+
+.remark {
+  width: 100%;
+  height: 140rpx;
+  font-size: 28rpx;
+  color: #1a1a1a;
+  box-sizing: border-box;
+}
+
+.total {
+  flex: 1;
+  font-size: 26rpx;
+  color: #6a6a6a;
+}
+
+.total-num {
+  font-size: 34rpx;
+  color: #d97600;
+  font-weight: 600;
+  margin-left: 8rpx;
+}
+
+/* 规格弹层 */
+.mask {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 10;
+}
+
+.sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #ffffff;
+  border-radius: 24rpx 24rpx 0 0;
+  padding: 32rpx;
+  z-index: 11;
+  max-height: 82vh;
+  overflow-y: auto;
+}
+
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24rpx;
+}
+
+.sheet-name {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.sheet-close {
+  font-size: 40rpx;
+  color: #b0b0b0;
+  line-height: 1;
+  padding: 0 10rpx;
+}
+
+.group {
+  margin-bottom: 24rpx;
+}
+
+.group-name {
+  font-size: 28rpx;
+  color: #4a4a4a;
+  margin-bottom: 14rpx;
+}
+
+.qty-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 0;
+  border-top: 1rpx solid #f4f5f7;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+}
+
+.step {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
+  background: #f5f6f8;
+  color: #4a4a4a;
+  font-size: 32rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.step-num {
+  min-width: 72rpx;
+  text-align: center;
+  font-size: 30rpx;
+}
+
+.sheet-foot {
+  display: flex;
+  align-items: center;
+  margin-top: 12rpx;
+}
