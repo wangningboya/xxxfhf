@@ -1,0 +1,35 @@
+<view class="page">
+  <!-- 店招 -->
+  <view class="hero">
+    <view class="hero-name">{{shopName}}</view>
+    <view class="hero-notice" wx:if="{{shopNotice}}">{{shopNotice}}</view>
+    <view class="hero-notice hero-notice-empty" wx:else>欢迎光临，今天想吃点什么</view>
+  </view>
+
+  <!-- 营业状态：取次日菜单，与点餐页同源 -->
+  <view class="status-card">
+    <view class="status-row">
+      <text class="status-label">明日营业</text>
+      <text class="status-value {{statusWarn ? 'status-warn' : ''}}">{{statusText || '读取中…'}}</text>
+    </view>
+    <view class="status-row" wx:if="{{serveTimeText}}">
+      <text class="status-label">供餐时段</text>
+      <text class="status-value">{{serveTimeText}}</text>
+    </view>
+    <view class="status-row" wx:if="{{cutoffTime}}">
+      <text class="status-label">截单时间</text>
+      <text class="status-value">前一天 {{cutoffTime}}</text>
+    </view>
+  </view>
+
+  <view class="start-btn {{loading ? 'start-btn-disabled' : ''}}" bindtap="onStartOrder">
+    {{loading ? '加载中…' : '开始点餐'}}
+  </view>
+
+  <view class="tips">
+    <view class="tips-line">· 下单统一在「点餐」页，明天午饭前配送到手或到店自取</view>
+    <view class="tips-line">· 明天截止前可自行取消，截单后请联系商家</view>
+  </view>
+
+  <!-- 预留位：后续推销位叠在这里，本期不渲染任何内容 -->
+</view>

@@ -7,11 +7,19 @@
   <view class="stats">
     <view class="stat" data-url="/pages/merchant/orders?status=pending_accept" bindtap="onGo">
       <view class="stat-num">{{pendingAccept}}</view>
-      <view class="stat-label">待接单</view>
+      <view class="stat-label">{{acceptLabel}}</view>
+    </view>
+    <view class="stat" data-url="/pages/merchant/orders?cancelOnly=1" bindtap="onGo">
+      <view class="stat-num {{pendingCancel > 0 ? 'stat-warn' : ''}}">{{pendingCancel}}</view>
+      <view class="stat-label">待处理退订</view>
     </view>
     <view class="stat" data-url="/pages/merchant/audit" bindtap="onGo">
       <view class="stat-num">{{pendingAudit}}</view>
-      <view class="stat-label">待审核</view>
+      <view class="stat-label">{{auditLabel}}</view>
+    </view>
+    <view class="stat" data-url="/pages/merchant/users" bindtap="onGo">
+      <view class="stat-num {{pendingAddress > 0 ? 'stat-warn' : ''}}">{{pendingAddress}}</view>
+      <view class="stat-label">待确认地址</view>
     </view>
     <view class="stat" data-url="/pages/merchant/menu" bindtap="onGo">
       <view class="stat-num">{{comboCount}}</view>

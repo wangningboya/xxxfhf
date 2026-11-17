@@ -30,8 +30,7 @@ public class ConfigController {
             ConfigKey.CUTOFF_TIME,
             ConfigKey.PICKUP_SLOTS,
             ConfigKey.DELIVERY_FEE,
-            ConfigKey.CLOSED_DATES,
-            ConfigKey.PHONE_AUTH_ENABLED
+            ConfigKey.CLOSED_DATES
     };
 
     private final ConfigService configService;

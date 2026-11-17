@@ -27,17 +27,25 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessageBox } from 'element-plus';
 import { useAuthStore } from '../stores/auth';
+import { useDictStore } from '../stores/dict';
 
 const auth = useAuthStore();
+const dict = useDictStore();
+
+// 字典进后台取一次（接口不鉴权，但排在这里可以保证页面渲染时已有文案）
+onMounted(() => {
+  dict.load();
+});
 const route = useRoute();
 const router = useRouter();
 
 /** 菜单只列有权限的项；权限项本身就是服务端判定的同一套字符串 */
 const ALL_MENUS = [
+  { path: '/dashboard', title: '工作台', perms: ['order.view', 'order.accept', 'user.audit'] },
   { path: '/order', title: '订单管理', perms: ['order.view', 'order.accept'] },
   { path: '/user', title: '用户审核', perms: ['user.audit', 'user.view'] },
   { path: '/address', title: '地址维护', perm: 'user.address' },
@@ -49,6 +57,7 @@ const ALL_MENUS = [
   { path: '/prep', title: '备菜统计', perm: 'prep.view' },
   { path: '/finance', title: '对账视图', perm: 'finance.view' },
   { path: '/role', title: '角色权限', perm: 'role.manage' },
+  { path: '/dict', title: '数据字典', perm: 'dict.manage' },
   { path: '/config', title: '系统配置', perm: 'config.manage' },
 ];
 

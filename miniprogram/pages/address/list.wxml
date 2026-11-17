@@ -24,7 +24,11 @@
           <text class="tag" wx:if="{{addr.tag}}">{{addr.tag}}</text>
         </view>
         <view class="addr-line2">{{addr.regionName}} {{addr.detail}}</view>
-        <view class="addr-pending" wx:if="{{addr.status !== 'active'}}">待商家确认，暂不能下单用</view>
+        <view class="addr-pending" wx:if="{{addr.status === 'pending'}}">待商家确认，暂不能下单用</view>
+        <!-- 驳回要把原因原样给用户：他才知道该改哪一段，而不是反复提交同一条 -->
+        <view class="addr-reject" wx:if="{{addr.status === 'rejected'}}">
+          商家驳回：{{addr.rejectReason || '请修改后重新提交'}}
+        </view>
       </view>
       <view class="addr-edit" data-id="{{addr.id}}" catchtap="onEdit">编辑</view>
     </view>

@@ -40,6 +40,8 @@ public final class Perms {
     public static final String CONFIG_MANAGE = "config.manage";
     /** 角色与权限分配 */
     public static final String ROLE_MANAGE = "role.manage";
+    /** 数据字典维护 */
+    public static final String DICT_MANAGE = "dict.manage";
 
     /** 内置「商家」角色的全部权限。 */
     public static final String[] ALL = {
@@ -49,6 +51,6 @@ public final class Perms {
             ORDER_ACCEPT, ORDER_VIEW,
             PREP_VIEW, PREP_EXPORT,
             ORDER_PAYMENT, FINANCE_VIEW,
-            CONFIG_MANAGE, ROLE_MANAGE
+            CONFIG_MANAGE, ROLE_MANAGE, DICT_MANAGE
     };
 }

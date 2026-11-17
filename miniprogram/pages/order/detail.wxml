@@ -12,9 +12,28 @@
     <view class="alert-desc">{{order.rejectReason}}</view>
   </view>
 
+  <!-- 三段用独立 wx:if 而不是 wx:elif：中间夹着注释，elif 链容易断 -->
   <view class="alert" wx:if="{{order.cancelRequested}}">
     <view class="alert-title">取消申请已提交</view>
-    <view class="alert-desc">等商家处理，同意后份数会自动释放。</view>
+    <view class="alert-desc">等商家处理，同意后份数会自动释放。超过约定时间未处理，系统会按同意自动取消。</view>
+  </view>
+
+  <!-- 商家驳回：必须让用户看到原因，否则他只知道「没批」却不知道下一步做什么 -->
+  <view
+    class="alert alert-warn"
+    wx:if="{{!order.cancelRequested && order.cancelRequest.result === 'rejected'}}"
+  >
+    <view class="alert-title">商家未同意取消</view>
+    <view class="alert-desc">{{order.cancelRequest.remark || '商家未填写原因，可直接联系商家'}}</view>
+  </view>
+
+  <!-- 超时自动取消：明确告诉用户不是商家手动批的，避免误会 -->
+  <view
+    class="alert"
+    wx:if="{{!order.cancelRequested && order.cancelRequest.result === 'auto_approved'}}"
+  >
+    <view class="alert-title">已自动取消</view>
+    <view class="alert-desc">商家超时未处理，系统已按同意处理并释放份数。</view>
   </view>
 
   <view class="alert alert-warn" wx:if="{{order.stockReleased}}">
@@ -42,7 +61,7 @@
   </view>
 
   <view class="card">
-    <view class="sum-row"><text>取送方式</text><text>{{order.deliveryType === 'delivery' ? '配送' : '自取'}}</text></view>
+    <view class="sum-row"><text>取送方式</text><text>{{deliveryTypeText}}</text></view>
     <view class="sum-row" wx:if="{{order.pickupSlot}}"><text>取餐时段</text><text>{{order.pickupSlot}}</text></view>
     <block wx:if="{{order.address}}">
       <view class="sum-row"><text>收货地址</text><text>{{order.address.regionName}} {{order.address.detail}}</text></view>

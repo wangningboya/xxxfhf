@@ -4,6 +4,8 @@ page {
 
 .page {
   padding: 24rpx;
+  /* 底部让出 tabBar（约 100rpx）与安全区，否则最后一份菜会被遮住 */
+  padding-bottom: calc(env(safe-area-inset-bottom) + 160rpx);
   min-height: 100vh;
   box-sizing: border-box;
 }
@@ -254,55 +256,42 @@ page {
   color: #a8a8a8;
 }
 
-/* ---------- 底部购物车条 ---------- */
+/* ---------- 购物车悬浮球 ---------- */
 
-.cart-gap {
-  height: 140rpx;
-}
-
-.cart-bar {
+.cart-fab {
   position: fixed;
-  left: 24rpx;
-  right: 24rpx;
-  bottom: 24rpx;
-  height: 96rpx;
-  background: #1f1f1f;
-  border-radius: 48rpx;
+  right: 32rpx;
+  bottom: calc(env(safe-area-inset-bottom) + 140rpx);
+  width: 100rpx;
+  height: 100rpx;
+  border-radius: 50%;
+  background: #ff9f1c;
+  box-shadow: 0 8rpx 24rpx rgba(255, 159, 28, 0.35);
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding-left: 36rpx;
-  box-sizing: border-box;
+  justify-content: center;
   z-index: 50;
 }
 
-.cart-info {
-  display: flex;
-  align-items: baseline;
-  flex: 1;
+.cart-fab-icon {
+  width: 52rpx;
+  height: 52rpx;
 }
 
-.cart-count {
-  font-size: 26rpx;
-  color: #d8d8d8;
-}
-
-.cart-amount {
-  margin-left: 20rpx;
-  font-size: 34rpx;
+.cart-fab-badge {
+  position: absolute;
+  top: -6rpx;
+  right: -6rpx;
+  min-width: 36rpx;
+  height: 36rpx;
+  padding: 0 8rpx;
+  border-radius: 18rpx;
+  background: #e8442e;
   color: #ffffff;
-  font-weight: 600;
-}
-
-.cart-go {
-  height: 96rpx;
-  padding: 0 44rpx;
-  border-radius: 0 48rpx 48rpx 0;
-  background: #ff9f1c;
-  color: #ffffff;
-  font-size: 30rpx;
-  display: flex;
-  align-items: center;
+  font-size: 22rpx;
+  line-height: 36rpx;
+  text-align: center;
+  box-sizing: border-box;
 }
 
 /* ---------- 昵称填写浮层 ---------- */

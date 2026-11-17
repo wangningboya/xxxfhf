@@ -95,6 +95,13 @@ page {
   color: #a86b00;
 }
 
+.addr-reject {
+  margin-top: 10rpx;
+  font-size: 22rpx;
+  line-height: 1.5;
+  color: #d93026;
+}
+
 .addr-edit {
   font-size: 24rpx;
   color: #8a8a8a;

@@ -40,20 +40,44 @@
             <el-tag size="small" effect="plain">{{ row.source === 'merchant' ? '商家' : '用户' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="100">
+        <el-table-column label="状态" width="120">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'active' ? 'success' : 'warning'" size="small">
-              {{ row.status === 'active' ? '可用' : '待确认' }}
+            <el-tag :type="statusTag(row.status)" size="small">
+              {{ statusLabel(row.status) }}
             </el-tag>
+            <div v-if="row.status === 'rejected' && row.rejectReason" class="reject-reason">
+              {{ row.rejectReason }}
+            </div>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" width="230" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="openForm(row)">编辑</el-button>
-            <el-button link type="primary" @click="toggleStatus(row)">
-              {{ row.status === 'active' ? '设为待确认' : '确认可用' }}
+            <el-button
+              v-if="row.status !== 'active'"
+              link
+              type="success"
+              @click="setStatus(row, 'active')"
+            >
+              通过
             </el-button>
-            <el-button link type="danger" @click="onDelete(row)">删除</el-button>
+            <el-button
+              v-if="row.status !== 'rejected'"
+              link
+              type="danger"
+              @click="onReject(row)"
+            >
+              驳回
+            </el-button>
+            <el-button
+              v-if="row.status === 'active'"
+              link
+              type="warning"
+              @click="setStatus(row, 'pending')"
+            >
+              收回
+            </el-button>
+            <el-button link type="danger" plain @click="onDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -91,7 +115,10 @@
 <script setup>
 import { onMounted, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import { useDictStore } from '../../stores/dict';
 import http from '../../api';
+
+const dict = useDictStore();
 
 const users = ref([]);
 const userLoading = ref(false);
@@ -192,11 +219,45 @@ function onSave() {
     });
 }
 
-function toggleStatus(row) {
-  const next = row.status === 'active' ? 'pending' : 'active';
+/** 地址三态的显示名走字典，商家可以把「待确认」改成「待核对」 */
+function statusLabel(status) {
+  const fallback = { active: '可用', pending: '待确认', rejected: '已驳回' }[status] || status;
+  return dict.label('address_status', status, fallback);
+}
+
+function statusTag(status) {
+  return { active: 'success', pending: 'warning', rejected: 'danger' }[status] || 'info';
+}
+
+function setStatus(row, status, reason) {
   http
-    .post('/admin/address/status', { addressId: row.id, status: next })
-    .then(() => loadAddresses())
+    .post('/admin/address/status', { addressId: row.id, status, reason })
+    .then(() => {
+      ElMessage.success(status === 'active' ? '已通过' : '已更新');
+      loadAddresses();
+    })
+    .catch(() => {});
+}
+
+/**
+ * 驳回必须写原因。
+ *
+ * 用输入框而不是「确认驳回」：用户端会把这句话原样显示，
+ * 只说「不行」等于让他猜哪里不对，下一条提交还是错的。
+ */
+function onReject(row) {
+  ElMessageBox.prompt('用户会看到这句话，写清楚哪里不对（如「3 栋没有 2 单元」）', '驳回地址', {
+    confirmButtonText: '驳回',
+    cancelButtonText: '取消',
+    inputType: 'textarea',
+    inputValidator: (value) => {
+      const text = (value || '').trim();
+      if (!text) return '必须填写驳回原因';
+      if (text.length > 200) return '最多 200 字';
+      return true;
+    },
+  })
+    .then(({ value }) => setStatus(row, 'rejected', value.trim()))
     .catch(() => {});
 }
 

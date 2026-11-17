@@ -11,7 +11,12 @@
         @change="reload"
       />
       <el-select v-model="status" placeholder="全部状态" clearable style="width: 140px" @change="reload">
-        <el-option v-for="item in STATUS" :key="item.value" :label="item.label" :value="item.value" />
+        <el-option
+          v-for="item in statusOptions"
+          :key="item.value"
+          :label="item.label"
+          :value="item.value"
+        />
       </el-select>
       <el-input
         v-model="keyword"
@@ -21,6 +26,7 @@
         @keyup.enter="reload"
         @clear="reload"
       />
+      <el-checkbox v-model="cancelOnly" @change="reload">只看有取消申请</el-checkbox>
       <el-button @click="reload">查询</el-button>
       <div class="toolbar-right">
         <el-button v-if="auth.has('order.accept')" @click="proxyVisible = true">代客下单</el-button>
@@ -69,7 +75,7 @@
       </el-table-column>
       <el-table-column label="取餐方式" width="110">
         <template #default="{ row }">
-          {{ row.order.deliveryType === 'delivery' ? '配送' : '自取' }}
+          {{ deliveryTypeLabel(row.order.deliveryType) }}
           <div class="muted" v-if="row.order.deliveryType === 'delivery'">
             {{ (row.order.region && row.order.region.name) || '' }}
           </div>
@@ -83,14 +89,14 @@
       </el-table-column>
       <el-table-column label="订单状态" width="100">
         <template #default="{ row }">
-          <el-tag :type="statusType(row.order.status)" size="small">
+          <el-tag :type="statusType(row.order)" size="small">
             {{ row.order.statusLabel }}
           </el-tag>
         </template>
       </el-table-column>
       <el-table-column label="收款" width="120">
         <template #default="{ row }">
-          <el-tag :type="payType(row.order.payStatus)" size="small" effect="plain">
+          <el-tag :type="payType(row.order)" size="small" effect="plain">
             {{ row.order.payStatusLabel }}
           </el-tag>
           <div v-if="row.order.cancelRequested" class="muted">有取消申请</div>
@@ -140,7 +146,7 @@
           <el-descriptions-item label="取餐码">{{ detail.order.pickupCode || '—' }}</el-descriptions-item>
           <el-descriptions-item label="取餐时段">{{ detail.order.pickupSlot || '—' }}</el-descriptions-item>
           <el-descriptions-item label="取餐方式" :span="2">
-            {{ detail.order.deliveryType === 'delivery' ? '配送到地址' : '到店自取' }}
+            {{ deliveryTypeLabel(detail.order.deliveryType) }}
           </el-descriptions-item>
           <el-descriptions-item v-if="detail.order.address" label="收货信息" :span="2">
             {{ detail.order.address.contactName }} {{ detail.order.address.phone }}<br />
@@ -151,7 +157,19 @@
             {{ detail.order.rejectReason }}
           </el-descriptions-item>
           <el-descriptions-item v-if="detail.order.cancelRequest" label="取消申请" :span="2">
-            {{ detail.order.cancelRequest.reason || '未填原因' }}
+            用户原因：{{ detail.order.cancelRequest.reason || '未填原因' }}
+            <div class="muted">
+              提交于 {{ detail.order.cancelRequest.appliedAt || '—' }}
+              <template v-if="detail.order.cancelRequest.result">
+                · 处理结果：{{ cancelResultLabel(detail.order.cancelRequest.result) }}
+              </template>
+              <template v-if="detail.order.cancelRequest.handledAt">
+                · 处理于 {{ detail.order.cancelRequest.handledAt }}
+              </template>
+              <template v-if="detail.order.cancelRequest.remark">
+                · 处理备注：{{ detail.order.cancelRequest.remark }}
+              </template>
+            </div>
           </el-descriptions-item>
         </el-descriptions>
 
@@ -237,14 +255,19 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
+import { useRoute } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import http from '../../api';
 import { useAuthStore } from '../../stores/auth';
+import { useDictStore } from '../../stores/dict';
 import ProxyOrderDialog from './ProxyOrderDialog.vue';
 
 const auth = useAuthStore();
+const dict = useDictStore();
+const route = useRoute();
 
+/** 字典没加载出来时的兜底；加载完成后以字典为准（商家可改显示名与顺序） */
 const STATUS = [
   { value: 'pending_accept', label: '待接单' },
   { value: 'accepted', label: '已接单' },
@@ -267,6 +290,8 @@ function tomorrow() {
 const serveDate = ref(tomorrow());
 const status = ref('');
 const keyword = ref('');
+/** 只看有取消申请的单：勾上时不限供餐日，专门用来捞漏处理的退订 */
+const cancelOnly = ref(false);
 const rows = ref([]);
 const total = ref(0);
 const page = ref(1);
@@ -284,19 +309,23 @@ function yuan(cents) {
   return (value / 100).toFixed(2);
 }
 
-function statusType(value) {
-  if (value === 'pending_accept') return 'warning';
-  if (value === 'cancelled' || value === 'rejected') return 'info';
-  if (value === 'completed') return 'success';
-  return 'primary';
+/** 状态筛选选项：字典里停用的项不会出现，顺序按字典 sort */
+const statusOptions = computed(() => dict.options('order_status', STATUS));
+
+/**
+ * 状态标签配色。优先用服务端随行下发的 statusTag（同一份字典算出来的），
+ * 本地字典还没到也能正确上色；两者都没有时落到 info。
+ */
+function statusType(row) {
+  return row.statusTag || dict.tagType('order_status', row.status);
 }
 
-function payType(value) {
-  if (value === 'paid') return 'success';
-  if (value === 'claimed') return 'warning';
-  if (value === 'refunding') return 'danger';
-  if (value === 'refunded') return 'info';
-  return 'info';
+function payType(row) {
+  return row.payStatusTag || dict.tagType('pay_status', row.payStatus);
+}
+
+function deliveryTypeLabel(value) {
+  return dict.label('delivery_type', value, value === 'delivery' ? '配送' : '自取');
 }
 
 function canSelect(row) {
@@ -308,9 +337,12 @@ function load() {
   http
     .get('/admin/order/list', {
       params: {
-        serveDate: serveDate.value,
+        // 只看取消申请时不限供餐日：漏处理的那条往往就是往期的，
+        // 带着「明天」这个默认日期去筛，等于把要找回的单先排除掉了
+        serveDate: cancelOnly.value ? undefined : serveDate.value,
         status: status.value || undefined,
         keyword: keyword.value || undefined,
+        cancelRequested: cancelOnly.value ? true : undefined,
         page: page.value,
         pageSize,
       },
@@ -474,7 +506,21 @@ function onCancelRequest(approve) {
     .catch(() => {});
 }
 
-onMounted(load);
+function cancelResultLabel(result) {
+  return {
+    approved: '已同意',
+    rejected: '已驳回',
+    auto_approved: '超时未处理，系统自动同意',
+  }[result] || result;
+}
+
+onMounted(() => {
+  // 从工作台「待处理取消申请」点进来时带上这个参数，直接筛出要处理的那批
+  if (route.query.cancelRequested === '1') {
+    cancelOnly.value = true;
+  }
+  load();
+});
 </script>
 
 <style scoped>

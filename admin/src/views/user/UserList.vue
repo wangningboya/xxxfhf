@@ -2,10 +2,12 @@
   <div class="page-card">
     <div class="toolbar">
       <el-select v-model="auditStatus" placeholder="全部状态" clearable style="width: 140px" @change="reload">
-        <el-option label="待审核" value="pending" />
-        <el-option label="已通过" value="approved" />
-        <el-option label="已驳回" value="rejected" />
-        <el-option label="已停用" value="disabled" />
+        <el-option
+          v-for="item in auditOptions"
+          :key="item.value"
+          :label="item.label"
+          :value="item.value"
+        />
       </el-select>
       <el-input
         v-model="keyword"
@@ -26,6 +28,7 @@
           批量通过（{{ selected.length }}）
         </el-button>
         <el-button v-if="auth.has('user.audit')" @click="onCreateInvite">生成邀请码</el-button>
+        <el-button v-if="auth.has('user.audit')" @click="openInvites">邀请码管理</el-button>
       </div>
     </div>
 
@@ -49,7 +52,21 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column prop="phone" label="手机号" width="130" />
+      <el-table-column label="手机号" width="150">
+        <template #default="{ row }">
+          <span>{{ row.phone || '未填' }}</span>
+          <!-- 代填：老人不会用微信授权、或者手填时打错一位，都靠这里改 -->
+          <el-button
+            v-if="auth.has('user.audit')"
+            link
+            type="primary"
+            class="phone-edit"
+            @click="openPhone(row)"
+          >
+            改
+          </el-button>
+        </template>
+      </el-table-column>
       <el-table-column label="准入方式" width="110">
         <template #default="{ row }">
           <el-tag size="small" effect="plain">
@@ -106,34 +123,114 @@
         @current-change="load"
       />
     </div>
+
+    <!-- 邀请码管理：发错群时能立刻作废，不用等它过期 -->
+    <el-dialog v-model="inviteVisible" title="邀请码管理" width="680px">
+      <div class="invite-head">
+        <el-select v-model="inviteStatus" placeholder="全部状态" clearable style="width: 140px" @change="loadInvites">
+          <el-option
+            v-for="item in inviteOptions"
+            :key="item.value"
+            :label="item.label"
+            :value="item.value"
+          />
+        </el-select>
+        <span class="muted">作废只对「未使用」的码有效；已使用的码作废会误导对方以为准入被撤销</span>
+      </div>
+      <el-table v-loading="inviteLoading" :data="invites" border size="small" style="width: 100%">
+        <el-table-column prop="code" label="邀请码" width="130">
+          <template #default="{ row }"><code>{{ row.code }}</code></template>
+        </el-table-column>
+        <el-table-column label="状态" width="100">
+          <template #default="{ row }">
+            <el-tag size="small" :type="inviteTag(row.status)">{{ inviteLabel(row.status) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="有效期至" width="150">
+          <template #default="{ row }">{{ (row.expireAt || '').replace('T', ' ').slice(0, 16) }}</template>
+        </el-table-column>
+        <el-table-column label="使用时间" width="150">
+          <template #default="{ row }">{{ (row.usedAt || '—').replace('T', ' ').slice(0, 16) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="90">
+          <template #default="{ row }">
+            <el-button
+              v-if="row.status === 'unused'"
+              link
+              type="danger"
+              @click="onRevoke(row)"
+            >
+              作废
+            </el-button>
+            <span v-else class="muted">—</span>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
+
+    <!-- 代填 / 修改手机号：接口早就有了，之前两端都只能看不能改 -->
+    <el-dialog v-model="phoneVisible" title="修改手机号" width="420px">
+      <el-form label-width="80px">
+        <el-form-item label="用户">
+          <span>{{ phoneRow ? phoneRow.nickName || phoneRow.userId : '' }}</span>
+        </el-form-item>
+        <el-form-item label="手机号">
+          <el-input v-model="phoneValue" maxlength="20" placeholder="11 位大陆手机号" clearable />
+        </el-form-item>
+      </el-form>
+      <div class="muted">仅用于配送联系。下单时会把手机号快照进订单，改这里不影响历史订单。</div>
+      <template #footer>
+        <el-button @click="phoneVisible = false">取消</el-button>
+        <el-button type="primary" :loading="phoneSaving" @click="onSavePhone">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import http from '../../api';
 import { useAuthStore } from '../../stores/auth';
+import { useDictStore } from '../../stores/dict';
 
 const auth = useAuthStore();
+const dict = useDictStore();
 
 const rows = ref([]);
 const total = ref(0);
 const page = ref(1);
 const pageSize = 20;
 const loading = ref(false);
+/** 字典没加载出来时的兜底；加载完成后以字典为准 */
+const FALLBACK_AUDIT = [
+  { value: 'pending', label: '待审核' },
+  { value: 'approved', label: '已通过' },
+  { value: 'rejected', label: '已驳回' },
+  { value: 'disabled', label: '已停用' },
+];
+const FALLBACK_INVITE = [
+  { value: 'unused', label: '未使用' },
+  { value: 'used', label: '已使用' },
+  { value: 'expired', label: '已过期' },
+  { value: 'revoked', label: '已作废' },
+];
+
+const auditOptions = computed(() => dict.options('audit_status', FALLBACK_AUDIT));
+const inviteOptions = computed(() => dict.options('invite_status', FALLBACK_INVITE));
+
 const auditStatus = ref('');
 const keyword = ref('');
 const selected = ref([]);
 
 function statusLabel(value) {
-  return (
-    { pending: '待审核', approved: '已通过', rejected: '已驳回', disabled: '已停用' }[value] || value
-  );
+  const fallback =
+    { pending: '待审核', approved: '已通过', rejected: '已驳回', disabled: '已停用' }[value] || value;
+  return dict.label('audit_status', value, fallback);
 }
 
 function statusType(value) {
-  return { pending: 'warning', approved: 'success', rejected: 'danger', disabled: 'info' }[value] || 'info';
+  return dict.tagType('audit_status', value);
 }
 
 function load() {
@@ -160,6 +257,40 @@ function load() {
 function reload() {
   page.value = 1;
   load();
+}
+
+/* ==================== 代填手机号 ==================== */
+
+const phoneVisible = ref(false);
+const phoneRow = ref(null);
+const phoneValue = ref('');
+const phoneSaving = ref(false);
+
+function openPhone(row) {
+  phoneRow.value = row;
+  phoneValue.value = row.phone || '';
+  phoneVisible.value = true;
+}
+
+function onSavePhone() {
+  const phone = (phoneValue.value || '').trim();
+  // 与服务端同一套规则：11 位大陆手机号，不校验归属
+  if (!/^1\d{10}$/.test(phone)) {
+    ElMessage.error('手机号应为 11 位，以 1 开头');
+    return;
+  }
+  phoneSaving.value = true;
+  http
+    .post('/admin/user/phone', { userId: phoneRow.value.userId, phone })
+    .then(() => {
+      ElMessage.success('已保存');
+      phoneVisible.value = false;
+      load();
+    })
+    .catch(() => {})
+    .finally(() => {
+      phoneSaving.value = false;
+    });
 }
 
 function onAudit(row, action) {
@@ -251,6 +382,55 @@ function onCreateInvite() {
     .catch(() => {});
 }
 
+const inviteVisible = ref(false);
+const inviteLoading = ref(false);
+const inviteStatus = ref('');
+const invites = ref([]);
+
+function openInvites() {
+  inviteVisible.value = true;
+  loadInvites();
+}
+
+function loadInvites() {
+  inviteLoading.value = true;
+  http
+    .get('/admin/invite/list', {
+      params: { status: inviteStatus.value || undefined, page: 1, pageSize: 50 },
+    })
+    .then((result) => {
+      invites.value = (result && result.list) || [];
+    })
+    .catch(() => {})
+    .finally(() => {
+      inviteLoading.value = false;
+    });
+}
+
+function inviteLabel(status) {
+  const fallback =
+    { unused: '未使用', used: '已使用', expired: '已过期', revoked: '已作废' }[status] || status;
+  return dict.label('invite_status', status, fallback);
+}
+
+function inviteTag(status) {
+  return dict.tagType('invite_status', status);
+}
+
+function onRevoke(row) {
+  ElMessageBox.confirm(`作废后邀请码 ${row.code} 立刻失效，确定吗？`, '作废邀请码')
+    .then(() => {
+      http
+        .post('/admin/invite/revoke', { code: row.code })
+        .then(() => {
+          ElMessage.success('已作废');
+          loadInvites();
+        })
+        .catch(() => {});
+    })
+    .catch(() => {});
+}
+
 onMounted(load);
 </script>
 
@@ -259,5 +439,10 @@ onMounted(load);
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* 手机号旁的「改」：贴得太近会看不清是按钮，留一点间距 */
+.phone-edit {
+  margin-left: 6px;
 }
 </style>

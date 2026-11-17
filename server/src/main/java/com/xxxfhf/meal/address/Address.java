@@ -37,8 +37,11 @@ public class Address {
     /** merchant 商家录入 / user 用户提交 */
     private String source;
 
-    /** active 可用 / pending 待商家确认 */
+    /** active 可用 / pending 待商家确认 / rejected 商家驳回 */
     private String status;
+
+    /** 驳回原因，仅 status = rejected 时有值，会展示给用户 */
+    private String rejectReason;
 
     /* ---------------- getters / setters ---------------- */
 
@@ -120,5 +123,13 @@ public class Address {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public String getRejectReason() {
+        return rejectReason;
+    }
+
+    public void setRejectReason(String rejectReason) {
+        this.rejectReason = rejectReason;
     }
 }

@@ -35,7 +35,6 @@ Page({
     allItems: [],
     allLoading: false,
     cartCount: 0,
-    cartAmountText: '0.00',
   },
 
   onLoad(options) {
@@ -298,10 +297,7 @@ Page({
 
   refreshCartBar() {
     const cart = cartUtil.load();
-    this.setData({
-      cartCount: cartUtil.count(cart),
-      cartAmountText: yuan(cartUtil.goodsAmount(cart)),
-    });
+    this.setData({ cartCount: cartUtil.count(cart) });
   },
 
   /* ==================== 导航 ==================== */
@@ -315,7 +311,8 @@ Page({
   },
 
   onOpenMine() {
-    wx.navigateTo({ url: '/pages/mine/index' });
+    // 「我的」已是 tab 页，navigateTo 跳 tab 页会静默失败
+    wx.switchTab({ url: '/pages/mine/index' });
   },
 
   onOpenOrders() {

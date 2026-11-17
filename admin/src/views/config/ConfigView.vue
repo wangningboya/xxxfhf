@@ -36,6 +36,24 @@
         <el-input-number v-model="form.prepayReleaseMinutes" :min="5" :max="1440" :step="5" />
         <span class="muted">分钟。下单后这么久还没点「我已付款」，份数自动释放给别人</span>
       </el-form-item>
+      <el-form-item label="取消申请超时">
+        <el-input-number v-model="form.cancelRequestTimeoutHours" :min="0" :max="72" :step="1" />
+        <span class="muted">小时。截单后用户申请退订，商家这么久没处理就按同意自动取消。<b>填 0 关闭自动同意</b>，只能人工处理</span>
+      </el-form-item>
+
+      <el-divider content-position="left">准入</el-divider>
+      <el-form-item label="群白名单">
+        <el-input
+          v-model="groupIdsText"
+          type="textarea"
+          :rows="4"
+          placeholder="一行一个 groupOpenId，如&#10;Gxxxxxxxxxxxxxxxx"
+        />
+        <div class="muted">
+          只允许这里登记过的微信群进入，改完<b>即时生效</b>，无需重启。
+          <b>留空表示不认任何群</b>，此时只能靠邀请码进入 —— 新群启用前记得先把标识贴进来，否则群里的人全部会被挡在引导页
+        </div>
+      </el-form-item>
 
       <el-divider content-position="left">配送与收款</el-divider>
       <el-form-item label="配送费（元）">
@@ -43,10 +61,19 @@
         <span class="muted">0 表示免配送费</span>
       </el-form-item>
 
-      <el-divider content-position="left">其他</el-divider>
-      <el-form-item label="微信手机号授权">
-        <el-switch v-model="phoneAuth" />
-        <span class="muted">开启后用户可用微信一键授权手机号；关闭则手填</span>
+      <el-divider content-position="left">订阅消息</el-divider>
+      <el-form-item label="消息模板">
+        <el-input
+          v-model="templatesText"
+          type="textarea"
+          :rows="8"
+          placeholder='{&#10;  "newOrder": {&#10;    "templateId": "模板ID",&#10;    "page": "pages/merchant/order-detail?orderId={orderId}",&#10;    "fields": { "character_string1": "orderNo", "thing2": "summary" }&#10;  }&#10;}'
+        />
+        <div class="muted">
+          键为通知类型：<code>newOrder</code> / <code>accepted</code> / <code>rejected</code> /
+          <code>ready</code> / <code>cancelRequest</code> / <code>cancelled</code>。
+          <b>填 `{}` 表示不发通知</b>，系统照常运行；模板 ID 需先在微信公众平台申请
+        </div>
       </el-form-item>
 
       <el-form-item>
@@ -70,11 +97,13 @@ const form = ref({
   shopNotice: '',
   serveTimeText: '',
   prepayReleaseMinutes: 30,
+  cancelRequestTimeoutHours: 2,
 });
 const cutoff = ref('21:00');
 const slotsText = ref('');
 const deliveryFeeYuan = ref(0);
-const phoneAuth = ref(false);
+const groupIdsText = ref('');
+const templatesText = ref('{}');
 
 function load() {
   loading.value = true;
@@ -82,26 +111,50 @@ function load() {
     .get('/admin/config')
     .then((config) => {
       const data = config || {};
+      // 0 是有效值（表示关闭自动同意），所以不能用 `|| 2` 兜底，只有缺键才给默认 2
+      const timeout = data.cancelRequestTimeoutHours;
       form.value = {
         shopName: data.shopName || '',
         shopNotice: data.shopNotice || '',
         serveTimeText: data.serveTimeText || '',
         prepayReleaseMinutes: Number(data.prepayReleaseMinutes || 30),
+        cancelRequestTimeoutHours:
+          timeout === undefined || timeout === null || timeout === '' ? 2 : Number(timeout),
       };
       cutoff.value = data.cutoffTime || '21:00';
       deliveryFeeYuan.value = Number(data.deliveryFee || 0) / 100;
-      phoneAuth.value = data.phoneAuthEnabled === 'true';
       try {
         const slots = JSON.parse(data.pickupSlots || '[]');
         slotsText.value = Array.isArray(slots) ? slots.join('\n') : '';
       } catch (e) {
         slotsText.value = '';
       }
+      // 群白名单与订阅模板都是 JSON，编辑时降级成文本；解析失败就留空，
+      // 保存时按 `[]` / `{}` 重写 —— 不能把解析不了的原文原样回写
+      try {
+        const groups = JSON.parse(data.groupOpenIds || '[]');
+        groupIdsText.value = Array.isArray(groups) ? groups.join('\n') : '';
+      } catch (e) {
+        groupIdsText.value = '';
+      }
+      templatesText.value = prettyJson(data.subscribeTemplates, {});
     })
     .catch(() => {})
     .finally(() => {
       loading.value = false;
     });
+}
+
+/** 配置里存的是压缩过的 JSON，展示时缩进一下，否则一行长串没法改 */
+function prettyJson(raw, fallback) {
+  if (!raw || !String(raw).trim()) {
+    return JSON.stringify(fallback, null, 2);
+  }
+  try {
+    return JSON.stringify(JSON.parse(raw), null, 2);
+  } catch (e) {
+    return String(raw);
+  }
 }
 
 function onSave() {
@@ -111,6 +164,28 @@ function onSave() {
     .map((line) => line.trim())
     .filter(Boolean);
 
+  // 群白名单同理；空列表也要存成 `[]` 而不是空串，读的一侧才解析得出来
+  const groups = groupIdsText.value
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  // 订阅模板必须是合法 JSON 对象，格式错了会在服务端被静默当成"没配"，
+  // 表现成"通知不发但也不报错"，所以这里先挡一次
+  let templates = '{}';
+  if (templatesText.value && templatesText.value.trim()) {
+    try {
+      const parsed = JSON.parse(templatesText.value);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('not object');
+      }
+      templates = JSON.stringify(parsed);
+    } catch (e) {
+      ElMessage.error('消息模板不是合法的 JSON 对象，请检查大括号与引号');
+      return;
+    }
+  }
+
   const payload = {
     shopName: form.value.shopName || '',
     shopNotice: form.value.shopNotice || '',
@@ -118,8 +193,10 @@ function onSave() {
     cutoffTime: cutoff.value || '21:00',
     pickupSlots: JSON.stringify(slots),
     deliveryFee: String(Math.round(Number(deliveryFeeYuan.value || 0) * 100)),
-    phoneAuthEnabled: phoneAuth.value ? 'true' : 'false',
     prepayReleaseMinutes: String(form.value.prepayReleaseMinutes || 30),
+    cancelRequestTimeoutHours: String(form.value.cancelRequestTimeoutHours || 0),
+    groupOpenIds: JSON.stringify(groups),
+    subscribeTemplates: templates,
   };
 
   saving.value = true;

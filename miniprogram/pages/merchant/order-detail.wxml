@@ -42,7 +42,7 @@
 
   <view class="card">
     <view class="row"><text class="row-label">收款状态</text><text class="row-value">{{order.payStatusLabel}}</text></view>
-    <view class="row"><text class="row-label">取送方式</text><text class="row-value">{{order.deliveryType === 'delivery' ? '配送' : '自取'}}</text></view>
+    <view class="row"><text class="row-label">取送方式</text><text class="row-value">{{deliveryTypeText}}</text></view>
     <view class="row" wx:if="{{order.pickupSlot}}"><text class="row-label">取餐时段</text><text class="row-value">{{order.pickupSlot}}</text></view>
     <view class="row" wx:if="{{order.pickupCode}}"><text class="row-label">取餐码</text><text class="row-value code">{{order.pickupCode}}</text></view>
     <view class="row" wx:if="{{order.address}}"><text class="row-label">收货地址</text><text class="row-value">{{order.address.regionName}} {{order.address.detail}}</text></view>

@@ -21,10 +21,15 @@ public final class ConfigKey {
     public static final String DELIVERY_FEE = "deliveryFee";
     public static final String SHOP_NAME = "shopName";
     public static final String SHOP_NOTICE = "shopNotice";
-    /** 是否启用微信手机号一键授权 */
-    public static final String PHONE_AUTH_ENABLED = "phoneAuthEnabled";
     /** 未付款订单释放份数的等待分钟数 */
     public static final String PREPAY_RELEASE_MINUTES = "prepayReleaseMinutes";
+    /**
+     * 取消申请超时自动同意的等待小时数。
+     *
+     * 0 表示关闭自动同意。设这个兜底是因为：申请悬挂时订单卡在待接单，
+     * 份数一直被占着，商家忘了批就等于这份盒饭永远卖不出去。
+     */
+    public static final String CANCEL_REQUEST_TIMEOUT_HOURS = "cancelRequestTimeoutHours";
     /** 停业的供餐日列表，JSON 数组，如 ["2026-12-01"] */
     public static final String CLOSED_DATES = "closedDates";
     /**

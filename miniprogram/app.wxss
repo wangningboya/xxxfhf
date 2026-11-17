@@ -20,3 +20,34 @@ button {
   line-height: normal;
   background: transparent;
 }
+
+/*
+ * 状态标签配色，取自数据字典的 tagType。
+ *
+ * 字典里能配的只有这六种（`primary` / `success` / `warning` / `danger` / `info` / `default`），
+ * 与网页后台 Element Plus 的 el-tag 保持同一套语义，商家在后台改一个颜色两端一起变。
+ * 字典缺项或没加载出字典时走 `tag-default`，不会出现无样式文字。
+ */
+.tag-primary {
+  color: #2f6fed;
+}
+
+.tag-success {
+  color: #2e9e5b;
+}
+
+.tag-warning {
+  color: #d97600;
+}
+
+.tag-danger {
+  color: #d93a3a;
+}
+
+.tag-info {
+  color: #8a8a8a;
+}
+
+.tag-default {
+  color: #4a4a4a;
+}

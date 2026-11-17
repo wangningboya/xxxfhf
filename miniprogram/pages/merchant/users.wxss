@@ -58,6 +58,17 @@
   color: #2e7d32;
 }
 
+.addr-off {
+  color: #d93026;
+}
+
+.addr-reject {
+  margin-top: 6rpx;
+  font-size: 24rpx;
+  line-height: 1.5;
+  color: #d93026;
+}
+
 .addr-detail {
   font-size: 28rpx;
   color: #1a1a1a;
@@ -97,4 +108,10 @@
 
 .form-ops .btn:last-child {
   margin-right: 0;
+}
+
+/* 手机号「改」：父级是展开地址，catchtap 已阻止冒泡 */
+.phone-edit {
+  color: #ff9f1c;
+  padding: 0 8rpx;
 }

@@ -1,6 +1,7 @@
 const app = getApp();
 const { request } = require('../../utils/request');
 const { yuan } = require('../../utils/format');
+const dict = require('../../utils/dict');
 
 Page({
   data: {
@@ -45,6 +46,11 @@ Page({
           totalText: yuan(order.totalAmount),
           nextStatus: next.status,
           nextLabel: next.label,
+          deliveryTypeText: dict.label(
+            'delivery_type',
+            order.deliveryType,
+            order.deliveryType === 'delivery' ? '配送' : '自取'
+          ),
         });
       })
       .catch((err) => app.toastError(err));
@@ -133,7 +139,8 @@ Page({
     wx.showModal({
       title: approve ? '同意取消' : '驳回取消申请',
       editable: true,
-      placeholderText: '备注（可不填）',
+      // 驳回的原因会原样显示在用户端，提示写清楚；同意时只是个备注
+      placeholderText: approve ? '备注（可不填）' : '驳回原因（用户会看到，建议填写）',
       success: (res) => {
         if (!res.confirm) {
           return;

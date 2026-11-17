@@ -34,17 +34,23 @@ public class OrderAdminController {
         this.orderService = orderService;
     }
 
-    /** 列表。份数已释放的单置顶、待接单优先。 */
+    /**
+     * 列表。份数已释放的单置顶、待接单优先。
+     *
+     * @param cancelRequested 传 true 只返回「用户已提交取消申请、等待处理」的单。
+     *                        商家漏处理是这条链路最容易出的事，所以要能一键筛出来
+     */
     @GetMapping("/list")
     @RequirePerm({Perms.ORDER_VIEW, Perms.ORDER_ACCEPT})
     public ApiResponse<PageResult<OrderAdminService.AdminOrderRow>> list(
             @RequestParam(required = false) String serveDate,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Boolean cancelRequested,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
         return ApiResponse.ok(PageResult.of(
-                orderAdminService.list(serveDate, status, keyword, page, pageSize)));
+                orderAdminService.list(serveDate, status, keyword, cancelRequested, page, pageSize)));
     }
 
     @GetMapping("/detail")

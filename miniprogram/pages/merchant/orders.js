@@ -1,9 +1,10 @@
 const app = getApp();
 const { request } = require('../../utils/request');
 const { yuan, dateStr, addDays } = require('../../utils/format');
+const dict = require('../../utils/dict');
 
-const STATUS_TABS = [
-  { key: '', label: '全部' },
+/** 兜底顺序与文案，字典加载出来后以字典为准（商家可改显示名与顺序） */
+const FALLBACK_STATUS = [
   { key: 'pending_accept', label: '待接单' },
   { key: 'accepted', label: '已接单' },
   { key: 'making', label: '制作中' },
@@ -13,9 +14,13 @@ const STATUS_TABS = [
   { key: 'rejected', label: '已拒单' },
 ];
 
+function buildTabs() {
+  return dict.tabs('order_status', '全部', FALLBACK_STATUS);
+}
+
 Page({
   data: {
-    tabs: STATUS_TABS,
+    tabs: buildTabs(),
     status: '',
     serveDate: '',
     keyword: '',
@@ -28,16 +33,21 @@ Page({
     loading: false,
     accepting: false,
     acceptText: '接单',
+    /** 只看有退订申请的单。开启时请求不带供餐日，往期漏单也能捞到 */
+    cancelOnly: false,
   },
 
   onLoad(options) {
     this.setData({
       serveDate: options.serveDate || addDays(dateStr(), 1),
       status: options.status || '',
+      cancelOnly: options.cancelOnly === '1',
     });
   },
 
   onShow() {
+    this.setData({ tabs: buildTabs() });
+    dict.load().then(() => this.setData({ tabs: buildTabs() }));
     this.reload();
   },
 
@@ -59,10 +69,16 @@ Page({
     }
     this.setData({ loading: true });
     const query = [
-      'serveDate=' + this.data.serveDate,
       'page=' + page,
       'pageSize=' + this.data.pageSize,
     ];
+    // 只看退订时不带供餐日：要捞的是漏处理的单，往期的也得算进来
+    if (!this.data.cancelOnly) {
+      query.unshift('serveDate=' + this.data.serveDate);
+    }
+    if (this.data.cancelOnly) {
+      query.push('cancelRequested=true');
+    }
     if (this.data.status) {
       query.push('status=' + this.data.status);
     }
@@ -90,6 +106,7 @@ Page({
       orderNo: order.orderNo,
       status: order.status,
       statusLabel: order.statusLabel,
+      tagClass: 'tag-' + (order.statusTag || dict.tagType('order_status', order.status)),
       payStatusLabel: order.payStatusLabel,
       totalText: yuan(order.totalAmount),
       pickupCode: order.pickupCode,
@@ -121,6 +138,11 @@ Page({
   },
 
   onSearch() {
+    this.reload();
+  },
+
+  onToggleCancelOnly() {
+    this.setData({ cancelOnly: !this.data.cancelOnly });
     this.reload();
   },
 

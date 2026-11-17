@@ -72,7 +72,8 @@ CREATE TABLE IF NOT EXISTS `address` (
     `detail`       VARCHAR(255) NOT NULL COMMENT '详细地址（区域内门牌）',
     `tag`          VARCHAR(32)           DEFAULT NULL COMMENT '家 / 公司',
     `source`       VARCHAR(16)  NOT NULL DEFAULT 'user' COMMENT 'merchant/user',
-    `status`       VARCHAR(16)  NOT NULL DEFAULT 'active' COMMENT 'active/pending',
+    `status`       VARCHAR(16)  NOT NULL DEFAULT 'active' COMMENT 'active 可用 / pending 待确认 / rejected 已驳回',
+    `reject_reason` VARCHAR(200)          DEFAULT NULL COMMENT '驳回原因，status=rejected 时有值',
     PRIMARY KEY (`id`),
     KEY `idx_address_user_status` (`user_id`, `status`),
     KEY `idx_address_region` (`region_id`)
@@ -172,6 +173,7 @@ CREATE TABLE IF NOT EXISTS `order` (
     `status`           VARCHAR(24) NOT NULL COMMENT 'pending_accept/accepted/making/ready/completed/cancelled/rejected',
     `cancel_requested` TINYINT(1)  NOT NULL DEFAULT 0 COMMENT '取消申请中，为 1 时禁止接单',
     `cancel_request`   JSON                 DEFAULT NULL COMMENT '取消申请与处理结果',
+    `cancel_requested_at` DATETIME          DEFAULT NULL COMMENT '取消申请提交时间，超时自动同意按此列扫描',
     `pay_status`       VARCHAR(16) NOT NULL DEFAULT 'unpaid' COMMENT 'unpaid/claimed/paid/refunding/refunded',
     `pay_method`       VARCHAR(24)          DEFAULT NULL COMMENT 'offline_transfer/wxpay',
     `pickup_code`      CHAR(4)              DEFAULT NULL COMMENT '4 位取餐码，当日唯一',
@@ -195,7 +197,9 @@ CREATE TABLE IF NOT EXISTS `order` (
     KEY `idx_order_date_region` (`serve_date`, `region_id`),
     KEY `idx_order_date_pay` (`serve_date`, `pay_status`),
     -- 超时未转账扫描专用（技术文档 4.4）
-    KEY `idx_order_release_scan` (`status`, `pay_status`, `stock_released`, `created_at`)
+    KEY `idx_order_release_scan` (`status`, `pay_status`, `stock_released`, `created_at`),
+    -- 取消申请超时自动同意扫描专用
+    KEY `idx_order_cancel_scan` (`cancel_requested`, `status`, `cancel_requested_at`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT ='订单';
 
 -- -----------------------------------------------------------------------------
@@ -240,5 +244,38 @@ CREATE TABLE IF NOT EXISTS `config` (
     `updated_at`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`config_key`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT ='系统配置';
+
+-- -----------------------------------------------------------------------------
+-- 12. 字典类型 dict_type
+--
+-- 为什么要字典：状态中文名、颜色散落在 Java 的 switch 里，改一个说法要发版。
+-- 内置类型（builtin=1）**只允许改显示名 / 颜色 / 排序 / 启停，不允许增删项** ——
+-- 往 order_status 里加一个库里不存在的值，订单状态机就出现无法处理的数据。
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `dict_type` (
+    `type_code`  VARCHAR(64)  NOT NULL COMMENT '类型编码，代码里按它取值，如 order_status',
+    `type_name`  VARCHAR(64)  NOT NULL COMMENT '类型名称，如「订单状态」',
+    `builtin`    TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '1 内置类型（项不可增删），0 自定义',
+    `remark`     VARCHAR(255)          DEFAULT NULL COMMENT '说明',
+    `created_at` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    PRIMARY KEY (`type_code`)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT ='字典类型';
+
+-- -----------------------------------------------------------------------------
+-- 13. 字典项 dict_item
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `dict_item` (
+    `id`         VARCHAR(32)  NOT NULL COMMENT '主键',
+    `type_code`  VARCHAR(64)  NOT NULL COMMENT '所属类型',
+    `item_value` VARCHAR(64)  NOT NULL COMMENT '存值，写进库的就是它，如 pending_accept',
+    `item_label` VARCHAR(64)  NOT NULL COMMENT '显示名，如「待接单」',
+    `tag_type`   VARCHAR(16)           DEFAULT NULL COMMENT '前端配色 info/success/warning/danger',
+    `sort`       INT          NOT NULL DEFAULT 0 COMMENT '排序，小的在前',
+    `status`     VARCHAR(16)  NOT NULL DEFAULT 'active' COMMENT 'active 启用 / disabled 停用',
+    `builtin`    TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '1 内置项（不可删除，只能改显示名）',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_dict_item` (`type_code`, `item_value`),
+    KEY `idx_dict_item_type` (`type_code`, `sort`)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT ='字典项';
 
 SET FOREIGN_KEY_CHECKS = 1;

@@ -60,7 +60,7 @@ public class OrderAdminService {
      * 最需要先处理的就是那几笔超时未付款、份数已经被别人买走的单。
      */
     public IPage<AdminOrderRow> list(String serveDateRaw, String status, String keyword,
-                                     int page, int pageSize) {
+                                     Boolean cancelRequested, int page, int pageSize) {
         LocalDate serveDate = DateParam.parse(serveDateRaw, "供餐日期");
         Page<Order> pager = new Page<>(Math.max(page, 1), Math.min(Math.max(pageSize, 1), 100));
 
@@ -82,6 +82,7 @@ public class OrderAdminService {
         IPage<Order> result = orderMapper.selectPage(pager, Wrappers.<Order>lambdaQuery()
                 .eq(serveDate != null, Order::getServeDate, serveDate)
                 .eq(status != null && !status.isBlank(), Order::getStatus, status)
+                .eq(Boolean.TRUE.equals(cancelRequested), Order::getCancelRequested, true)
                 .in(!matchedUserIds.isEmpty(), Order::getUserId, matchedUserIds)
                 .last("ORDER BY stock_released DESC, "
                         + "FIELD(status, 'pending_accept', 'accepted', 'making', 'ready', "
@@ -316,28 +317,50 @@ public class OrderAdminService {
      * 审批用户的取消申请。
      *
      * 同意：订单转已取消 + 释放份数 + 已收钱转待退款；
-     * 驳回：只清掉申请标记，订单回到正常流转（接单按钮随之恢复）。
+     * 驳回：只清掉申请标记，订单回到正常流转（接单按钮随之恢复），备注原因回给用户。
      */
     @Transactional
     public OrderService.OrderView handleCancelRequest(String operatorId, String orderId,
                                                       boolean approve, String remark) {
+        return doHandleCancelRequest(operatorId, orderId, approve, remark,
+                approve ? CancelRequest.APPROVED : CancelRequest.REJECTED);
+    }
+
+    /**
+     * 超时自动同意（N-14）。
+     *
+     * 与商家手动同意走同一条逻辑，只有两处不同：结果记 `auto_approved`、
+     * 操作人留空表示系统。**不另写一套状态流转**，否则两条路径迟早会分叉。
+     */
+    @Transactional
+    public OrderService.OrderView autoApproveCancelRequest(String orderId, int timeoutHours) {
+        return doHandleCancelRequest(null, orderId, true,
+                "超过 " + timeoutHours + " 小时未处理，系统自动同意", CancelRequest.AUTO_APPROVED);
+    }
+
+    private OrderService.OrderView doHandleCancelRequest(String operatorId, String orderId,
+                                                         boolean approve, String remark,
+                                                         String result) {
         Order order = orderService.require(orderId);
         if (!Boolean.TRUE.equals(order.getCancelRequested())) {
             throw BizException.conflict("该订单没有待处理的取消申请");
         }
+        String trimmedRemark = remark == null || remark.isBlank() ? null : remark.trim();
         CancelRequest origin = order.getCancelRequest();
         CancelRequest handled = new CancelRequest(
                 origin == null ? null : origin.reason(),
                 origin == null ? null : origin.appliedAt(),
                 LocalDateTime.now(),
-                approve ? CancelRequest.APPROVED : CancelRequest.REJECTED,
-                operatorId);
+                result,
+                operatorId,
+                trimmedRemark);
 
         if (approve) {
             int affected = orderMapper.update(null, Wrappers.<Order>lambdaUpdate()
                     .set(Order::getStatus, OrderStatus.CANCELLED)
                     .set(Order::getCancelRequested, false)
                     .set(Order::getCancelRequest, handled)
+                    .set(Order::getCancelRequestedAt, null)
                     .eq(Order::getId, orderId)
                     .eq(Order::getCancelRequested, true));
             if (affected == 0) {
@@ -349,6 +372,7 @@ public class OrderAdminService {
             int affected = orderMapper.update(null, Wrappers.<Order>lambdaUpdate()
                     .set(Order::getCancelRequested, false)
                     .set(Order::getCancelRequest, handled)
+                    .set(Order::getCancelRequestedAt, null)
                     .eq(Order::getId, orderId)
                     .eq(Order::getCancelRequested, true));
             if (affected == 0) {
@@ -357,8 +381,8 @@ public class OrderAdminService {
         }
 
         log.info("取消申请审批 orderNo={} 结果={} 操作人={} 备注={}",
-                order.getOrderNo(), approve ? "同意" : "驳回", operatorId,
-                remark == null ? "" : remark);
+                order.getOrderNo(), result, operatorId == null ? "系统" : operatorId,
+                trimmedRemark == null ? "" : trimmedRemark);
         Order handledOrder = orderService.require(orderId);
         if (approve) {
             // 同意了就等于这单没了，商家要及时知道，别再排进备菜

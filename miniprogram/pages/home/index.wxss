@@ -1,0 +1,107 @@
+page {
+  background: #f5f6f8;
+}
+
+.page {
+  padding: 24rpx;
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+/* ---------- 店招 ---------- */
+
+.hero {
+  background: linear-gradient(135deg, #ffb347 0%, #ff9f1c 100%);
+  border-radius: 24rpx;
+  padding: 56rpx 40rpx;
+  margin-bottom: 24rpx;
+}
+
+.hero-name {
+  font-size: 48rpx;
+  font-weight: 600;
+  color: #ffffff;
+  letter-spacing: 2rpx;
+}
+
+.hero-notice {
+  margin-top: 20rpx;
+  font-size: 26rpx;
+  color: #fff6e8;
+  line-height: 1.6;
+}
+
+.hero-notice-empty {
+  color: #fff0d9;
+}
+
+/* ---------- 营业状态 ---------- */
+
+.status-card {
+  background: #ffffff;
+  border-radius: 20rpx;
+  padding: 12rpx 32rpx;
+  margin-bottom: 32rpx;
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 22rpx 0;
+  border-bottom: 1rpx solid #f2f2f2;
+}
+
+.status-row:last-child {
+  border-bottom: none;
+}
+
+.status-label {
+  font-size: 28rpx;
+  color: #8a8a8a;
+}
+
+.status-value {
+  font-size: 28rpx;
+  color: #1a1a1a;
+  font-weight: 600;
+  text-align: right;
+  max-width: 60%;
+}
+
+.status-warn {
+  color: #a86b00;
+}
+
+/* ---------- 主按钮 ---------- */
+
+.start-btn {
+  height: 96rpx;
+  border-radius: 48rpx;
+  background: #ff9f1c;
+  color: #ffffff;
+  font-size: 32rpx;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  letter-spacing: 4rpx;
+}
+
+.start-btn-disabled {
+  background: #e6e6e6;
+  color: #a8a8a8;
+}
+
+/* ---------- 说明 ---------- */
+
+.tips {
+  margin-top: 40rpx;
+  padding: 0 8rpx;
+}
+
+.tips-line {
+  font-size: 24rpx;
+  color: #9a9a9a;
+  line-height: 1.9;
+}

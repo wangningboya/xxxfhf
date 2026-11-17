@@ -1,10 +1,16 @@
 const app = getApp();
 const { request } = require('../../utils/request');
 const { yuan } = require('../../utils/format');
+const dict = require('../../utils/dict');
 
-/** 状态页签。不做「进行中」这种合并状态：服务端按单状态分页，合并会让分页数不准。 */
-const TABS = [
-  { key: '', label: '全部' },
+/**
+ * 状态页签。
+ *
+ * 不做「进行中」这种合并状态：服务端按单状态分页，合并会让分页数不准。
+ * 文案与顺序以数据字典为准（商家把「待接单」改成「待处理」即时生效），
+ * FALLBACK 只是字典没加载出来时的兜底，两边不一致时字典赢。
+ */
+const FALLBACK_STATUS = [
   { key: 'pending_accept', label: '待接单' },
   { key: 'accepted', label: '已接单' },
   { key: 'making', label: '制作中' },
@@ -14,9 +20,13 @@ const TABS = [
   { key: 'cancelled', label: '已取消' },
 ];
 
+function buildTabs() {
+  return dict.tabs('order_status', '全部', FALLBACK_STATUS);
+}
+
 Page({
   data: {
-    tabs: TABS,
+    tabs: buildTabs(),
     status: '',
     list: [],
     page: 1,
@@ -27,6 +37,9 @@ Page({
   },
 
   onShow() {
+    // 字典可能是首次冷启动才回来，到了这里再刷一次页签，避免沿用兜底文案
+    this.setData({ tabs: buildTabs() });
+    dict.load().then(() => this.setData({ tabs: buildTabs() }));
     // 从详情页回来要看到最新状态（比如刚取消过）
     this.reload();
   },
@@ -77,6 +90,9 @@ Page({
           serveDate: order.serveDate,
           status: order.status,
           statusLabel: order.statusLabel,
+          // 配色优先用服务端下发的 statusTag（同一份字典算出来的），
+          // 本地字典还没加载时也能正确上色
+          tagClass: 'tag-' + (order.statusTag || dict.tagType('order_status', order.status)),
           totalText: yuan(order.totalAmount),
           qty: (order.items || []).reduce((s, it) => s + (it.qty || 0), 0),
           summary: (order.items || []).map((it) => it.name + '×' + it.qty).join('、'),

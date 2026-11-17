@@ -32,6 +32,22 @@ body {
   font-size: 12px;
 }
 
+/* 驳回原因：跟在状态标签下方，说明为什么不行 */
+.reject-reason {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #c2410c;
+}
+
+/* 弹窗内的筛选行 */
+.invite-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
 .price {
   color: #c2410c;
   font-weight: 600;

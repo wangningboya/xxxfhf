@@ -65,6 +65,14 @@ public class Order {
     @TableField(typeHandler = Jackson3TypeHandler.class)
     private CancelRequest cancelRequest;
 
+    /**
+     * 取消申请提交时间。
+     *
+     * 单独存一列而不是从 cancel_request JSON 里取：超时自动同意任务要按时间范围扫描，
+     * 只有独立列才能走索引（JSON 里取字段是逐行计算，几百单就会拖慢）。
+     */
+    private LocalDateTime cancelRequestedAt;
+
     /** unpaid / claimed / paid / refunding / refunded */
     private String payStatus;
 
@@ -230,6 +238,14 @@ public class Order {
 
     public void setCancelRequest(CancelRequest cancelRequest) {
         this.cancelRequest = cancelRequest;
+    }
+
+    public LocalDateTime getCancelRequestedAt() {
+        return cancelRequestedAt;
+    }
+
+    public void setCancelRequestedAt(LocalDateTime cancelRequestedAt) {
+        this.cancelRequestedAt = cancelRequestedAt;
     }
 
     public String getPayStatus() {

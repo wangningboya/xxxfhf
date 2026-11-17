@@ -103,7 +103,7 @@
 
 .order-status {
   font-size: 26rpx;
-  color: #8a8a8a;
+  /* 颜色由数据字典的 tagType 决定，见 app.wxss 的 .tag-* */
 }
 
 .order-summary {
@@ -173,4 +173,27 @@
 .accept {
   flex: 1;
   margin-left: 16rpx;
+}
+
+/* 只看退订的筛选条：默认灰、开启后橙色底 */
+.cancel-filter {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  margin: 0 24rpx 16rpx;
+  padding: 16rpx 22rpx;
+  border-radius: 14rpx;
+  background: #f5f6f8;
+  font-size: 26rpx;
+  color: #666666;
+}
+
+.cancel-filter-on {
+  background: #fff3e0;
+  color: #d97706;
+}
+
+.cancel-filter-hint {
+  font-size: 22rpx;
+  color: #a86b00;
 }

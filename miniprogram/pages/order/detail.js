@@ -1,6 +1,7 @@
 const app = getApp();
 const { request } = require('../../utils/request');
 const { yuan } = require('../../utils/format');
+const dict = require('../../utils/dict');
 
 Page({
   data: {
@@ -42,6 +43,12 @@ Page({
           goodsText: yuan(order.goodsAmount),
           specText: yuan(order.specAmount),
           feeText: yuan(order.deliveryFee),
+          // 取送方式的中文名也走字典，商家可以把「自取」改成「到店拿」
+          deliveryTypeText: dict.label(
+            'delivery_type',
+            order.deliveryType,
+            order.deliveryType === 'delivery' ? '配送' : '自取'
+          ),
         });
       })
       .catch((err) => {

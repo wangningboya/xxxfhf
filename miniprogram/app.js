@@ -1,5 +1,6 @@
 const { request, setToken, getToken, toastError } = require('./utils/request');
 const { getGroupEncrypted } = require('./utils/group-entry');
+const dict = require('./utils/dict');
 
 App({
   globalData: {
@@ -13,9 +14,15 @@ App({
   },
 
   onLaunch() {
-    this.ensureLogin().catch(() => {
-      // 启动期登录失败不阻塞渲染，页面会再试一次并给出提示
-    });
+    this.ensureLogin()
+      .then(() => {
+        // 字典与登录无关（接口不鉴权），但排在登录后发，少一次并发首屏请求
+        dict.load();
+      })
+      .catch(() => {
+        // 启动期登录失败不阻塞渲染，页面会再试一次并给出提示
+        dict.load();
+      });
   },
 
   /**

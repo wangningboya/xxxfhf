@@ -13,8 +13,13 @@ const routes = [
   {
     path: '/',
     component: AppLayout,
-    redirect: '/order',
+    redirect: '/dashboard',
     children: [
+      {
+        path: 'dashboard',
+        component: () => import('../views/Dashboard.vue'),
+        meta: { title: '工作台', perms: ['order.view', 'order.accept', 'user.audit'] },
+      },
       {
         path: 'order',
         component: () => import('../views/order/OrderList.vue'),
@@ -71,13 +76,18 @@ const routes = [
         meta: { title: '角色权限', perm: 'role.manage' },
       },
       {
+        path: 'dict',
+        component: () => import('../views/dict/DictList.vue'),
+        meta: { title: '数据字典', perm: 'dict.manage' },
+      },
+      {
         path: 'config',
         component: () => import('../views/config/ConfigView.vue'),
         meta: { title: '系统配置', perm: 'config.manage' },
       },
     ],
   },
-  { path: '/:pathMatch(.*)*', redirect: '/order' },
+  { path: '/:pathMatch(.*)*', redirect: '/dashboard' },
 ];
 
 const router = createRouter({
@@ -115,6 +125,7 @@ router.beforeEach(async (to) => {
 /** 当前账号能进的第一个页面，避免无权限时来回跳登录页 */
 export function firstAllowed(auth) {
   const candidates = [
+    ['/dashboard', ['order.view', 'order.accept', 'user.audit']],
     ['/order', ['order.view', 'order.accept']],
     ['/user', ['user.audit', 'user.view']],
     ['/address', ['user.address']],
@@ -126,6 +137,7 @@ export function firstAllowed(auth) {
     ['/prep', ['prep.view']],
     ['/finance', ['finance.view']],
     ['/role', ['role.manage']],
+    ['/dict', ['dict.manage']],
     ['/config', ['config.manage']],
   ];
   const found = candidates.filter(([, perms]) => auth.hasAny(perms))[0];

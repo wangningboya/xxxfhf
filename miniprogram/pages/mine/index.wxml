@@ -19,31 +19,17 @@
     <view class="audit-desc">{{auditDesc}}</view>
   </view>
 
-  <view class="menu">
-    <view class="menu-item" bindtap="onOpenOrders">
-      <text>我的订单</text>
-      <text class="arrow">›</text>
-    </view>
-    <view class="menu-item" bindtap="onOpenAddress">
-      <text>收货地址</text>
-      <text class="arrow">›</text>
-    </view>
-    <view class="menu-item" wx:if="{{phoneAuthEnabled}}" bindtap="onEditPhone">
-      <text>手机号一键授权</text>
-      <text class="arrow">›</text>
-    </view>
-    <button
-      class="menu-item menu-btn"
-      wx:if="{{phoneAuthEnabled}}"
-      open-type="getPhoneNumber"
-      bindgetphonenumber="onGetPhoneNumber"
+  <!-- 宫格：每行 3 个，手机号格位常驻，商家账号多一个工作台入口，不足一行靠左 -->
+  <view class="grid">
+    <view
+      class="grid-cell"
+      wx:for="{{cells}}"
+      wx:key="key"
+      data-action="{{item.key}}"
+      bindtap="onTapCell"
     >
-      <text>用微信绑定手机号</text>
-      <text class="arrow">›</text>
-    </button>
-    <view class="menu-item" bindtap="onOpenMerchant">
-      <text>我是商家</text>
-      <text class="arrow">›</text>
+      <image class="grid-icon" src="{{item.icon}}" mode="aspectFit" />
+      <view class="grid-label">{{item.label}}</view>
     </view>
   </view>
 

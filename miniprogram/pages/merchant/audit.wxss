@@ -48,6 +48,7 @@
 }
 
 .invite-code {
+  flex: 1;
   font-size: 30rpx;
   font-weight: 600;
   color: #1a1a1a;
@@ -57,6 +58,24 @@
 .invite-status {
   font-size: 22rpx;
   color: #9a9a9a;
+}
+
+/* 作废与过期分色：作废是商家主动撤销，需要更醒目 */
+.invite-status-revoked {
+  color: #d93026;
+}
+
+.invite-status-expired {
+  color: #b0b0b0;
+}
+
+.invite-revoke {
+  margin-left: 18rpx;
+  padding: 4rpx 14rpx;
+  font-size: 22rpx;
+  color: #d93026;
+  border: 1rpx solid #f0b9b4;
+  border-radius: 20rpx;
 }
 
 .search {

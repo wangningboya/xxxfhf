@@ -67,21 +67,7 @@ page {
 
 .order-status {
   font-size: 26rpx;
-  color: #4a4a4a;
-}
-
-.status-pending_accept {
-  color: #d97600;
-}
-
-.status-ready {
-  color: #2e9e5b;
-  font-weight: 600;
-}
-
-.status-rejected,
-.status-cancelled {
-  color: #a8a8a8;
+  /* 颜色由数据字典的 tagType 决定，见 app.wxss 的 .tag-* */
 }
 
 .order-summary {

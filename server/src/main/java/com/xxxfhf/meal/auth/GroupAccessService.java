@@ -144,31 +144,11 @@ public class GroupAccessService {
     /* ---------------- 手机号 ---------------- */
 
     /**
-     * 微信手机号一键授权。
+     * 用户自己改手机号（手填）。
      *
-     * 受配置项 phoneAuthEnabled 控制：商家没开启时直接拒绝，避免前端误以为可用。
-     * 手机号只在配送单需要，但这里只负责采集保存，是否必填由下单环节判断。
+     * 只有这一条路径：商家代填走 /admin/user/phone。不再提供微信一键授权，
+     * 省掉手机号快速验证能力的按次费用与隐私声明负担。
      */
-    @Transactional
-    public String bindPhoneByWx(String userId, String encryptedData, String iv) {
-        if (!configService.getBoolean(ConfigKey.PHONE_AUTH_ENABLED, false)) {
-            throw BizException.forbidden("商家未开启微信手机号授权，请手动填写");
-        }
-        User user = requireUser(userId);
-        if (user.getOpenid() == null || user.getOpenid().isBlank()) {
-            throw BizException.forbidden("当前账号不是微信用户");
-        }
-        String sessionKey = sessionKeyStore.get(user.getOpenid())
-                .orElseThrow(() -> BizException.unauthorized("登录状态已过期，请重新进入小程序"));
-
-        String phone = PhoneValidator.require(wxCrypto.requirePhone(sessionKey, encryptedData, iv));
-        user.setPhone(phone);
-        userMapper.updateById(user);
-        log.info("用户手机号已更新 userId={}", userId);
-        return phone;
-    }
-
-    /** 用户自己改手机号（手填）。 */
     @Transactional
     public String updatePhone(String userId, String phone) {
         User user = requireUser(userId);

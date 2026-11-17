@@ -1,8 +1,23 @@
 const app = getApp();
 const { request } = require('../../utils/request');
 const { dateStr, addDays } = require('../../utils/format');
+const dict = require('../../utils/dict');
 
 const MERCHANT_KEY = 'meal_merchant';
+
+/**
+ * 待办卡片的标题要走字典。
+ *
+ * 卡片的数字来自 `/admin/dashboard` 的 `pendingAccept` / `pendingAudit`，
+ * 标题跟着「待接单」「待审核」这两个状态的显示名走 —— 商家在后台把「待接单」
+ * 改成「待处理」，这里必须一起变，否则点进去看到的页签名字和卡片对不上。
+ */
+function buildStatLabels() {
+  return {
+    acceptLabel: dict.label('order_status', 'pending_accept', '待接单'),
+    auditLabel: dict.label('audit_status', 'pending', '待审核'),
+  };
+}
 
 /**
  * 按权限决定显示哪些入口。
@@ -33,8 +48,12 @@ Page({
     displayName: '',
     serveDate: '',
     pendingAccept: 0,
+    pendingCancel: 0,
     pendingAudit: 0,
+    pendingAddress: 0,
     comboCount: 0,
+    acceptLabel: '待接单',
+    auditLabel: '待审核',
     closed: false,
     cutoff: false,
     cutoffText: '',
@@ -51,6 +70,9 @@ Page({
     this.setData({ displayName: saved.displayName || saved.username || '商家' });
     this.setData({ can: buildCan(saved.permissions) });
     this.setData({ serveDate: addDays(dateStr(), 1) });
+    // 先用当前字典（可能还没加载好，退回兜底文案）渲染，取回来再校正一次
+    this.setData(buildStatLabels());
+    dict.load().then(() => this.setData(buildStatLabels()));
     this.load();
     this.startTimer();
   },
@@ -66,13 +88,19 @@ Page({
   load() {
     const serveDate = this.data.serveDate;
     const tasks = [
-      // 待接单数：分页接口只取 total，pageSize 给 1 就够
-      request({
-        url: '/admin/order/list?serveDate=' + serveDate + '&status=pending_accept&page=1&pageSize=1',
-      }).then((r) => this.setData({ pendingAccept: r.total || 0 })),
-      request({ url: '/admin/user/list?auditStatus=pending&page=1&pageSize=1' }).then((r) =>
-        this.setData({ pendingAudit: r.total || 0 })
-      ),
+      // 待办统一走聚合接口：原来分散调 2 个列表接口只取 total，
+      // 现在要看的待办变多（待接单/待取消/待审核/待确认地址），合并成一次请求
+      request({ url: '/admin/dashboard?serveDate=' + serveDate })
+        .then((d) =>
+          this.setData({
+            pendingAccept: d.pendingAccept || 0,
+            pendingCancel: d.pendingCancel || 0,
+            pendingAudit: d.pendingAudit || 0,
+            pendingAddress: d.pendingAddress || 0,
+          })
+        )
+        // 只有备菜 / 对账权限的角色拿不到工作台数字，不该因此整页报错
+        .catch(() => {}),
       request({ url: '/admin/menu/view?serveDate=' + serveDate }).then((view) =>
         this.setData({
           comboCount: (view.items || []).length,

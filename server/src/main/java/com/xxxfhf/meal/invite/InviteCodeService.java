@@ -108,7 +108,41 @@ public class InviteCodeService {
         if (InviteStatus.USED.equals(existing.getStatus())) {
             throw BizException.conflict("该邀请码已被使用，请联系商家重新获取");
         }
+        if (InviteStatus.REVOKED.equals(existing.getStatus())) {
+            throw BizException.conflict("该邀请码已被商家作废，请联系商家重新获取");
+        }
         throw BizException.conflict("该邀请码已过期，请联系商家重新获取");
+    }
+
+    /**
+     * 作废邀请码。
+     *
+     * 只作废未使用的码：已经被人用掉的码作废没有意义，反而会让人误以为那个人的准入被撤销。
+     * 用条件更新而不是「先查后改」，避免与同一瞬间的核销打架（核销也是带条件的 UPDATE）。
+     */
+    @Transactional
+    public InviteCode revoke(String rawCode) {
+        String code = rawCode == null ? "" : rawCode.trim().toUpperCase();
+        if (code.isEmpty()) {
+            throw BizException.param("请选择要作废的邀请码");
+        }
+        int affected = inviteCodeMapper.update(null, Wrappers.<InviteCode>lambdaUpdate()
+                .set(InviteCode::getStatus, InviteStatus.REVOKED)
+                .eq(InviteCode::getCode, code)
+                .eq(InviteCode::getStatus, InviteStatus.UNUSED));
+        if (affected == 0) {
+            InviteCode existing = inviteCodeMapper.selectOne(
+                    Wrappers.<InviteCode>lambdaQuery().eq(InviteCode::getCode, code));
+            if (existing == null) {
+                throw BizException.notFound("邀请码不存在");
+            }
+            if (InviteStatus.USED.equals(existing.getStatus())) {
+                throw BizException.conflict("该邀请码已被使用，作废会让人误以为取消了他的准入，已阻止");
+            }
+            throw BizException.conflict("该邀请码已是「" + existing.getStatus() + "」状态，无需重复作废");
+        }
+        log.info("邀请码已作废 code={}", code);
+        return inviteCodeMapper.selectOne(Wrappers.<InviteCode>lambdaQuery().eq(InviteCode::getCode, code));
     }
 
     /** 该用户是否曾用邀请码进入过。登录时判准入用，只查索引不扫表。 */

@@ -66,6 +66,7 @@ public class AddressService {
             log.info("商家新增地址 id={} userId={}", address.getId(), cmd.userId());
         } else {
             addressMapper.updateById(address);
+            clearRejectReason(address.getId());
             log.info("商家修改地址 id={} userId={}", address.getId(), cmd.userId());
         }
         return address;
@@ -98,21 +99,60 @@ public class AddressService {
             log.info("用户新增地址 id={} userId={}（待确认）", address.getId(), userId);
         } else {
             addressMapper.updateById(address);
+            clearRejectReason(address.getId());
             log.info("用户修改地址 id={} userId={}（重新待确认）", address.getId(), userId);
         }
         return address;
     }
 
-    /** 商家确认 / 收回地址（确认后用户才能在下单时选到它）。 */
+    /**
+     * 清掉历史驳回原因。
+     *
+     * 必须单独走一次条件更新：`updateById` 会跳过 null 字段，
+     * 只把 status 改回 pending 的话，上一次的驳回原因会一直挂在地址上。
+     */
+    private void clearRejectReason(String addressId) {
+        if (addressId == null) {
+            return;
+        }
+        addressMapper.update(null, Wrappers.<Address>lambdaUpdate()
+                .set(Address::getRejectReason, null)
+                .eq(Address::getId, addressId));
+    }
+
+    /**
+     * 商家确认 / 驳回 / 收回地址。
+     *
+     * 驳回必须给原因：用户端要把「哪里不对」显示出来，否则他只能反复提交同一个错误地址。
+     * 三种状态之外一律拒绝 —— 地址状态直接决定这单能不能下，不能出现未定义值。
+     */
     @Transactional
-    public Address updateStatus(String addressId, String status) {
-        if (!"active".equals(status) && !"pending".equals(status)) {
-            throw BizException.param("状态只能是 active 或 pending");
+    public Address updateStatus(String addressId, String status, String reason) {
+        String target = status == null ? "" : status.trim();
+        if (!"active".equals(target) && !"pending".equals(target) && !"rejected".equals(target)) {
+            throw BizException.param("状态只能是 active、pending 或 rejected");
         }
         Address address = require(addressId);
-        address.setStatus(status);
-        addressMapper.updateById(address);
-        log.info("地址状态变更 id={} -> {}", addressId, status);
+
+        String trimmed = reason == null ? "" : reason.trim();
+        if ("rejected".equals(target)) {
+            if (trimmed.isEmpty()) {
+                throw BizException.param("驳回地址必须填写原因，用户需要知道改哪里");
+            }
+            if (trimmed.length() > 200) {
+                throw BizException.param("驳回原因最多 200 字");
+            }
+        }
+        // 用条件更新而不是 updateById：updateById 会跳过 null 字段，
+        // 导致「从驳回改回可用」时旧原因清不掉，用户端一直挂着一句过期的话
+        addressMapper.update(null, Wrappers.<Address>lambdaUpdate()
+                .set(Address::getStatus, target)
+                .set(Address::getRejectReason, "rejected".equals(target) ? trimmed : null)
+                .eq(Address::getId, addressId));
+
+        address.setStatus(target);
+        address.setRejectReason("rejected".equals(target) ? trimmed : null);
+        log.info("地址状态变更 id={} -> {} 原因={}", addressId, target, trimmed);
         return address;
     }
 

@@ -4,6 +4,8 @@ page {
 
 .page {
   padding: 24rpx;
+  /* 底部让出 tabBar 与安全区 */
+  padding-bottom: calc(env(safe-area-inset-bottom) + 140rpx);
   min-height: 100vh;
   box-sizing: border-box;
 }
@@ -74,40 +76,33 @@ page {
   line-height: 1.6;
 }
 
-.menu {
+/* ---------- 宫格：每行 3 个 ---------- */
+
+.grid {
+  display: flex;
+  flex-wrap: wrap;
   background: #ffffff;
   border-radius: 20rpx;
-  overflow: hidden;
+  padding: 12rpx 0;
 }
 
-.menu-item {
+.grid-cell {
+  width: 33.333%;
+  padding: 28rpx 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  padding: 32rpx;
-  font-size: 30rpx;
-  color: #1a1a1a;
-  border-bottom: 1rpx solid #f2f3f5;
 }
 
-.menu-item:last-child {
-  border-bottom: none;
+.grid-icon {
+  width: 56rpx;
+  height: 56rpx;
 }
 
-.menu-btn {
-  width: 100%;
-  text-align: left;
-  border-radius: 0;
-  box-sizing: border-box;
-}
-
-.menu-btn::after {
-  border: none;
-}
-
-.arrow {
-  font-size: 34rpx;
-  color: #c8c8c8;
+.grid-label {
+  margin-top: 14rpx;
+  font-size: 26rpx;
+  color: #3a3a3a;
 }
 
 .mask {

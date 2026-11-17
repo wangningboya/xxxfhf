@@ -161,8 +161,8 @@ public class ConfigService {
             ConfigKey.DELIVERY_FEE,
             ConfigKey.SHOP_NAME,
             ConfigKey.SHOP_NOTICE,
-            ConfigKey.PHONE_AUTH_ENABLED,
             ConfigKey.PREPAY_RELEASE_MINUTES,
+            ConfigKey.CANCEL_REQUEST_TIMEOUT_HOURS,
             ConfigKey.CLOSED_DATES,
             ConfigKey.GROUP_OPEN_IDS,
             ConfigKey.SUBSCRIBE_TEMPLATES

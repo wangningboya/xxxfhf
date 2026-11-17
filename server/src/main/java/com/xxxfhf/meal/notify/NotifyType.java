@@ -22,6 +22,9 @@ public enum NotifyType {
     /** 订单可取餐 / 已送达 → 用户 */
     READY("ready", "可以取餐了", Recipient.USER),
 
+    /** 用户提交取消申请（截单后）→ 商家。不推的话申请只会躺在订单列表里等人翻 */
+    CANCEL_REQUEST("cancelRequest", "用户申请取消", Recipient.MERCHANT),
+
     /** 用户取消（截单前自撤、或取消申请被同意）→ 商家 */
     CANCELLED("cancelled", "订单已取消", Recipient.MERCHANT);
 

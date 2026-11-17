@@ -87,24 +87,6 @@ public class WxCrypto {
         return openGId;
     }
 
-    /**
-     * 解手机号。新接口返回 phoneNumber / purePhoneNumber，旧接口在 watermark 之外只有纯号码。
-     */
-    public String requirePhone(String sessionKey, String encryptedData, String iv) {
-        JsonNode node = decrypt(sessionKey, encryptedData, iv);
-        if (node == null) {
-            throw new BizException(ErrorCode.WX_API_ERROR, "手机号获取失败，请手动填写或稍后重试");
-        }
-        String phone = node.path("purePhoneNumber").asText("");
-        if (phone.isBlank()) {
-            phone = node.path("phoneNumber").asText("");
-        }
-        if (phone.isBlank()) {
-            throw new BizException(ErrorCode.WX_API_ERROR, "未获取到手机号，请手动填写");
-        }
-        return phone;
-    }
-
     private static boolean isBlank(String value) {
         return value == null || value.isBlank();
     }

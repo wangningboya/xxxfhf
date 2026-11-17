@@ -1,16 +1,36 @@
 const app = getApp();
 const { request } = require('../../utils/request');
+const dict = require('../../utils/dict');
 
-const TABS = [
+/** 兜底文案，字典加载出来后被覆盖（商家可把「已通过」改成「已放行」） */
+const FALLBACK_AUDIT = [
   { key: 'pending', label: '待审核' },
   { key: 'approved', label: '已通过' },
   { key: 'rejected', label: '已驳回' },
   { key: 'disabled', label: '已停用' },
 ];
 
+/** 邀请码状态兜底。作废是商家主动撤销，与「过期」不是一回事，要分开显示 */
+const FALLBACK_INVITE = {
+  unused: '未使用',
+  used: '已使用',
+  expired: '已过期',
+  revoked: '已作废',
+};
+
+/** 审核状态页签：字典里停用的项不出现，顺序按字典 sort */
+function buildTabs() {
+  const list = dict.tabs('audit_status', null, FALLBACK_AUDIT);
+  return list.length ? list : FALLBACK_AUDIT;
+}
+
+function inviteStatusText(status) {
+  return dict.label('invite_status', status, FALLBACK_INVITE[status] || status);
+}
+
 Page({
   data: {
-    tabs: TABS,
+    tabs: buildTabs(),
     auditStatus: 'pending',
     list: [],
     page: 1,
@@ -25,8 +45,16 @@ Page({
   },
 
   onShow() {
+    this.setData({ tabs: buildTabs() });
     this.reload();
     this.loadInvites();
+    // 冷启动首进：字典还没回来，等它到了再刷页签与邀请码状态文案
+    if (!dict.ready()) {
+      dict.load().then(() => {
+        this.setData({ tabs: buildTabs() });
+        this.loadInvites();
+      });
+    }
   },
 
   onReachBottom() {
@@ -73,8 +101,37 @@ Page({
 
   loadInvites() {
     request({ url: '/admin/invite/list?page=1&pageSize=5' })
-      .then((result) => this.setData({ inviteCodes: result.list || [] }))
+      .then((result) =>
+        this.setData({
+          // 状态文案在 js 里算好：wxml 里嵌套三元没法维护，加一个状态就得再嵌一层
+          inviteCodes: (result.list || []).map((item) => ({
+            ...item,
+            statusText: inviteStatusText(item.status),
+          })),
+        })
+      )
       .catch(() => {});
+  },
+
+  onRevokeCode(e) {
+    const code = e.currentTarget.dataset.code;
+    wx.showModal({
+      title: '作废邀请码',
+      content: '作废后 ' + code + ' 立刻失效，已用它进来的人不受影响。确定吗？',
+      confirmText: '作废',
+      confirmColor: '#d93026',
+      success: (res) => {
+        if (!res.confirm) {
+          return;
+        }
+        request({ url: '/admin/invite/revoke', method: 'POST', data: { code } })
+          .then(() => {
+            wx.showToast({ title: '已作废', icon: 'success' });
+            this.loadInvites();
+          })
+          .catch((err) => app.toastError(err));
+      },
+    });
   },
 
   onSwitchTab(e) {

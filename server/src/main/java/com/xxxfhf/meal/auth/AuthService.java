@@ -96,7 +96,8 @@ public class AuthService {
         GroupAccessService.AccessState access = groupAccessService.resolve(user);
         return new MeResult(user.getId(), user.getNickName(), user.getAvatarUrl(),
                 access.accessGranted(), access.accessVia(),
-                access.auditStatus(), access.rejectReason(), access.phone());
+                access.auditStatus(), access.rejectReason(), access.phone(),
+                user.getUserType());
     }
 
     /**
@@ -182,10 +183,15 @@ public class AuthService {
                               String auditStatus, String rejectReason, String phone) {
     }
 
-    /** 「我的」页与拦截页用的当前用户状态，字段含义同 LoginResult。 */
+    /**
+     * 「我的」页与拦截页用的当前用户状态，字段含义同 LoginResult。
+     *
+     * @param userType customer / merchant，取自库（不写进令牌），前端据此决定「我的」宫格是否出现商家工作台
+     */
     public record MeResult(String userId, String nickName, String avatarUrl,
                            boolean accessGranted, String accessVia,
-                           String auditStatus, String rejectReason, String phone) {
+                           String auditStatus, String rejectReason, String phone,
+                           String userType) {
     }
 
     /**

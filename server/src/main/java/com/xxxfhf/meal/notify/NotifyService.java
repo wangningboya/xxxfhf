@@ -81,6 +81,11 @@ public class NotifyService {
         fire(NotifyType.READY, order);
     }
 
+    /** 用户提交取消申请 → 商家 */
+    public void cancelRequested(Order order) {
+        fire(NotifyType.CANCEL_REQUEST, order);
+    }
+
     /** 用户取消（截单前自撤 / 取消申请被同意）→ 商家 */
     public void cancelled(Order order) {
         fire(NotifyType.CANCELLED, order);
@@ -199,6 +204,9 @@ public class NotifyService {
         vars.put("deliveryType", "delivery".equals(order.getDeliveryType()) ? "配送" : "自取");
         vars.put("status", order.getStatus() == null ? "" : order.getStatus());
         vars.put("reason", nvl(order.getRejectReason()));
+        // 用户申请取消时填的原因，商家据此判断要不要同意
+        vars.put("cancelReason", order.getCancelRequest() == null
+                ? "" : nvl(order.getCancelRequest().reason()));
         vars.put("remark", nvl(order.getRemark()));
         vars.put("time", LocalDateTime.now().format(TIME_FMT));
         vars.put("serveDateDay", serveDateDay(order.getServeDate()));

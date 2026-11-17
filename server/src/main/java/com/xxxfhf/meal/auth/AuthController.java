@@ -83,14 +83,12 @@ public class AuthController {
 
     /* ---------------- 手机号 ---------------- */
 
-    /** 微信手机号一键授权。受配置项 phoneAuthEnabled 控制，未开启时直接拒绝。 */
-    @PostMapping("/phone/wx")
-    public ApiResponse<String> bindPhoneByWx(@Valid @RequestBody WxEncryptedRequest request) {
-        return ApiResponse.ok(groupAccessService.bindPhoneByWx(
-                UserContext.userId(), request.encryptedData(), request.iv()));
-    }
-
-    /** 手动填写 / 修改手机号。 */
+    /**
+     * 手动填写 / 修改手机号。
+     *
+     * 不接微信 `getPhoneNumber` 一键授权：手机号只在配送单需要，量小、用户也不多，
+     * 为省这一次输入去申请手机号快速验证能力（按次计费）不划算。
+     */
     @PostMapping("/phone")
     public ApiResponse<String> updatePhone(@Valid @RequestBody PhoneRequest request) {
         return ApiResponse.ok(groupAccessService.updatePhone(UserContext.userId(), request.phone()));

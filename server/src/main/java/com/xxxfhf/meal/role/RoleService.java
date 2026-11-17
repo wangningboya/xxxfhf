@@ -50,7 +50,8 @@ public class RoleService {
             new PermissionItem(Perms.ORDER_PAYMENT, "收款与退款", "确认收款、标记退款", false),
             new PermissionItem(Perms.FINANCE_VIEW, "对账查看", "查看对账视图（应收 / 已收 / 未收 / 已退款）", true),
             new PermissionItem(Perms.CONFIG_MANAGE, "系统配置", "截单时间、配送费、店铺信息", false),
-            new PermissionItem(Perms.ROLE_MANAGE, "角色权限", "角色与权限分配", false)
+            new PermissionItem(Perms.ROLE_MANAGE, "角色权限", "角色与权限分配", false),
+            new PermissionItem(Perms.DICT_MANAGE, "数据字典", "状态与类型的显示名、颜色、排序维护", false)
     );
 
     private static final Set<String> VALID = new HashSet<>(List.of(Perms.ALL));

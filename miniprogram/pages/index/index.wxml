@@ -110,14 +110,10 @@
     </view>
   </block>
 
-  <view class="cart-gap"></view>
-
-  <view class="cart-bar" wx:if="{{cartCount > 0}}">
-    <view class="cart-info" bindtap="onOpenCart">
-      <text class="cart-count">{{cartCount}} 份</text>
-      <text class="cart-amount">¥{{cartAmountText}}</text>
-    </view>
-    <view class="cart-go" bindtap="onOpenCart">去结算</view>
+  <!-- 购物车入口：右下角悬浮球，带数量角标；空车不渲染（决策 D-15） -->
+  <view class="cart-fab" wx:if="{{cartCount > 0}}" bindtap="onOpenCart">
+    <image class="cart-fab-icon" src="/assets/tabbar/cart.png" mode="aspectFit" />
+    <view class="cart-fab-badge">{{cartCount > 99 ? '99+' : cartCount}}</view>
   </view>
 
   <!-- 昵称填写：微信不再返回真实昵称，只能由用户自己点选或手填一次 -->

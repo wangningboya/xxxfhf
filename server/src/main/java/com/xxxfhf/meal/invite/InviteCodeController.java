@@ -8,6 +8,7 @@ import com.xxxfhf.meal.common.PageResult;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -53,10 +54,20 @@ public class InviteCodeController {
         return ApiResponse.ok(PageResult.of(result.convert(InviteCodeView::of)));
     }
 
+    /** 作废邀请码。发错群、发错人时用，只能作废未使用的码。 */
+    @PostMapping("/revoke")
+    @RequirePerm(Perms.USER_AUDIT)
+    public ApiResponse<InviteCodeView> revoke(@Valid @RequestBody RevokeRequest request) {
+        return ApiResponse.ok(InviteCodeView.of(inviteCodeService.revoke(request.code())));
+    }
+
     public record CreateRequest(
             @Min(value = 1, message = "有效期至少 1 小时")
             @Max(value = 720, message = "有效期最长 720 小时（30 天）")
             Integer expireHours) {
+    }
+
+    public record RevokeRequest(@NotBlank(message = "缺少邀请码") String code) {
     }
 
     /**

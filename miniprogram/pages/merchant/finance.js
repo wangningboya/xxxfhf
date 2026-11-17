@@ -1,6 +1,7 @@
 const app = getApp();
 const { request } = require('../../utils/request');
 const { yuan, dateStr, addDays } = require('../../utils/format');
+const dict = require('../../utils/dict');
 
 /**
  * 对账视图（F-G07 之外的第四块运营视图）。
@@ -82,7 +83,11 @@ Page({
         const detail = (rows || []).map((row) => ({
           orderNo: row.orderNo,
           contactName: row.contactName || '自取顾客',
-          deliveryType: row.deliveryType === 'delivery' ? '配送' : '自取',
+          deliveryType: dict.label(
+            'delivery_type',
+            row.deliveryType,
+            row.deliveryType === 'delivery' ? '配送' : '自取'
+          ),
           statusLabel: row.statusLabel,
           payStatusLabel: row.payStatusLabel,
           totalText: yuan(row.totalAmount),

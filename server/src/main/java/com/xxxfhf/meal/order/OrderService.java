@@ -9,6 +9,8 @@ import com.xxxfhf.meal.auth.AccessGuard;
 import com.xxxfhf.meal.common.BizException;
 import com.xxxfhf.meal.config.ConfigKey;
 import com.xxxfhf.meal.config.ConfigService;
+import com.xxxfhf.meal.dict.DictCodes;
+import com.xxxfhf.meal.dict.DictService;
 import com.xxxfhf.meal.goods.ComboDish;
 import com.xxxfhf.meal.goods.SpecOption;
 import com.xxxfhf.meal.menu.ComboSnapshot;
@@ -61,11 +63,13 @@ public class OrderService {
     private final OrderNumberService numberService;
     private final AccessGuard accessGuard;
     private final NotifyService notifyService;
+    private final DictService dictService;
 
     public OrderService(OrderMapper orderMapper, DailyMenuMapper menuMapper,
                         AddressService addressService, ServeDateClock clock,
                         ConfigService configService, OrderNumberService numberService,
-                        AccessGuard accessGuard, NotifyService notifyService) {
+                        AccessGuard accessGuard, NotifyService notifyService,
+                        DictService dictService) {
         this.orderMapper = orderMapper;
         this.menuMapper = menuMapper;
         this.addressService = addressService;
@@ -74,6 +78,7 @@ public class OrderService {
         this.numberService = numberService;
         this.accessGuard = accessGuard;
         this.notifyService = notifyService;
+        this.dictService = dictService;
     }
 
     /* ==================== 下单 ==================== */
@@ -442,17 +447,21 @@ public class OrderService {
         if (Boolean.TRUE.equals(order.getCancelRequested())) {
             throw BizException.conflict("已提交取消申请，等待商家处理");
         }
-        CancelRequest request = new CancelRequest(trimmedReason, LocalDateTime.now(), null, null, null);
+        CancelRequest request = new CancelRequest(trimmedReason, LocalDateTime.now(), null, null, null, null);
         int affected = orderMapper.update(null, Wrappers.<Order>lambdaUpdate()
                 .set(Order::getCancelRequested, true)
                 .set(Order::getCancelRequest, request)
+                .set(Order::getCancelRequestedAt, LocalDateTime.now())
                 .eq(Order::getId, orderId)
                 .eq(Order::getCancelRequested, false));
         if (affected == 0) {
             throw BizException.conflict("已提交取消申请，等待商家处理");
         }
         log.info("用户提交取消申请 orderNo={} 原因={}", order.getOrderNo(), trimmedReason);
-        return toView(require(orderId));
+        Order requested = require(orderId);
+        // 通知商家：不推的话这条申请只会躺在订单列表里等人翻（工作台角标是第二道保险）
+        notifyService.cancelRequested(requested);
+        return toView(requested);
     }
 
     /**
@@ -576,16 +585,24 @@ public class OrderService {
     }
 
     OrderView toView(Order order) {
+        String status = order.getStatus();
+        String payStatus = order.getPayStatus();
+        // 中文名与配色优先取字典：商家改个说法不用发版。
+        // 字典缺项时回退到代码里的静态标签，绝不出现空标签
         return new OrderView(order.getId(), order.getOrderNo(), order.getServeDate(),
-                order.getDeliveryType(), order.getStatus(), OrderStatus.label(order.getStatus()),
-                order.getPayStatus(), PayStatus.label(order.getPayStatus()),
+                order.getDeliveryType(), status,
+                dictService.label(DictCodes.ORDER_STATUS, status, OrderStatus.label(status)),
+                dictService.tagType(DictCodes.ORDER_STATUS, status),
+                payStatus,
+                dictService.label(DictCodes.PAY_STATUS, payStatus, PayStatus.label(payStatus)),
+                dictService.tagType(DictCodes.PAY_STATUS, payStatus),
                 order.getItems(), order.getGoodsAmount(), order.getSpecAmount(),
                 order.getDeliveryFee(), order.getTotalAmount(),
                 order.getPickupCode(), order.getPickupSlot(),
                 order.getRegionSnapshot(), order.getAddressSnapshot(), order.getRemark(),
                 Boolean.TRUE.equals(order.getCancelRequested()), order.getCancelRequest(),
                 order.getRejectReason(), Boolean.TRUE.equals(order.getStockReleased()),
-                order.getCreatedAt());
+                order.getCreatedAt(), order.getCancelRequestedAt());
     }
 
     /* ==================== 入参 / 出参 ==================== */
@@ -615,16 +632,21 @@ public class OrderService {
      * 订单视图。用户端与商家端共用，不暴露 requestId 这类内部字段。
      *
      * 拒单原因、取消申请、取消申请中标记都在这里 —— 需求明确要求用户能看到这些。
+     *
+     * @param statusTag    状态配色（字典配置），前端按它上色，查不到为 null
+     * @param payStatusTag 收款状态配色，同上
+     * @param cancelRequestedAt 申请提交时间，前端用来显示「已等待多久」
      */
     public record OrderView(String orderId, String orderNo, LocalDate serveDate, String deliveryType,
-                            String status, String statusLabel, String payStatus, String payStatusLabel,
+                            String status, String statusLabel, String statusTag,
+                            String payStatus, String payStatusLabel, String payStatusTag,
                             List<OrderItem> items, Integer goodsAmount, Integer specAmount,
                             Integer deliveryFee, Integer totalAmount,
                             String pickupCode, String pickupSlot,
                             RegionSnapshot region, AddressSnapshot address, String remark,
                             boolean cancelRequested, CancelRequest cancelRequest,
                             String rejectReason, boolean stockReleased,
-                            LocalDateTime createdAt) {
+                            LocalDateTime createdAt, LocalDateTime cancelRequestedAt) {
     }
 
     /** 供备菜统计等场景复用的明细行（避免各处再解一次 JSON）。 */

@@ -19,7 +19,7 @@
   <view class="order" wx:for="{{list}}" wx:key="orderId" data-id="{{item.orderId}}" bindtap="onOpen">
     <view class="order-head">
       <text class="order-no">{{item.orderNo}}</text>
-      <text class="order-status status-{{item.status}}">{{item.statusLabel}}</text>
+      <text class="order-status {{item.tagClass}}">{{item.statusLabel}}</text>
     </view>
     <view class="order-summary">{{item.summary}}</view>
     <view class="order-reason" wx:if="{{item.status === 'rejected' && item.rejectReason}}">

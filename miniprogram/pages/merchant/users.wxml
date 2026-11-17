@@ -5,11 +5,13 @@
              value="{{keyword}}" bindinput="onKeyword" />
     </view>
     <view class="chips" style="margin-top:16rpx">
-      <view class="chip {{auditStatus === '' ? 'chip-active' : ''}}" data-status="" bindtap="onStatus">全部</view>
-      <view class="chip {{auditStatus === 'approved' ? 'chip-active' : ''}}" data-status="approved" bindtap="onStatus">已通过</view>
-      <view class="chip {{auditStatus === 'pending' ? 'chip-active' : ''}}" data-status="pending" bindtap="onStatus">待审核</view>
-      <view class="chip {{auditStatus === 'rejected' ? 'chip-active' : ''}}" data-status="rejected" bindtap="onStatus">已驳回</view>
-      <view class="chip {{auditStatus === 'disabled' ? 'chip-active' : ''}}" data-status="disabled" bindtap="onStatus">已停用</view>
+      <view
+        wx:for="{{auditTabs}}"
+        wx:key="key"
+        class="chip {{auditStatus === item.key ? 'chip-active' : ''}}"
+        data-status="{{item.key}}"
+        bindtap="onStatus"
+      >{{item.label}}</view>
     </view>
   </view>
 
@@ -19,7 +21,11 @@
     <view class="user-head" data-index="{{index}}" bindtap="onPickUser">
       <view>
         <view class="user-name">{{item.nickName || '未填昵称'}}</view>
-        <view class="muted">{{item.phone || '无手机号'}} · {{item.auditStatus}}</view>
+        <view class="muted">
+          <text>{{item.phone || '无手机号'}}</text>
+          <text class="phone-edit" data-index="{{index}}" catchtap="onEditPhone"> 改</text>
+          <text> · {{item.auditText}}</text>
+        </view>
       </view>
       <text class="muted">{{selectedUser.userId === item.userId ? '收起' : '地址 ›'}}</text>
     </view>
@@ -34,16 +40,42 @@
       <view wx:for="{{addresses}}" wx:key="id" wx:for-item="addr" wx:for-index="addrIndex" class="addr">
         <view class="addr-top">
           <text class="addr-region">{{addr.regionName}}</text>
-          <text class="addr-status {{addr.status === 'active' ? 'addr-on' : ''}}">
-            {{addr.status === 'active' ? '可用' : '待确认'}}
+          <text class="addr-status {{addr.status === 'active' ? 'addr-on' : (addr.status === 'rejected' ? 'addr-off' : '')}}">
+            {{addr.statusText}}
           </text>
         </view>
         <view class="addr-detail">{{addr.contactName}} {{addr.phone}}</view>
         <view class="muted">{{addr.detail}}</view>
+        <view class="addr-reject" wx:if="{{addr.status === 'rejected' && addr.rejectReason}}">
+          驳回原因：{{addr.rejectReason}}
+        </view>
         <view class="addr-ops">
           <text class="op" data-index="{{addrIndex}}" bindtap="onEditAddress">编辑</text>
-          <text class="op" data-index="{{addrIndex}}" bindtap="onToggleAddress">
-            {{addr.status === 'active' ? '设为待确认' : '确认可用'}}
+          <text
+            class="op"
+            wx:if="{{addr.status !== 'active'}}"
+            data-index="{{addrIndex}}"
+            data-status="active"
+            bindtap="onSetAddressStatus"
+          >
+            通过
+          </text>
+          <text
+            class="op op-danger"
+            wx:if="{{addr.status === 'active'}}"
+            data-index="{{addrIndex}}"
+            data-status="pending"
+            bindtap="onSetAddressStatus"
+          >
+            收回
+          </text>
+          <text
+            class="op op-danger"
+            wx:if="{{addr.status !== 'rejected'}}"
+            data-index="{{addrIndex}}"
+            bindtap="onRejectAddress"
+          >
+            驳回
           </text>
           <text class="op op-danger" data-index="{{addrIndex}}" bindtap="onDeleteAddress">删除</text>
         </view>

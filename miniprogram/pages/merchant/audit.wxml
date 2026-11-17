@@ -15,7 +15,16 @@
           bindtap="onCopyCode"
         >
           <text class="invite-code">{{item.code}}</text>
-          <text class="invite-status">{{item.status === 'unused' ? '未使用' : '已使用'}}</text>
+          <text class="invite-status invite-status-{{item.status}}">{{item.statusText}}</text>
+          <!-- catchtap：父级是「点击复制」，作废不能顺带把码复制走 -->
+          <text
+            class="invite-revoke"
+            wx:if="{{item.status === 'unused'}}"
+            data-code="{{item.code}}"
+            catchtap="onRevokeCode"
+          >
+            作废
+          </text>
         </view>
       </view>
       <view class="btn" bindtap="onCreateInvite">{{creating ? '生成中…' : '生成邀请码'}}</view>

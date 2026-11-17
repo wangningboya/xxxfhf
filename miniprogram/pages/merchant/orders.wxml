@@ -16,6 +16,12 @@
     </view>
   </view>
 
+  <!-- 只看退订：从工作台「待处理退订」点进来时默认开启，此时不限供餐日，往期漏单也能捞到 -->
+  <view class="cancel-filter {{cancelOnly ? 'cancel-filter-on' : ''}}" bindtap="onToggleCancelOnly">
+    <text>{{cancelOnly ? '✓ ' : ''}}只看有退订申请的单</text>
+    <text class="cancel-filter-hint">{{cancelOnly ? '（不限供餐日）' : ''}}</text>
+  </view>
+
   <scroll-view class="tabs" scroll-x enable-flex>
     <view
       class="tab {{status === item.key ? 'tab-active' : ''}}"
@@ -50,7 +56,7 @@
         {{selected[item.orderId] ? '✓' : ''}}
       </view>
       <view class="order-name">{{item.userNickName}}</view>
-      <view class="order-status">{{item.statusLabel}}</view>
+      <view class="order-status {{item.tagClass}}">{{item.statusLabel}}</view>
     </view>
 
     <view class="order-summary">{{item.summary}}</view>
