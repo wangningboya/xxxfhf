@@ -255,3 +255,13 @@ page {
   background: #e6e6e6;
   color: #a8a8a8;
 }
+
+/* 截单失效提示（需求 4.6） */
+.cutoff-banner {
+  background: #fff8e6;
+  color: #a86b00;
+  font-size: 26rpx;
+  border-radius: 16rpx;
+  padding: 20rpx 24rpx;
+  margin-bottom: 20rpx;
+}

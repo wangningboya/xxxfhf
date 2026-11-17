@@ -23,6 +23,7 @@
       />
       <el-button @click="reload">查询</el-button>
       <div class="toolbar-right">
+        <el-button v-if="auth.has('order.accept')" @click="proxyVisible = true">代客下单</el-button>
         <el-button
           v-if="auth.has('order.accept')"
           type="primary"
@@ -230,6 +231,8 @@
         </div>
       </div>
     </el-drawer>
+
+    <ProxyOrderDialog v-model="proxyVisible" @created="reload" />
   </div>
 </template>
 
@@ -238,6 +241,7 @@ import { onMounted, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import http from '../../api';
 import { useAuthStore } from '../../stores/auth';
+import ProxyOrderDialog from './ProxyOrderDialog.vue';
 
 const auth = useAuthStore();
 
@@ -273,6 +277,7 @@ const selected = ref([]);
 
 const drawer = ref(false);
 const detail = ref(null);
+const proxyVisible = ref(false);
 
 function yuan(cents) {
   const value = Number(cents || 0);

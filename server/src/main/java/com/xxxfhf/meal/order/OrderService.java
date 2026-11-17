@@ -374,12 +374,12 @@ public class OrderService {
 
     /* ==================== 用户操作 ==================== */
 
-    /** 用户点「我已完成转账」→ 声称已转账。**不是已收款**，钱还没核对。 */
+    /** 用户点「我已完成付款」→ 声称已付款。**不是已收款**，钱还没核对。 */
     @Transactional
     public OrderView claimPaid(String userId, String orderId) {
         Order order = requireOwned(orderId, userId);
         if (OrderStatus.isFinal(order.getStatus())) {
-            throw BizException.conflict("订单已结束（" + OrderStatus.label(order.getStatus()) + "），无法标记转账");
+            throw BizException.conflict("订单已结束（" + OrderStatus.label(order.getStatus()) + "），无法标记付款");
         }
         if (!PayStatus.UNPAID.equals(order.getPayStatus())) {
             throw BizException.conflict("当前收款状态是「" + PayStatus.label(order.getPayStatus())
@@ -394,7 +394,7 @@ public class OrderService {
         if (affected == 0) {
             throw BizException.conflict("收款状态已变化，请刷新后重试");
         }
-        log.info("用户声称已转账 orderNo={} userId={}", order.getOrderNo(), userId);
+        log.info("用户声称已付款 orderNo={} userId={}", order.getOrderNo(), userId);
         return toView(require(orderId));
     }
 
@@ -458,7 +458,7 @@ public class OrderService {
     /**
      * 已收到钱的单被取消 / 拒单，强制转「待退款」。
      *
-     * claimed 也算：用户说转了但商家没核对，这时既不能认定已收也不能当没收到。
+     * claimed 也算：用户说付了但商家没核对，这时既不能认定已收也不能当没收到。
      * 统一挂「待退款」让商家去核对，比两边都不动更容易收口。
      */
     void moveToRefundingIfPaid(String orderId) {
@@ -475,14 +475,14 @@ public class OrderService {
     }
 
     /**
-     * 超时未转账：释放份数，订单**状态不变**（仍在待接单）。
+     * 超时未付款：释放份数，订单**状态不变**（仍在待接单）。
      *
      * 为什么不是直接取消订单：截单在供餐日前一天，商家多半次日上午统一接单，
      * 直接取消会把截单前下的单几乎全废掉（技术文档 4.4）。
      *
      * 由定时任务逐单调，每单一个事务：一单失败不影响其它单。
      *
-     * @return 是否真的释放了（已经不是待接单 / 用户声称已转账 / 已释放过，都返回 false）
+     * @return 是否真的释放了（已经不是待接单 / 用户声称已付款 / 已释放过，都返回 false）
      */
     @Transactional
     public boolean releaseForTimeout(String orderId) {
@@ -492,7 +492,7 @@ public class OrderService {
                 || PayStatus.userClaimed(order.getPayStatus())) {
             return false;
         }
-        // 条件更新：pay_status = 'unpaid' 写进 WHERE，避免「查的时候没转账、更新的时候已声称」
+        // 条件更新：pay_status = 'unpaid' 写进 WHERE，避免「查的时候没付款、更新的时候已声称」
         int affected = orderMapper.update(null, Wrappers.<Order>lambdaUpdate()
                 .set(Order::getStockReleased, true)
                 .set(Order::getStockReleasedAt, LocalDateTime.now())
@@ -504,7 +504,7 @@ public class OrderService {
             return false;
         }
         releaseStock(order);
-        log.info("超时未转账释放份数 orderNo={} serveDate={}", order.getOrderNo(), order.getServeDate());
+        log.info("超时未付款释放份数 orderNo={} serveDate={}", order.getOrderNo(), order.getServeDate());
         return true;
     }    /* ==================== 内部 ==================== */
 

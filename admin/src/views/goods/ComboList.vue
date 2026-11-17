@@ -202,7 +202,7 @@ function onQtyChange(dish, qty) {
 async function uploadCover(options) {
   const data = new FormData();
   data.append('file', options.file);
-  const result = await http.post('/upload', data, {
+  const result = await http.post('/admin/file/upload', data, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
   form.value.cover = result.url;

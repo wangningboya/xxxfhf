@@ -21,6 +21,8 @@ Page({
     address: null,
     remark: '',
     submitting: false,
+    /** 该菜单已截单：不能提交（需求 4.6） */
+    cutoff: false,
     /** 单次提交的幂等号：点两次「提交」只建一单 */
     requestId: '',
     canSubmit: false,
@@ -73,8 +75,24 @@ Page({
         pickupSlot: this.data.pickupSlot || (slots.length === 1 ? slots[0] : ''),
       });
       this.loadAddress();
+      this.checkCutoff();
       this.recalc();
     });
+  },
+
+  /** 截单检测：过了截单点不能提交（判定以服务端为准，这里只做前置提示） */
+  checkCutoff() {
+    if (!this.data.serveDate) {
+      return;
+    }
+    request({ url: '/menu?serveDate=' + this.data.serveDate })
+      .then((menu) => {
+        this.setData({ cutoff: !!menu.cutoff });
+        this.recalc();
+      })
+      .catch(() => {
+        // 拉不到就不提示，提交时服务端仍会拦
+      });
   },
 
   /** 默认地址：配送单必须有一个，否则提交时会被服务端打回 */
@@ -105,9 +123,9 @@ Page({
     const deliveryFee = this.data.deliveryType === 'delivery' ? this.data.deliveryFee : 0;
     const cart = cartUtil.load();
     const total = cartUtil.goodsAmount(cart) + deliveryFee;
-    const canSubmit = this.data.deliveryType === 'delivery'
+    const canSubmit = !this.data.cutoff && (this.data.deliveryType === 'delivery'
       ? !!this.data.address
-      : !!this.data.pickupSlot;
+      : !!this.data.pickupSlot);
     this.setData({
       deliveryFeeText: yuan(deliveryFee),
       totalAmountText: yuan(total),
@@ -135,6 +153,10 @@ Page({
 
   onSubmit() {
     if (this.data.submitting) {
+      return;
+    }
+    if (this.data.cutoff) {
+      wx.showToast({ title: '已截单，请重新选择', icon: 'none' });
       return;
     }
     if (!this.data.canSubmit) {

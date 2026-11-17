@@ -48,10 +48,8 @@
   </view>
 
   <view class="card">
-    <view class="card-title">收款码</view>
-    <image class="qr" wx:if="{{config.payQrCode}}" src="{{config.payQrCode}}" mode="aspectFit" bindtap="onUploadQr" />
-    <view class="qr-empty" wx:else bindtap="onUploadQr">点击上传收款码</view>
-    <view class="note">用户下单后在订单页看到它，转完点「我已完成转账」</view>
+    <view class="card-title">收款方式</view>
+    <view class="note">线下转账或现金，小程序内不展示收款码。转账账号请线下告知用户；现金在取餐或送达时当面收。</view>
   </view>
 
   <view class="save {{saving ? 'btn-disabled' : ''}}" bindtap="onSave">

@@ -30,7 +30,6 @@ public class ConfigController {
             ConfigKey.CUTOFF_TIME,
             ConfigKey.PICKUP_SLOTS,
             ConfigKey.DELIVERY_FEE,
-            ConfigKey.PAY_QR_CODE,
             ConfigKey.CLOSED_DATES,
             ConfigKey.PHONE_AUTH_ENABLED
     };

@@ -21,11 +21,9 @@ public final class ConfigKey {
     public static final String DELIVERY_FEE = "deliveryFee";
     public static final String SHOP_NAME = "shopName";
     public static final String SHOP_NOTICE = "shopNotice";
-    /** 收款码图片地址 */
-    public static final String PAY_QR_CODE = "payQrCode";
     /** 是否启用微信手机号一键授权 */
     public static final String PHONE_AUTH_ENABLED = "phoneAuthEnabled";
-    /** 未转账订单释放份数的等待分钟数 */
+    /** 未付款订单释放份数的等待分钟数 */
     public static final String PREPAY_RELEASE_MINUTES = "prepayReleaseMinutes";
     /** 停业的供餐日列表，JSON 数组，如 ["2026-12-01"] */
     public static final String CLOSED_DATES = "closedDates";

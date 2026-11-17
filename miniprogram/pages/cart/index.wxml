@@ -1,4 +1,8 @@
 <view class="page">
+  <view class="cutoff-banner" wx:if="{{cutoff && lines.length}}">
+    该菜单已截单，车内餐品已失效，请重新选择（可清空后重选）
+  </view>
+
   <view class="head">
     <text class="head-date">供餐日 {{serveDate}}</text>
     <text class="head-clear" wx:if="{{lines.length}}" bindtap="onClear">清空</text>

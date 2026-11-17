@@ -57,7 +57,7 @@ public class OrderAdminService {
      * 订单列表。
      *
      * 排序刻意做成「份数已释放的置顶 + 待接单优先」：早上打开列表，
-     * 最需要先处理的就是那几笔超时未转账、份数已经被别人买走的单。
+     * 最需要先处理的就是那几笔超时未付款、份数已经被别人买走的单。
      */
     public IPage<AdminOrderRow> list(String serveDateRaw, String status, String keyword,
                                      int page, int pageSize) {
@@ -140,7 +140,7 @@ public class OrderAdminService {
             }
             accepted.add(order.getOrderNo());
             if (Boolean.TRUE.equals(order.getStockReleased())) {
-                warnings.add(order.getOrderNo() + "：份数曾因超时未转账被释放，请确认该盒饭是否还有余量");
+                warnings.add(order.getOrderNo() + "：份数曾因超时未付款被释放，请确认该盒饭是否还有余量");
             }
             // 通知用户「已接单」。用更新前的对象即可：模板只用到订单号、明细、供餐日这些不变字段
             notifyService.accepted(order);
@@ -248,7 +248,7 @@ public class OrderAdminService {
 
     /* ==================== 收款与退款 ==================== */
 
-    /** 确认收款：未收款 / 用户声称已转账 → 已确认收款。 */
+    /** 确认收款：未收款 / 用户声称已付款 → 已确认收款。 */
     @Transactional
     public OrderService.OrderView confirmPayment(String operatorId, String orderId) {
         Order order = orderService.require(orderId);
@@ -268,7 +268,7 @@ public class OrderAdminService {
     /**
      * 回退为未收款。
      *
-     * 用在「用户说转了但商家查不到」的场景：状态与事实不符时必须能改回去，
+     * 用在「用户说付了但商家查不到」的场景：状态与事实不符时必须能改回去，
      * 否则商家只能一直挂着一笔不存在的钱。
      */
     @Transactional

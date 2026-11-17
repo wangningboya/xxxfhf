@@ -7,12 +7,14 @@
       <view class="name">{{item.name}}</view>
       <view class="price">¥{{priceText}}</view>
     </view>
+    <view class="dishes" wx:if="{{desc}}">{{desc}}</view>
     <view class="dishes" wx:if="{{dishesText}}">含：{{dishesText}}</view>
-    <view class="remain">
+    <view class="remain" wx:if="{{!browse}}">
       剩余
       <text wx:if="{{item.remainQty === null || item.remainQty === undefined}}">不限量</text>
       <text wx:else>{{item.remainQty}} 份</text>
     </view>
+    <view class="remain" wx:if="{{browse}}">暂不供应，仅可浏览</view>
   </view>
 
   <view class="card" wx:for="{{groups}}" wx:key="name" wx:for-index="gi" wx:for-item="group">
@@ -36,7 +38,7 @@
     </view>
   </view>
 
-  <view class="qty-row">
+  <view class="qty-row" wx:if="{{!browse}}">
     <text class="qty-label">份数</text>
     <view class="stepper">
       <view class="step {{qty <= 1 ? 'step-disabled' : ''}}" bindtap="onMinus">−</view>
@@ -53,7 +55,7 @@
       <text class="total-amount">¥{{totalText}}</text>
     </view>
     <view class="add-btn {{orderable ? '' : 'add-btn-disabled'}}" bindtap="onAdd">
-      {{orderable ? '加入购物车' : '当前不可下单'}}
+      {{browse ? '暂不供应，仅可浏览' : (orderable ? '加入购物车' : '当前不可下单')}}
     </view>
   </view>
 </view>

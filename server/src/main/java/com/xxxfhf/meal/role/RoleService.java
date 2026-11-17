@@ -49,7 +49,7 @@ public class RoleService {
             new PermissionItem(Perms.PREP_EXPORT, "导出", "导出备菜与对账 Excel", false),
             new PermissionItem(Perms.ORDER_PAYMENT, "收款与退款", "确认收款、标记退款", false),
             new PermissionItem(Perms.FINANCE_VIEW, "对账查看", "查看对账视图（应收 / 已收 / 未收 / 已退款）", true),
-            new PermissionItem(Perms.CONFIG_MANAGE, "系统配置", "截单时间、配送费、店铺信息、收款码", false),
+            new PermissionItem(Perms.CONFIG_MANAGE, "系统配置", "截单时间、配送费、店铺信息", false),
             new PermissionItem(Perms.ROLE_MANAGE, "角色权限", "角色与权限分配", false)
     );
 

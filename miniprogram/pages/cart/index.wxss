@@ -188,3 +188,13 @@ page {
   display: flex;
   align-items: center;
 }
+
+/* 截单失效提示（需求 4.6：截单后车内餐品自动失效） */
+.cutoff-banner {
+  background: #fff8e6;
+  color: #a86b00;
+  font-size: 26rpx;
+  border-radius: 16rpx;
+  padding: 20rpx 24rpx;
+  margin-bottom: 20rpx;
+}

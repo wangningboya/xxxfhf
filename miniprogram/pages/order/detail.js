@@ -11,7 +11,6 @@ Page({
     goodsText: '0.00',
     specText: '0.00',
     feeText: '0.00',
-    payQrCode: '',
     busy: false,
   },
 
@@ -27,9 +26,6 @@ Page({
     if (!this.data.orderId) {
       return;
     }
-    app.loadConfig().then((config) => {
-      this.setData({ payQrCode: config.payQrCode || '' });
-    });
     request({ url: '/order/detail?orderId=' + this.data.orderId })
       .then((order) => {
         const lines = (order.items || []).map((item) => ({
@@ -51,13 +47,6 @@ Page({
       .catch((err) => {
         app.toastError(err);
       });
-  },
-
-  onPreviewQr() {
-    if (!this.data.payQrCode) {
-      return;
-    }
-    wx.previewImage({ urls: [this.data.payQrCode] });
   },
 
   onClaimPaid() {

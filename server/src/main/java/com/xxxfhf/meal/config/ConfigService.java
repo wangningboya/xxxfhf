@@ -161,7 +161,6 @@ public class ConfigService {
             ConfigKey.DELIVERY_FEE,
             ConfigKey.SHOP_NAME,
             ConfigKey.SHOP_NOTICE,
-            ConfigKey.PAY_QR_CODE,
             ConfigKey.PHONE_AUTH_ENABLED,
             ConfigKey.PREPAY_RELEASE_MINUTES,
             ConfigKey.CLOSED_DATES,

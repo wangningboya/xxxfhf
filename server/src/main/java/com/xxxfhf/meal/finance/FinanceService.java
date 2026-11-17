@@ -22,12 +22,12 @@ import java.util.List;
 /**
  * 对账视图（F-4.16）。
  *
- * 线下转账没有支付流水，**系统里这几个数就是唯一的账**，所以口径必须写死在这里：
+ * 线下转账与现金都没有支付流水，**系统里这几个数就是唯一的账**，所以口径必须写死在这里：
  *
  * 应收 = 未取消且未拒单的订单金额合计
  * 已确认收款 = 收款状态 paid
- * 未收款 = 收款状态 unpaid（用户没点转账）
- * 用户声称已转账 = 收款状态 claimed（用户说转了，商家还没核）
+ * 未收款 = 收款状态 unpaid（用户没点付款）
+ * 用户声称已付款 = 收款状态 claimed（用户说付了，商家还没核）
  * 待退款 = 收款状态 refunding（已收的钱挂着要退）
  * 已退款 = 收款状态 refunded
  *
@@ -124,8 +124,8 @@ public class FinanceService {
         List<SummaryExcelRow> summaryRows = List.of(
                 new SummaryExcelRow("应收（全部有效订单）", summary.receivable().amount(), summary.receivable().count()),
                 new SummaryExcelRow("已确认收款", summary.paid().amount(), summary.paid().count()),
-                new SummaryExcelRow("未收款（用户未点转账）", summary.unpaid().amount(), summary.unpaid().count()),
-                new SummaryExcelRow("用户声称已转账（待核对）", summary.claimed().amount(), summary.claimed().count()),
+                new SummaryExcelRow("未收款（用户未点付款）", summary.unpaid().amount(), summary.unpaid().count()),
+                new SummaryExcelRow("用户声称已付款（待核对）", summary.claimed().amount(), summary.claimed().count()),
                 new SummaryExcelRow("待退款", summary.refunding().amount(), summary.refunding().count()),
                 new SummaryExcelRow("已退款", summary.refunded().amount(), summary.refunded().count()));
 

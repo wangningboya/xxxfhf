@@ -7,7 +7,6 @@ Page({
     orderId: '',
     order: null,
     totalText: '0.00',
-    payQrCode: '',
     claiming: false,
     claimed: false,
   },
@@ -24,9 +23,6 @@ Page({
     if (!this.data.orderId) {
       return;
     }
-    app.loadConfig().then((config) => {
-      this.setData({ payQrCode: config.payQrCode || '' });
-    });
     request({ url: '/order/detail?orderId=' + this.data.orderId })
       .then((order) => {
         this.setData({
@@ -40,15 +36,8 @@ Page({
       });
   },
 
-  onPreviewQr() {
-    if (!this.data.payQrCode) {
-      return;
-    }
-    wx.previewImage({ urls: [this.data.payQrCode] });
-  },
-
   /**
-   * 我已完成转账。
+   * 我已完成付款。
    *
    * 只是「声称」，不是「已收款」—— 钱到没到只有商家看得到，
    * 所以文案要写清楚「等商家核对」，不能让用户以为已经付成功了。

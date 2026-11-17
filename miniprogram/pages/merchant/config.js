@@ -1,6 +1,5 @@
 const app = getApp();
-const { request, getToken } = require('../../utils/request');
-const { apiBase } = require('../../config');
+const { request } = require('../../utils/request');
 
 Page({
   data: {
@@ -11,7 +10,6 @@ Page({
       cutoffTime: '',
       pickupSlots: '',
       deliveryFee: '0',
-      payQrCode: '',
       prepayReleaseMinutes: '30',
     },
     /** 自取时段用多行文本编辑，比让商家写 JSON 靠谱 */
@@ -19,7 +17,6 @@ Page({
     /** 配送费按元编辑，保存时换回分 */
     deliveryFeeYuan: '0.00',
     saving: false,
-    uploading: false,
   },
 
   onShow() {
@@ -36,7 +33,6 @@ Page({
           cutoffTime: all.cutoffTime || '',
           pickupSlots: all.pickupSlots || '[]',
           deliveryFee: all.deliveryFee || '0',
-          payQrCode: all.payQrCode || '',
           prepayReleaseMinutes: all.prepayReleaseMinutes || '30',
         });
         this.setData({
@@ -84,44 +80,6 @@ Page({
     });
   },
 
-  onUploadQr() {
-    if (this.data.uploading) {
-      return;
-    }
-    wx.chooseMedia({
-      count: 1,
-      mediaType: ['image'],
-      success: (res) => {
-        const file = res.tempFiles && res.tempFiles[0];
-        if (!file) {
-          return;
-        }
-        this.setData({ uploading: true });
-        wx.uploadFile({
-          url: apiBase + '/admin/file/upload',
-          filePath: file.tempFilePath,
-          name: 'file',
-          header: { Authorization: 'Bearer ' + getToken() },
-          success: (uploadRes) => {
-            try {
-              const body = JSON.parse(uploadRes.data);
-              if (body.code === 0 && body.data && body.data.url) {
-                this.setData({ 'config.payQrCode': body.data.url });
-                wx.showToast({ title: '已上传', icon: 'success' });
-              } else {
-                wx.showToast({ title: body.message || '上传失败', icon: 'none' });
-              }
-            } catch (e) {
-              wx.showToast({ title: '上传返回异常', icon: 'none' });
-            }
-          },
-          fail: () => wx.showToast({ title: '上传失败', icon: 'none' }),
-          complete: () => this.setData({ uploading: false }),
-        });
-      },
-    });
-  },
-
   onSave() {
     if (this.data.saving) {
       return;
@@ -149,7 +107,6 @@ Page({
         pickupSlots: c.pickupSlots,
         // 金额存分，避免 0.1 这类小数进数据库
         deliveryFee: String(Math.round(feeYuan * 100)),
-        payQrCode: c.payQrCode,
         prepayReleaseMinutes: c.prepayReleaseMinutes,
       },
     })

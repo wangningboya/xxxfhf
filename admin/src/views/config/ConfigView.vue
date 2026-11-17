@@ -32,23 +32,15 @@
         />
         <div class="muted">用户下自取单时必须选一个；不限每个时段的份数，只做登记与备菜分组</div>
       </el-form-item>
-      <el-form-item label="未转账释放份数">
+      <el-form-item label="未付款释放份数">
         <el-input-number v-model="form.prepayReleaseMinutes" :min="5" :max="1440" :step="5" />
-        <span class="muted">分钟。下单后这么久还没点「我已转账」，份数自动释放给别人</span>
+        <span class="muted">分钟。下单后这么久还没点「我已付款」，份数自动释放给别人</span>
       </el-form-item>
 
-      <el-divider content-position="left">收款</el-divider>
+      <el-divider content-position="left">配送与收款</el-divider>
       <el-form-item label="配送费（元）">
         <el-input-number v-model="deliveryFeeYuan" :min="0" :precision="2" :step="1" />
         <span class="muted">0 表示免配送费</span>
-      </el-form-item>
-      <el-form-item label="收款码图片">
-        <el-upload :show-file-list="false" :http-request="uploadQr" accept="image/*">
-          <el-image v-if="form.payQrCode" :src="form.payQrCode" fit="contain" class="qr" />
-          <el-button v-else>上传收款码</el-button>
-        </el-upload>
-        <el-button v-if="form.payQrCode" link type="danger" @click="form.payQrCode = ''">移除</el-button>
-        <div class="muted">展示在用户的下单成功页与订单详情，用于转账</div>
       </el-form-item>
 
       <el-divider content-position="left">其他</el-divider>
@@ -78,7 +70,6 @@ const form = ref({
   shopNotice: '',
   serveTimeText: '',
   prepayReleaseMinutes: 30,
-  payQrCode: '',
 });
 const cutoff = ref('21:00');
 const slotsText = ref('');
@@ -96,7 +87,6 @@ function load() {
         shopNotice: data.shopNotice || '',
         serveTimeText: data.serveTimeText || '',
         prepayReleaseMinutes: Number(data.prepayReleaseMinutes || 30),
-        payQrCode: data.payQrCode || '',
       };
       cutoff.value = data.cutoffTime || '21:00';
       deliveryFeeYuan.value = Number(data.deliveryFee || 0) / 100;
@@ -114,19 +104,6 @@ function load() {
     });
 }
 
-async function uploadQr(options) {
-  const data = new FormData();
-  data.append('file', options.file);
-  const result = await http.post('/upload', data, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
-  form.value.payQrCode = result.url;
-  ElMessage.success('已上传');
-  if (options.onSuccess) {
-    options.onSuccess(result);
-  }
-}
-
 function onSave() {
   // 自取时段按行拆，空行丢掉；不合法的时间格式由服务端最终把关
   const slots = slotsText.value
@@ -141,7 +118,6 @@ function onSave() {
     cutoffTime: cutoff.value || '21:00',
     pickupSlots: JSON.stringify(slots),
     deliveryFee: String(Math.round(Number(deliveryFeeYuan.value || 0) * 100)),
-    payQrCode: form.value.payQrCode || '',
     phoneAuthEnabled: phoneAuth.value ? 'true' : 'false',
     prepayReleaseMinutes: String(form.value.prepayReleaseMinutes || 30),
   };

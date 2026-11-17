@@ -30,6 +30,10 @@ Page({
     menuLoading: false,
     /** 菜单项展示用（价格已转成元，避免 wxml 里做除法） */
     viewItems: [],
+    /** 第三个 Tab「全部菜单」：盒饭库全量，只浏览不直接加购 */
+    allActive: false,
+    allItems: [],
+    allLoading: false,
     cartCount: 0,
     cartAmountText: '0.00',
   },
@@ -52,11 +56,10 @@ Page({
     const today = dateStr();
     const tomorrow = addDays(today, 1);
     const dayAfter = addDays(today, 2);
+    // 后天 Tab 仅在商家已发布后天菜单时出现（需求 4.5）：
+    // 先只放明天，探到后天有菜单再追加，没发布就不占位不置灰
     this.setData({
-      dates: [
-        { date: tomorrow, label: dayLabel(tomorrow, today, tomorrow) },
-        { date: dayAfter, label: dayLabel(dayAfter, today, tomorrow) },
-      ],
+      dates: [{ date: tomorrow, label: dayLabel(tomorrow, today, tomorrow) }],
     });
 
     app
@@ -76,7 +79,8 @@ Page({
         }
         const active = this.data.activeDate || (this.data.dates[0] && this.data.dates[0].date) || '';
         this.setData({ loading: false, activeDate: active });
-        return this.loadMenu(active);
+        this.loadMenu(active);
+        this.probeDayAfter(dayAfter, today, tomorrow);
       })
       .catch((err) => {
         this.setData({ loading: false });
@@ -84,6 +88,23 @@ Page({
       })
       .then(() => {
         this.loadingNow = false;
+      });
+  },
+
+  /** 探测后天菜单是否已发布，是才追加「后天」Tab（不占位不置灰，需求 4.5） */
+  probeDayAfter(dayAfter, today, tomorrow) {
+    request({ url: '/menu?serveDate=' + dayAfter })
+      .then((menu) => {
+        if ((menu.items || []).length && this.data.dates.length === 1) {
+          this.setData({
+            dates: this.data.dates.concat([
+              { date: dayAfter, label: dayLabel(dayAfter, today, tomorrow) },
+            ]),
+          });
+        }
+      })
+      .catch(() => {
+        // 后天菜单拉不到（还没排 / 已停业）就不显示这个 Tab，不弹错
       });
   },
 
@@ -156,7 +177,11 @@ Page({
   /** 切换供餐日。后天只能看不能买，但仍要能看。 */
   onSwitchDate(e) {
     const date = e.currentTarget.dataset.date;
-    if (!date || date === this.data.activeDate) {
+    if (!date) {
+      return;
+    }
+    // 从「全部菜单」切回来时，即使还是同一个供餐日也要生效
+    if (!this.data.allActive && date === this.data.activeDate) {
       return;
     }
     const cart = cartUtil.load();
@@ -170,14 +195,46 @@ Page({
           }
           cartUtil.clear();
           this.refreshCartBar();
-          this.setData({ activeDate: date });
+          this.setData({ activeDate: date, allActive: false });
           this.loadMenu(date);
         },
       });
       return;
     }
-    this.setData({ activeDate: date });
+    this.setData({ activeDate: date, allActive: false });
     this.loadMenu(date);
+  },
+
+  /** 切到「全部菜单」Tab。全部菜单是浏览入口，点卡片进详情再按供餐日下单。 */
+  onSwitchAll() {
+    if (this.data.allActive) {
+      return;
+    }
+    this.setData({ allActive: true });
+    this.loadAllCombos();
+  },
+
+  loadAllCombos() {
+    this.setData({ allLoading: true });
+    return request({ url: '/combo/all' })
+      .then((list) => {
+        const allItems = (list || []).map((item) => ({
+          comboId: item.comboId,
+          name: item.name,
+          cover: item.cover,
+          desc: item.desc || '',
+          priceText: yuan(item.price),
+          dishesText: (item.dishes || []).map((d) => d.name + '×' + d.qty).join('、'),
+          tomorrowText: item.tomorrowSupplied ? '明日供应' : '暂不供应',
+        }));
+        this.setData({ allItems });
+      })
+      .catch((err) => {
+        app.toastError(err);
+      })
+      .then(() => {
+        this.setData({ allLoading: false });
+      });
   },
 
   /** 点卡片进详情：规格只能在那里选 */

@@ -62,8 +62,8 @@ const auth = useAuthStore();
 const BUCKETS = [
   { key: 'receivable', label: '应收', hint: '全部有效订单' },
   { key: 'paid', label: '已收', hint: '已确认收款' },
-  { key: 'unpaid', label: '未收', hint: '顾客未点已转账' },
-  { key: 'claimed', label: '待确认', hint: '顾客称已转账' },
+  { key: 'unpaid', label: '未收', hint: '顾客未点已付款' },
+  { key: 'claimed', label: '待确认', hint: '顾客称已付款' },
   { key: 'refunding', label: '待退款', hint: '取消或拒单' },
   { key: 'refunded', label: '已退款', hint: '退款已完成' },
 ];

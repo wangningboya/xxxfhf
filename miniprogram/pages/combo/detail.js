@@ -9,6 +9,9 @@ Page({
     serveDate: '',
     loading: true,
     orderable: false,
+    /** 浏览态：从「全部菜单」进来的、不在当日菜单里的盒饭，只看不能买（需求 4.5） */
+    browse: false,
+    desc: '',
     item: null,
     priceText: '0.00',
     totalText: '0.00',
@@ -34,46 +37,71 @@ Page({
     request({ url: '/menu?serveDate=' + this.data.serveDate })
       .then((menu) => {
         const item = (menu.items || []).find((it) => it.comboId === this.data.comboId);
+        if (item) {
+          this.renderItem(item, !!menu.orderable, false);
+          return;
+        }
+        // 不在当日菜单：从「全部菜单」点进来的，退到盒饭库浏览（需求 4.5：进详情可看图文）
+        this.loadFromAll();
+      })
+      .catch(() => {
+        // 当日菜单拉不到（日期越界等）：同样退到盒饭库浏览
+        this.loadFromAll();
+      });
+  },
+
+  /** 从盒饭库加载：只渲染，不给下单 */
+  loadFromAll() {
+    return request({ url: '/combo/all' })
+      .then((list) => {
+        const item = (list || []).find((it) => it.comboId === this.data.comboId);
         if (!item) {
-          wx.showToast({ title: '这道菜不在当天菜单里', icon: 'none' });
+          wx.showToast({ title: '盒饭不存在或已下架', icon: 'none' });
           this.setData({ loading: false });
           return;
         }
-        // 默认选中每个必选组的第一个选项：让用户一进来就能直接下单，
-        // 而不是点「加入」时才被拦下来提示「请选择规格」
-        const selected = {};
-        const groups = (item.specGroups || []).map((group, index) => {
-          const options = (group.options || []).map((opt) => ({
-            optionId: opt.optionId,
-            name: opt.name,
-            priceDelta: opt.priceDelta || 0,
-            deltaText: delta(opt.priceDelta),
-          }));
-          if (group.required && options.length) {
-            selected[index] = options[0].optionId;
-          }
-          return { name: group.name, required: !!group.required, options };
-        });
-
-        const maxQty = item.remainQty === null || item.remainQty === undefined
-          ? 99 : Math.max(item.remainQty, 0);
-
-        this.setData({
-          loading: false,
-          item,
-          orderable: !!menu.orderable && maxQty > 0,
-          dishesText: (item.dishes || []).map((d) => d.name + '×' + d.qty).join('、'),
-          groups,
-          selected,
-          maxQty,
-        });
-        wx.setNavigationBarTitle({ title: item.name || '详情' });
-        this.recalc();
+        this.renderItem(item, false, true);
       })
       .catch((err) => {
         this.setData({ loading: false });
         app.toastError(err);
       });
+  },
+
+  /** 渲染一份数据。browse = 浏览态（隐藏份数与加购，展示简介） */
+  renderItem(item, orderable, browse) {
+    // 默认选中每个必选组的第一个选项：让用户一进来就能直接下单，
+    // 而不是点「加入」时才被拦下来提示「请选择规格」
+    const selected = {};
+    const groups = (item.specGroups || []).map((group, index) => {
+      const options = (group.options || []).map((opt) => ({
+        optionId: opt.optionId,
+        name: opt.name,
+        priceDelta: opt.priceDelta || 0,
+        deltaText: delta(opt.priceDelta),
+      }));
+      if (group.required && options.length) {
+        selected[index] = options[0].optionId;
+      }
+      return { name: group.name, required: !!group.required, options };
+    });
+
+    const maxQty = browse || item.remainQty === null || item.remainQty === undefined
+      ? 99 : Math.max(item.remainQty, 0);
+
+    this.setData({
+      loading: false,
+      item,
+      orderable: orderable && maxQty > 0,
+      browse: !!browse,
+      desc: item.desc || '',
+      dishesText: (item.dishes || []).map((d) => d.name + '×' + d.qty).join('、'),
+      groups,
+      selected,
+      maxQty,
+    });
+    wx.setNavigationBarTitle({ title: item.name || '详情' });
+    this.recalc();
   },
 
   /** 选规格。同一组内互斥，再点一次取消（非必选组允许不选） */

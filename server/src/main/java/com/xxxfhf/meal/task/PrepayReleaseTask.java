@@ -13,7 +13,7 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 /**
- * 超时未转账扫描（F-E06）。
+ * 超时未付款扫描（F-E06）。
  *
  * 动作只有两个：**释放份数**、置 `stock_released = 1`。订单状态**不变**，仍在待接单。
  *
@@ -22,7 +22,7 @@ import java.util.List;
  *
  * 三条不释放的红线：
  * - 已经不是待接单（被接 / 被拒 / 被取消）
- * - 用户点过「我已完成转账」（`claimed` 及以上）—— 宁可少释放，不可误伤已付款用户
+ * - 用户点过「我已完成付款」（`claimed` 及以上）—— 宁可少释放，不可误伤已付款用户
  * - 已经释放过（`stock_released = 1`）
  */
 @Component
@@ -62,7 +62,7 @@ public class PrepayReleaseTask {
             int minutes = Math.max(1, configService.getInt(ConfigKey.PREPAY_RELEASE_MINUTES, 30));
             List<String> ids = jdbcTemplate.queryForList(SCAN_SQL, String.class, minutes, BATCH_LIMIT);
             if (ids.isEmpty()) {
-                log.debug("超时未转账扫描：无命中");
+                log.debug("超时未付款扫描：无命中");
                 return;
             }
 
@@ -77,11 +77,11 @@ public class PrepayReleaseTask {
                     log.error("释放份数失败 orderId={}", orderId, ex);
                 }
             }
-            log.info("超时未转账扫描：命中 {} 单（门槛 {} 分钟），实际释放 {} 单",
+            log.info("超时未付款扫描：命中 {} 单（门槛 {} 分钟），实际释放 {} 单",
                     ids.size(), minutes, released);
         } catch (Exception ex) {
             // 定时任务异常不能抛出去，否则调度线程会静默停止后续触发
-            log.error("超时未转账扫描任务执行失败", ex);
+            log.error("超时未付款扫描任务执行失败", ex);
         }
     }
 }

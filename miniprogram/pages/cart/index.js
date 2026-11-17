@@ -1,3 +1,4 @@
+const { request } = require('../../utils/request');
 const { yuan } = require('../../utils/format');
 const cartUtil = require('../../utils/cart');
 
@@ -7,6 +8,8 @@ Page({
     lines: [],
     count: 0,
     amountText: '0.00',
+    /** 该菜单已截单：车内餐品失效，不能再结算（需求 4.6） */
+    cutoff: false,
   },
 
   onShow() {
@@ -35,6 +38,24 @@ Page({
       count: cartUtil.count(cart),
       amountText: yuan(cartUtil.goodsAmount(cart)),
     });
+    this.checkCutoff();
+  },
+
+  /** 截单检测：过了截单点车内餐品自动失效（判定以服务端为准，这里只做提示） */
+  checkCutoff() {
+    if (!this.data.serveDate || !this.data.lines.length) {
+      if (this.data.cutoff) {
+        this.setData({ cutoff: false });
+      }
+      return;
+    }
+    request({ url: '/menu?serveDate=' + this.data.serveDate })
+      .then((menu) => {
+        this.setData({ cutoff: !!menu.cutoff });
+      })
+      .catch(() => {
+        // 拉不到就不提示，提交时服务端仍会拦
+      });
   },
 
   onMinus(e) {
@@ -94,6 +115,10 @@ Page({
   onCheckout() {
     if (!this.data.count) {
       wx.showToast({ title: '购物车是空的', icon: 'none' });
+      return;
+    }
+    if (this.data.cutoff) {
+      wx.showToast({ title: '已截单，请重新选择', icon: 'none' });
       return;
     }
     wx.navigateTo({ url: '/pages/order/confirm' });

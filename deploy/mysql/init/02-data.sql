@@ -38,9 +38,8 @@ VALUES ('cutoffTime', '21:00', '截单时间 HH:mm，供餐日前一天生效，
        ('deliveryFee', '0', '配送费（分），0 表示免配送费'),
        ('shopName', '', '店铺名称，首页展示'),
        ('shopNotice', '', '店铺公告，首页滚动展示'),
-       ('payQrCode', '', '收款码图片地址，订单详情展示'),
        ('phoneAuthEnabled', 'false', '是否启用微信手机号授权'),
-       ('prepayReleaseMinutes', '30', '未转账订单释放份数的等待分钟数'),
+       ('prepayReleaseMinutes', '30', '未付款订单释放份数的等待分钟数'),
        ('closedDates', '[]', '停业的供餐日列表 ["2026-12-01"]'),
        ('groupOpenIds', '[]', '允许进入本店的微信群 openGId 白名单（JSON 数组）；空数组表示只允许邀请码进入'),
        ('subscribeTemplates', '{}', '订阅消息模板（JSON 对象）；空对象表示未申请模板、不发通知。结构见技术文档')

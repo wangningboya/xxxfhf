@@ -37,7 +37,7 @@ public class AccessGuard {
         return user;
     }
 
-    /** 已准入 **且** 审核通过：下单、取消、声称已转账这类会改变业务数据的操作用这个。 */
+    /** 已准入 **且** 审核通过：下单、取消、声称已付款这类会改变业务数据的操作用这个。 */
     public User requireApproved(String userId) {
         return requireApproved(requireAccess(userId));
     }

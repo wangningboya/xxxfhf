@@ -1,4 +1,6 @@
 <view class="page">
+  <view class="cutoff-banner" wx:if="{{cutoff}}">该菜单已截单，无法提交，请返回重新选餐</view>
+
   <view class="card">
     <view class="card-title">取餐方式</view>
     <view class="type-row">
@@ -41,7 +43,7 @@
         <view class="addr-line1">{{address.regionName}} {{address.detail}}</view>
         <view class="addr-line2">{{address.contactName}} {{address.phone}}</view>
       </view>
-      <view class="addr-empty" wx:else>请选择收货地址</view>
+      <view class="addr-empty" wx:else>请联系商家添加收货地址</view>
       <view class="arrow">›</view>
     </view>
   </view>
@@ -85,7 +87,7 @@
     </view>
   </view>
 
-  <view class="pay-hint">提交后请按订单页的收款码转账，转账后点「我已完成转账」</view>
+  <view class="pay-hint">提交后按订单页说明付款（线下转账或现金），付好后点「我已完成付款」</view>
 
   <view class="bottom-gap"></view>
 

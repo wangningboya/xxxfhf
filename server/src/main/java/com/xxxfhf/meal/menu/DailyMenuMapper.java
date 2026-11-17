@@ -30,7 +30,7 @@ public interface DailyMenuMapper extends BaseMapper<DailyMenu> {
                @Param("qty") int qty);
 
     /**
-     * 释放份数。拒单、用户取消、超时未转账三个入口共用。
+     * 释放份数。拒单、用户取消、超时未付款三个入口共用。
      *
      * GREATEST(..., 0) 是防御：重复释放绝不能把 sold_qty 压成负数，
      * 否则剩余份数会凭空多出来，等于白送。

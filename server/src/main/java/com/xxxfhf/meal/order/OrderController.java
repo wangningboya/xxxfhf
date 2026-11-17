@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 用户端订单。
  *
- * 下单 / 声称转账 / 取消走 {@link AccessGuard#requireApproved}；
+ * 下单 / 声称付款 / 取消走 {@link AccessGuard#requireApproved}；
  * 查询自己的订单只要求已准入 —— 待审核用户看不到下单按钮，但历史订单还得能看。
  */
 @RestController
@@ -56,7 +56,7 @@ public class OrderController {
         return ApiResponse.ok(orderService.detail(userId, orderId));
     }
 
-    /** 我已完成转账 → 收款状态置为「用户声称已转账」，等商家核对。 */
+    /** 我已完成付款 → 收款状态置为「用户声称已付款」，等商家核对。 */
     @PostMapping("/claim-paid")
     public ApiResponse<OrderService.OrderView> claimPaid(@Valid @RequestBody IdRequest request) {
         return ApiResponse.ok(orderService.claimPaid(UserContext.userId(), request.orderId()));

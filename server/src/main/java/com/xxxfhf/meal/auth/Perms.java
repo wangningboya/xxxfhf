@@ -36,7 +36,7 @@ public final class Perms {
     public static final String ORDER_PAYMENT = "order.payment";
     /** 查看对账视图 */
     public static final String FINANCE_VIEW = "finance.view";
-    /** 截单时间、配送费、店铺信息、收款码 */
+    /** 截单时间、配送费、店铺信息 */
     public static final String CONFIG_MANAGE = "config.manage";
     /** 角色与权限分配 */
     public static final String ROLE_MANAGE = "role.manage";

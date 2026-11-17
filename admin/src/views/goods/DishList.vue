@@ -125,7 +125,7 @@ function openForm(row) {
 async function uploadImage(options) {
   const data = new FormData();
   data.append('file', options.file);
-  const result = await http.post('/upload', data, {
+  const result = await http.post('/admin/file/upload', data, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
   form.value.image = result.url;

@@ -77,7 +77,7 @@
     </view>
     <view wx:if="{{can.config}}" class="grid-item" data-url="/pages/merchant/config" bindtap="onGo">
       <view class="grid-title">配置</view>
-      <view class="grid-desc">截单时间、收款码等</view>
+      <view class="grid-desc">截单时间、配送费等</view>
     </view>
   </view>
 

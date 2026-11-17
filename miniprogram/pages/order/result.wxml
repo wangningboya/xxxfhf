@@ -1,7 +1,7 @@
 <view class="page">
   <view class="hero">
     <view class="hero-title">下单成功</view>
-    <view class="hero-desc">请按下方收款码转账，转完点一下「我已完成转账」</view>
+    <view class="hero-desc">请按页面说明完成付款，付好后点一下「我已完成付款」</view>
   </view>
 
   <view class="card" wx:if="{{order}}">
@@ -27,19 +27,13 @@
     </view>
   </view>
 
-  <view class="card qr-card" wx:if="{{payQrCode}}">
-    <view class="card-title">转账收款码</view>
-    <image class="qr" src="{{payQrCode}}" mode="aspectFit" bindtap="onPreviewQr" />
-    <view class="qr-hint">长按或点击放大后识别</view>
+  <view class="card">
+    <view class="card-title">付款方式</view>
+    <view class="pay-note">本店只收线下转账或现金。转账请联系商家获取收款账号；现金请取餐或送达时当面支付。付好后点下面的按钮。</view>
 
     <view class="claim {{claimed ? 'claim-done' : ''}}" bindtap="onClaimPaid">
-      {{claimed ? '已告诉商家，等核对' : (claiming ? '提交中…' : '我已完成转账')}}
+      {{claimed ? '已告诉商家，等核对' : (claiming ? '提交中…' : '我已完成付款')}}
     </view>
-  </view>
-
-  <view class="card" wx:else>
-    <view class="card-title">商家还没配收款码</view>
-    <view class="qr-hint">请直接联系商家转账，转完告诉他订单号。</view>
   </view>
 
   <view class="actions">

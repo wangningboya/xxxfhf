@@ -193,7 +193,7 @@ public class AppProperties {
     }
 
     public static class Schedule {
-        /** 超时未转账扫描任务。默认每 5 分钟；要更精确可改 "0 * * * * *"（每分钟）。 */
+        /** 超时未付款扫描任务。默认每 5 分钟；要更精确可改 "0 * * * * *"（每分钟）。 */
         private String prepayReleaseCron = "0 */5 * * * *";
         private boolean enabled = true;
 

@@ -76,7 +76,7 @@ public class Order {
     /** 自取时段，仅自取单有值 */
     private String pickupSlot;
 
-    /** 份数是否已被「超时未转账」释放；为 true 时商家端置顶标红 */
+    /** 份数是否已被「超时未付款」释放；为 true 时商家端置顶标红 */
     private Boolean stockReleased;
     private LocalDateTime stockReleasedAt;
 

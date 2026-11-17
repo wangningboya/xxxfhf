@@ -57,10 +57,10 @@ page {
 }
 
 .row-code {
-  font-size: 40rpx;
+  font-size: 56rpx;
   font-weight: 700;
   color: #ff9f1c;
-  letter-spacing: 8rpx;
+  letter-spacing: 12rpx;
 }
 
 .row-amount {

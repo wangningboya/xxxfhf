@@ -11,8 +11,8 @@ const { yuan, dateStr, addDays } = require('../../utils/format');
 const BUCKETS = [
   { key: 'receivable', label: '应收', hint: '全部有效订单' },
   { key: 'paid', label: '已收', hint: '已确认收款' },
-  { key: 'unpaid', label: '未收', hint: '顾客还没点「我已转账」' },
-  { key: 'claimed', label: '待确认', hint: '顾客说已转账，待核对' },
+  { key: 'unpaid', label: '未收', hint: '顾客还没点「我已付款」' },
+  { key: 'claimed', label: '待确认', hint: '顾客说已付款，待核对' },
   { key: 'refunding', label: '待退款', hint: '已取消或拒单，需退钱' },
   { key: 'refunded', label: '已退款', hint: '退款已完成' },
 ];
