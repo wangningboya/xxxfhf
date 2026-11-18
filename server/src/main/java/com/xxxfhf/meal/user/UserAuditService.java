@@ -190,13 +190,13 @@ public class UserAuditService {
     }
 
     /** 只要昵称；没填昵称就退回 userId。删除类记录用这个，号码不落库 */
-    private static String displayName(User user) {
+    static String displayName(User user) {
         return user.getNickName() == null || user.getNickName().isBlank()
                 ? user.getId() : user.getNickName();
     }
 
     /** userId 尾 6 位：人读的日志里够指到某一行，又不至于把整串 UUID 铺满 */
-    private static String idTail(String userId) {
+    static String idTail(String userId) {
         if (userId == null || userId.length() <= 6) {
             return userId == null ? "" : userId;
         }

@@ -43,6 +43,8 @@ public final class AuditActions {
     public static final String USER_PHONE = "user.phone";
     /** 查看完整手机号：只读动作，记下来是为了「谁看过谁的号」可追溯 */
     public static final String USER_PHONE_VIEW = "user.phone.view";
+    /** 用户在小程序里自己注销（不是商家删人）：删除或匿名化，记录里只留昵称与账号尾号 */
+    public static final String USER_SELF_DELETE = "user.selfDelete";
 
     /** 筛选下拉用；顺序即页面展示顺序，按业务域成组 */
     private static final List<Action> ALL = List.of(
@@ -58,7 +60,8 @@ public final class AuditActions {
             new Action(USER_ENABLE, "恢复用户", TABLE_USER),
             new Action(USER_DELETE, "删除用户", TABLE_USER),
             new Action(USER_PHONE, "修改手机号", TABLE_USER),
-            new Action(USER_PHONE_VIEW, "查看完整手机号", TABLE_USER)
+            new Action(USER_PHONE_VIEW, "查看完整手机号", TABLE_USER),
+            new Action(USER_SELF_DELETE, "用户自助注销", TABLE_USER)
     );
 
     private AuditActions() {

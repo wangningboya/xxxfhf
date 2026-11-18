@@ -1,6 +1,7 @@
 package com.xxxfhf.meal.auth;
 
 import com.xxxfhf.meal.common.ApiResponse;
+import com.xxxfhf.meal.user.AccountDeletionService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -22,10 +23,13 @@ public class AuthController {
 
     private final AuthService authService;
     private final GroupAccessService groupAccessService;
+    private final AccountDeletionService accountDeletionService;
 
-    public AuthController(AuthService authService, GroupAccessService groupAccessService) {
+    public AuthController(AuthService authService, GroupAccessService groupAccessService,
+                          AccountDeletionService accountDeletionService) {
         this.authService = authService;
         this.groupAccessService = groupAccessService;
+        this.accountDeletionService = accountDeletionService;
     }
 
     /* ---------------- 登录 ---------------- */
@@ -123,6 +127,29 @@ public class AuthController {
     @PostMapping("/reapply")
     public ApiResponse<GroupAccessService.AccessState> reapply() {
         return ApiResponse.ok(groupAccessService.reapply(UserContext.userId()));
+    }
+
+    /* ---------------- 注销 ---------------- */
+
+    /**
+     * 注销前先看后果：有几笔订单要保留、几条地址会被删、手机号会不会被抹掉。
+     *
+     * <p>单独一个接口而不是塞进 {@code /me}：这是低频且破坏性的操作，
+     * 只有用户点进「注销」时才需要这些数字。
+     */
+    @GetMapping("/delete-preview")
+    public ApiResponse<AccountDeletionService.DeletionPreview> deletePreview() {
+        return ApiResponse.ok(accountDeletionService.preview(UserContext.userId()));
+    }
+
+    /**
+     * 执行注销。有订单时保留订单、抹掉身份；没订单时整行删除。
+     *
+     * <p>调用成功后当前令牌立即失效（令牌版本 +1，或用户行已删），前端必须清本地登录态。
+     */
+    @PostMapping("/delete")
+    public ApiResponse<AccountDeletionService.DeletionResult> deleteAccount() {
+        return ApiResponse.ok(accountDeletionService.delete(UserContext.userId()));
     }
 
     /* ---------------- 请求体 ---------------- */

@@ -77,6 +77,26 @@ Page({
     return { status: '', label: '' };
   },
 
+  /**
+   * 联系顾客：号码平时是掩码，真要打电话才向服务端取一次全号。
+   * 不 setData、不缓存 —— 页面上任何能反查的地方都不该出现 11 位号。
+   * 这一次调取会记进订单时间轴，且同单 24 小时最多 5 次。
+   */
+  onCallCustomer() {
+    if (!this.data.orderId) {
+      return;
+    }
+    request({ url: '/admin/order/' + this.data.orderId + '/contact-phone' })
+      .then((phone) => {
+        if (!phone) {
+          wx.showToast({ title: '这单没有留电话', icon: 'none' });
+          return;
+        }
+        wx.makePhoneCall({ phoneNumber: phone, fail: () => {} });
+      })
+      .catch((err) => app.toastError(err));
+  },
+
   onAccept() {
     this.post('/admin/order/accept', { orderIds: [this.data.orderId] }, '已接单');
   },

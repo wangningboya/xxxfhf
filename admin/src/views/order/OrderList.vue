@@ -140,7 +140,10 @@
           <el-descriptions-item label="订单号">{{ detail.order.orderNo }}</el-descriptions-item>
           <el-descriptions-item label="供餐日">{{ detail.order.serveDate }}</el-descriptions-item>
           <el-descriptions-item label="顾客">{{ detail.userNickName || '未填昵称' }}</el-descriptions-item>
-          <el-descriptions-item label="手机号">{{ detail.userPhone || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="手机号">
+            {{ detail.userPhone || '—' }}
+            <el-button link type="primary" size="small" @click="callCustomer">联系顾客</el-button>
+          </el-descriptions-item>
           <el-descriptions-item label="订单状态">{{ detail.order.statusLabel }}</el-descriptions-item>
           <el-descriptions-item label="收款状态">{{ detail.order.payStatusLabel }}</el-descriptions-item>
           <el-descriptions-item label="收款方式">{{ detail.order.payMethodLabel || '未申报' }}</el-descriptions-item>
@@ -461,6 +464,29 @@ function openDetail(row) {
       loadLogs(orderId);
     })
     .catch(() => {});
+}
+
+/**
+ * 联系顾客：向服务端要一次完整号码，直接交给系统拨号。
+ *
+ * 号码不写进 detail / 不存变量，拿到就拨、拨完即忘 —— 页面上任何一处可反查的地方
+ * 都不该出现 11 位号。这一次调取会被记进订单时间轴，并且有频控（同单 24h 5 次）。
+ */
+function callCustomer() {
+  const orderId = detail.value && detail.value.order.orderId;
+  if (!orderId) return;
+  http
+    .get('/admin/order/' + orderId + '/contact-phone')
+    .then((phone) => {
+      if (!phone) {
+        ElMessage.warning('这笔订单没有留联系电话');
+        return;
+      }
+      window.location.href = 'tel:' + phone;
+    })
+    .catch(() => {
+      // 错误提示由 http 拦截器统一弹，这里只保证不会继续拨号
+    });
 }
 
 function loadLogs(orderId) {

@@ -9,6 +9,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -72,6 +73,19 @@ public class OrderAdminController {
     @RequirePerm({Perms.ORDER_VIEW, Perms.ORDER_ACCEPT})
     public ApiResponse<List<OrderStatusLogService.Row>> statusLog(@RequestParam String orderId) {
         return ApiResponse.ok(statusLogService.list(orderId));
+    }
+
+    /**
+     * 联系顾客：取一次完整号码用于拨号。
+     *
+     * <p>号码平时是掩码的，这个接口每调一次都会写进订单时间轴并受频控约束：
+     * 同一笔订单 24 小时最多 5 次、同一操作人每天最多 100 次、订单结束后 7 天关闭。
+     * 前端拿到就拨号，不放进页面数据、不落缓存 —— 它不是「查号码」的通用入口。
+     */
+    @GetMapping("/{orderId}/contact-phone")
+    @RequirePerm({Perms.ORDER_VIEW, Perms.ORDER_ACCEPT})
+    public ApiResponse<String> contactPhone(@PathVariable String orderId) {
+        return ApiResponse.ok(orderAdminService.contactPhone(UserContext.userId(), orderId));
     }
 
     /** 接单，支持批量。取消申请中的单会被跳过并给出原因。 */

@@ -74,4 +74,12 @@
       </view>
     </view>
   </view>
+
+  <!-- 隐私与账号：注销入口只给群成员，商家账号在网页后台上管理 -->
+  <view class="links">
+    <view class="link" bindtap="onOpenPrivacy">隐私政策</view>
+    <view class="link link-danger" wx:if="{{me.userType !== 'merchant'}}" bindtap="onDeleteAccount">
+      注销账号
+    </view>
+  </view>
 </view>

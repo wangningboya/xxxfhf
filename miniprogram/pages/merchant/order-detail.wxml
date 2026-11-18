@@ -4,8 +4,9 @@
       <view class="name">{{row.userNickName || '群成员'}}</view>
       <view class="status">{{order.statusLabel}}</view>
     </view>
-    <!-- 接口已脱敏（前 3 后 2）：点按拨号在这里没有意义，别让用户拨到一串星号 -->
+    <!-- 接口已脱敏（前 3 后 2）：显示的是掩码，拨号走「联系顾客」按钮单独取一次全号 -->
     <view class="meta" wx:if="{{row.userPhone}}">📞 {{row.userPhone}}</view>
+    <view class="call-btn" wx:if="{{row.userPhone}}" bindtap="onCallCustomer">联系顾客</view>
     <view class="meta">{{order.orderNo}}</view>
   </view>
 

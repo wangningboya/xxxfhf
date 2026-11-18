@@ -23,6 +23,17 @@
   color: #9a9a9a;
 }
 
+/* 「联系顾客」：号码是掩码，拨号要单独取一次全号，所以做成一个明确的小按钮 */
+.call-btn {
+  display: inline-block;
+  margin-top: 14rpx;
+  padding: 8rpx 24rpx;
+  border: 1rpx solid #ff9f1c;
+  border-radius: 999rpx;
+  font-size: 24rpx;
+  color: #ff9f1c;
+}
+
 .warn-title {
   font-size: 28rpx;
   font-weight: 600;

@@ -5,9 +5,16 @@
 -->
 <configuration>
 
+    <!--
+      手机号兜底脱敏：业务代码已不打全号，这里再拦一道，
+      防的是将来有人随手把号码拼进日志。见 PhoneMaskingConverter。
+    -->
+    <conversionRule conversionWord="maskedMsg"
+                    converterClass="com.xxxfhf.meal.common.log.PhoneMaskingConverter"/>
+
     <property name="LOG_DIR" value="${APP_LOG_DIR:-./logs}"/>
     <property name="PATTERN"
-              value="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{requestId:-}] %logger{36} - %msg%n"/>
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{requestId:-}] %logger{36} - %maskedMsg%n"/>
 
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>

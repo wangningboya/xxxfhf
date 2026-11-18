@@ -45,18 +45,20 @@ public class OrderAdminService {
     private final ServeDateClock clock;
     private final NotifyService notifyService;
     private final OrderStatusLogService statusLogService;
+    private final OrderStatusLogMapper statusLogMapper;
     private final DictService dictService;
 
     public OrderAdminService(OrderMapper orderMapper, OrderService orderService,
                              UserMapper userMapper, ServeDateClock clock,
                              NotifyService notifyService, OrderStatusLogService statusLogService,
-                             DictService dictService) {
+                             OrderStatusLogMapper statusLogMapper, DictService dictService) {
         this.orderMapper = orderMapper;
         this.orderService = orderService;
         this.userMapper = userMapper;
         this.clock = clock;
         this.notifyService = notifyService;
         this.statusLogService = statusLogService;
+        this.statusLogMapper = statusLogMapper;
         this.dictService = dictService;
     }
 
@@ -278,6 +280,87 @@ public class OrderAdminService {
         statusLogService.record(order.getId(), OrderLogActions.ORDER_PICKUP,
                 order.getStatus(), OrderStatus.COMPLETED, "取餐码 " + trimmed, LocalDateTime.now());
         return orderService.toView(orderService.require(order.getId()));
+    }
+
+    /* ==================== 联系顾客 ==================== */
+
+    /** 订单结束（完成/取消/拒单）之后仍可调取号码的天数，留出退款与售后沟通的窗口 */
+    private static final int CONTACT_WINDOW_DAYS = 7;
+    /** 同一笔订单 24 小时内最多调取几次 */
+    private static final int CONTACT_MAX_PER_ORDER_24H = 5;
+    /** 同一个操作人一天最多调取几次 */
+    private static final int CONTACT_MAX_PER_OPERATOR_DAY = 100;
+
+    /**
+     * 联系顾客：按需、限次、留痕地把完整号码交给商家拨号。
+     *
+     * <p>列表里的号码一律是掩码，只有真要打电话时才取一次全号；这次调取会写进订单时间轴，
+     * 「谁在什么时候看了哪一单的号码」事后可查。限次防的不是用户，是页面上无意识地
+     * 点来点去把号码摊开。
+     *
+     * <p>返回的明文只在这一次响应的内存里存在，前端不落缓存、不进 data —— 拨完即忘。
+     */
+    @Transactional
+    public String contactPhone(String operatorId, String orderId) {
+        Order order = orderService.require(orderId);
+        LocalDateTime now = LocalDateTime.now();
+
+        LocalDateTime terminalAt = terminalAt(order);
+        if (terminalAt != null && terminalAt.isBefore(now.minusDays(CONTACT_WINDOW_DAYS))) {
+            throw BizException.conflict("订单结束已超过 " + CONTACT_WINDOW_DAYS + " 天，不能再调取顾客号码");
+        }
+
+        long inOrder = statusLogMapper.selectCount(Wrappers.<OrderStatusLog>lambdaQuery()
+                .eq(OrderStatusLog::getAction, OrderLogActions.EVENT_CONTACT_PHONE)
+                .eq(OrderStatusLog::getOrderId, orderId)
+                .ge(OrderStatusLog::getCreatedAt, now.minusHours(24)));
+        if (inOrder >= CONTACT_MAX_PER_ORDER_24H) {
+            throw BizException.conflict("这单 24 小时内已调取 " + CONTACT_MAX_PER_ORDER_24H
+                    + " 次号码，先看订单备注或稍后再试");
+        }
+
+        long today = statusLogMapper.selectCount(Wrappers.<OrderStatusLog>lambdaQuery()
+                .eq(OrderStatusLog::getAction, OrderLogActions.EVENT_CONTACT_PHONE)
+                .eq(OrderStatusLog::getOperatorId, operatorId)
+                .ge(OrderStatusLog::getCreatedAt, LocalDate.now().atStartOfDay()));
+        if (today >= CONTACT_MAX_PER_OPERATOR_DAY) {
+            throw BizException.conflict("今天调取号码已达上限 " + CONTACT_MAX_PER_OPERATOR_DAY + " 次");
+        }
+
+        String phone = contactNumberOf(order);
+        if (phone == null) {
+            throw BizException.notFound("这笔订单没有留联系电话，无法拨号");
+        }
+        statusLogService.record(orderId, OrderLogActions.EVENT_CONTACT_PHONE, null, null, "调取号码拨号", now);
+        log.info("调取顾客号码 orderNo={} 操作人={}", order.getOrderNo(), operatorId);
+        return phone;
+    }
+
+    /** 终态时间：订单主表没存完成时间，只能从时间轴里取最后一个终态 */
+    private LocalDateTime terminalAt(Order order) {
+        if (!OrderStatus.isFinal(order.getStatus())) {
+            return null;
+        }
+        OrderStatusLog last = statusLogMapper.selectOne(Wrappers.<OrderStatusLog>lambdaQuery()
+                .eq(OrderStatusLog::getOrderId, order.getId())
+                .in(OrderStatusLog::getToStatus,
+                        List.of(OrderStatus.COMPLETED, OrderStatus.CANCELLED, OrderStatus.REJECTED))
+                .orderByDesc(OrderStatusLog::getCreatedAt)
+                .last("LIMIT 1"));
+        return last == null ? null : last.getCreatedAt();
+    }
+
+    /** 快照里的号优先（下单时确认过的），没有就回退到账号手机号 */
+    private String contactNumberOf(Order order) {
+        AddressSnapshot snapshot = order.getAddressSnapshot();
+        if (snapshot != null && snapshot.phone() != null && !snapshot.phone().isBlank()) {
+            return snapshot.phone().trim();
+        }
+        User user = userMapper.selectById(order.getUserId());
+        if (user == null || user.getPhone() == null || user.getPhone().isBlank()) {
+            return null;
+        }
+        return user.getPhone().trim();
     }
 
     /* ==================== 收款与退款 ==================== */

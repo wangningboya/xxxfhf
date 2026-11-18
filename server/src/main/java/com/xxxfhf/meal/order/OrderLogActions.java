@@ -50,6 +50,11 @@ public final class OrderLogActions {
     public static final String EVENT_NOTIFY = "event.notify";
     /** 订阅消息发送失败 */
     public static final String EVENT_NOTIFY_FAIL = "event.notify_fail";
+    /**
+     * 商家调取顾客完整号码用于拨号。不改状态，但必须留痕：
+     * 号码平时是掩码的，这一次「看了全号」得有据可查。
+     */
+    public static final String EVENT_CONTACT_PHONE = "event.contact_phone";
 
     private static final List<Action> ALL = List.of(
             new Action(ORDER_CREATE, "下单"),
@@ -68,7 +73,8 @@ public final class OrderLogActions {
             new Action(EVENT_CANCEL_DENY, "驳回取消申请"),
             new Action(EVENT_STOCK_RELEASE, "超时释放份数"),
             new Action(EVENT_NOTIFY, "通知已发送"),
-            new Action(EVENT_NOTIFY_FAIL, "通知未送达")
+            new Action(EVENT_NOTIFY_FAIL, "通知未送达"),
+            new Action(EVENT_CONTACT_PHONE, "拨打顾客电话")
     );
 
     private OrderLogActions() {

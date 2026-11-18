@@ -1,5 +1,5 @@
 const app = getApp();
-const { request } = require('../../utils/request');
+const { request, setToken } = require('../../utils/request');
 
 /** 商家登录态键名，与 pages/merchant/login.js 保持一致 */
 const MERCHANT_KEY = 'meal_merchant';
@@ -29,6 +29,8 @@ Page({
     phoneEditing: false,
     phoneInput: '',
     saving: false,
+    /** 注销进行中：防止连点两次 */
+    deleting: false,
   },
 
   onShow() {
@@ -194,5 +196,75 @@ Page({
       return;
     }
     wx.navigateTo({ url: '/pages/merchant/login' });
+  },
+
+  /* ---------------- 隐私与注销 ---------------- */
+
+  onOpenPrivacy() {
+    wx.navigateTo({
+      url: '/pages/privacy/index',
+      fail: () => wx.showToast({ title: '隐私政策页即将上线', icon: 'none' }),
+    });
+  },
+
+  /**
+   * 注销账号：先把后果摆清楚，再要一次确认。
+   *
+   * 有订单的账号不会被删行（订单是对账与售后凭证），只做匿名化：
+   * 昵称改「已注销」、手机号 / 头像 / openid 清空、令牌当场失效。
+   * 后果文案来自服务端 preview，不在前端写死数字。
+   */
+  onDeleteAccount() {
+    if (this.data.deleting) {
+      return;
+    }
+    request({ url: '/auth/delete-preview' })
+      .then((preview) => this.confirmDelete(preview))
+      .catch((err) => app.toastError(err));
+  },
+
+  confirmDelete(preview) {
+    const hasOrders = (preview.orderCount || 0) > 0;
+    const lines = [
+      hasOrders
+        ? '你有 ' + preview.orderCount + ' 笔订单，会保留 3 年用于交易与售后，其中的联系电话改成掩码。'
+        : '你没有历史订单，账号会被直接删除。',
+      preview.addressCount > 0 ? '名下 ' + preview.addressCount + ' 条收货地址会一并删除。' : '',
+      '昵称、头像、手机号会立即清除，注销后无法恢复。',
+    ].filter(Boolean);
+    wx.showModal({
+      title: '注销账号',
+      content: lines.join('\n'),
+      confirmText: '仍要注销',
+      confirmColor: '#c0392b',
+      success: (first) => {
+        if (!first.confirm) {
+          return;
+        }
+        wx.showModal({
+          title: '最后确认',
+          content: '注销后不能再下单，也找不回这个账号，确定吗？',
+          confirmText: '确定注销',
+          confirmColor: '#c0392b',
+          success: (second) => {
+            if (second.confirm) {
+              this.doDeleteAccount();
+            }
+          },
+        });
+      },
+    });
+  },
+
+  doDeleteAccount() {
+    this.setData({ deleting: true });
+    request({ url: '/auth/delete', method: 'POST' })
+      .then(() => {
+        setToken('');
+        wx.showToast({ title: '已注销', icon: 'success' });
+        setTimeout(() => wx.reLaunch({ url: '/pages/index/index' }), 800);
+      })
+      .catch((err) => app.toastError(err))
+      .then(() => this.setData({ deleting: false }));
   },
 });
