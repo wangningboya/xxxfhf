@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xxxfhf.meal.audit.AuditHelper;
 import com.xxxfhf.meal.common.BizException;
+import com.xxxfhf.meal.common.MaskUtil;
 import com.xxxfhf.meal.dict.DictCodes;
 import com.xxxfhf.meal.dict.DictService;
 import com.xxxfhf.meal.menu.DateParam;
@@ -480,7 +481,8 @@ public class OrderAdminService {
             User user = users.get(order.getUserId());
             rows.add(new AdminOrderRow(orderService.toView(order),
                     user == null ? null : user.getNickName(),
-                    user == null ? null : user.getPhone()));
+                    // 账号手机号只是「这单是谁订的」的辅助信息，订单列表按对外口径给前 3 后 2
+                    user == null ? null : MaskUtil.phoneShort(user.getPhone())));
         }
         return rows;
     }

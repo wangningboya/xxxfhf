@@ -7,6 +7,7 @@ import com.xxxfhf.meal.audit.AuditActions;
 import com.xxxfhf.meal.audit.AuditHelper;
 import com.xxxfhf.meal.audit.AuditService;
 import com.xxxfhf.meal.common.BizException;
+import com.xxxfhf.meal.common.MaskUtil;
 import com.xxxfhf.meal.common.PageResult;
 import com.xxxfhf.meal.common.PhoneValidator;
 import com.xxxfhf.meal.region.Region;
@@ -99,7 +100,9 @@ public class AddressService {
             User user = users.get(address.getUserId());
             rows.add(new AddressRow(address.getId(), address.getUserId(),
                     user == null ? null : user.getNickName(),
-                    user == null ? null : user.getPhone(),
+                    // 账号手机号只做「这个地址是谁的」参考，给掩码；
+                    // 收货电话（address.phone）保留明文：商家要真拨过去，这是配送履约的必需数据
+                    user == null ? null : MaskUtil.phone(user.getPhone()),
                     user == null ? null : user.getAuditStatus(),
                     address.getRegionId(), address.getRegionName(), address.getContactName(),
                     address.getPhone(), address.getDetail(), address.getTag(),

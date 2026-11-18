@@ -80,8 +80,8 @@ Page({
     wx.showModal({
       title: '修改手机号',
       editable: true,
+      // 列表里给的是掩码（138****1234），预填会把星号当成号码存回去，所以留空重填
       placeholderText: '11 位大陆手机号',
-      content: user.phone || '',
       success: (res) => {
         if (!res.confirm) {
           return;
@@ -198,13 +198,25 @@ Page({
         userId: this.data.selectedUser.userId,
         regionId: regions[0].id,
         contactName: '',
-        // 手机号必填（需求 4.8），新增时预填所选用户的手机号，可改
-        phone: (this.data.selectedUser.phone || '').trim(),
+        // 手机号必填（需求 4.8）。列表里的账号手机号是掩码，这里留空，
+        // 再单独取一次明文回填；取不到就让商家自己填，绝不把 138****1234 存进去
+        phone: '',
         detail: '',
         tag: '',
       },
       formRegionIndex: 0,
     });
+    const userId = this.data.selectedUser.userId;
+    request({ url: `/admin/user/${userId}/phone` })
+      .then((phone) => {
+        const form = this.data.form;
+        if (phone && form && form.userId === userId && !form.id) {
+          this.setData({ form: Object.assign({}, form, { phone }) });
+        }
+      })
+      .catch(() => {
+        // 无权限或还没填号：保持留空
+      });
   },
 
   onEditAddress(e) {

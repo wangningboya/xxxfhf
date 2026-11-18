@@ -2,6 +2,7 @@ package com.xxxfhf.meal.auth;
 
 import com.xxxfhf.meal.common.BizException;
 import com.xxxfhf.meal.common.ContentSecurityService;
+import com.xxxfhf.meal.common.MaskUtil;
 import com.xxxfhf.meal.common.NickNameValidator;
 import com.xxxfhf.meal.common.PhoneValidator;
 import com.xxxfhf.meal.audit.AuditActions;
@@ -70,8 +71,10 @@ public class GroupAccessService {
         } else if (inviteCodeService.hasConsumed(user.getId())) {
             via = AccessVia.INVITE;
         }
+        // 手机号一律掩码出网关：登录态与「我的」页都不需要 11 位明文，
+        // 需要全号的地方（本人改号、地址预填）走 /auth/my-phone 单独取
         return new AccessState(via != null, via, user.getAuditStatus(),
-                user.getRejectReason(), user.getPhone());
+                user.getRejectReason(), MaskUtil.phone(user.getPhone()));
     }
 
     /* ---------------- 路径一：群卡片 ---------------- */

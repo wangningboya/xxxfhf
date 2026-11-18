@@ -22,6 +22,8 @@ public final class Perms {
     public static final String USER_VIEW = "user.view";
     /** 物理删除用户（含名下地址）；不可撤销，与「停用」是两回事 */
     public static final String USER_DELETE = "user.delete";
+    /** 查看完整手机号；列表一律掩码，这是唯一的明文出口，每次查看记操作记录 */
+    public static final String USER_PHONE_VIEW = "user.phone.view";
     /** 区域新增、改名、排序、停用 */
     public static final String REGION_MANAGE = "region.manage";
     /** 维护用户收货地址 */
@@ -50,7 +52,7 @@ public final class Perms {
     /** 内置「商家」角色的全部权限。 */
     public static final String[] ALL = {
             DISH_MANAGE, COMBO_MANAGE, MENU_MANAGE,
-            USER_AUDIT, USER_VIEW, USER_DELETE,
+            USER_AUDIT, USER_VIEW, USER_DELETE, USER_PHONE_VIEW,
             REGION_MANAGE, USER_ADDRESS,
             ORDER_ACCEPT, ORDER_VIEW,
             PREP_VIEW, PREP_EXPORT,

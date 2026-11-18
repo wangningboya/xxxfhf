@@ -41,6 +41,8 @@ public final class AuditActions {
     public static final String USER_ENABLE = "user.enable";
     public static final String USER_DELETE = "user.delete";
     public static final String USER_PHONE = "user.phone";
+    /** 查看完整手机号：只读动作，记下来是为了「谁看过谁的号」可追溯 */
+    public static final String USER_PHONE_VIEW = "user.phone.view";
 
     /** 筛选下拉用；顺序即页面展示顺序，按业务域成组 */
     private static final List<Action> ALL = List.of(
@@ -55,7 +57,8 @@ public final class AuditActions {
             new Action(USER_DISABLE, "停用用户", TABLE_USER),
             new Action(USER_ENABLE, "恢复用户", TABLE_USER),
             new Action(USER_DELETE, "删除用户", TABLE_USER),
-            new Action(USER_PHONE, "修改手机号", TABLE_USER)
+            new Action(USER_PHONE, "修改手机号", TABLE_USER),
+            new Action(USER_PHONE_VIEW, "查看完整手机号", TABLE_USER)
     );
 
     private AuditActions() {

@@ -21,6 +21,7 @@ miniprogram/node_modules/
 miniprogram/miniprogram_npm/
 
 # ---------- IDE / 系统 ----------
+.workbuddy/
 .idea/
 .vscode/
 *.iml

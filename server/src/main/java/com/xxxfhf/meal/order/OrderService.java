@@ -8,6 +8,7 @@ import com.xxxfhf.meal.address.AddressService;
 import com.xxxfhf.meal.auth.AccessGuard;
 import com.xxxfhf.meal.audit.AuditHelper;
 import com.xxxfhf.meal.common.BizException;
+import com.xxxfhf.meal.common.MaskUtil;
 import com.xxxfhf.meal.config.ConfigKey;
 import com.xxxfhf.meal.config.ConfigService;
 import com.xxxfhf.meal.dict.DictCodes;
@@ -652,6 +653,21 @@ public class OrderService {
         return value == null ? "" : value.trim();
     }
 
+    /**
+     * 出参里的联系人电话一律前 3 后 2。
+     *
+     * <p>库里的快照保持明文（履约要真拨），但接口响应不返回 11 位连续号：
+     * 抓一次包就能拿到整批用户号码，这才是监管与黑产真正盯的入口。
+     * 商家要真拨号，走 P1-20 的「联系顾客」接口（有权限、有频控、有记录），别把明文塞回列表。
+     */
+    private static AddressSnapshot maskedAddress(AddressSnapshot address) {
+        if (address == null) {
+            return null;
+        }
+        return new AddressSnapshot(address.contactName(), MaskUtil.phoneShort(address.phone()),
+                address.detail(), address.regionName(), address.tag());
+    }
+
     private static String trimToNull(String value) {
         String trimmed = trim(value);
         return trimmed.isEmpty() ? null : trimmed;
@@ -694,7 +710,7 @@ public class OrderService {
                 order.getItems(), order.getGoodsAmount(), order.getSpecAmount(),
                 order.getDeliveryFee(), order.getTotalAmount(),
                 order.getPickupCode(), order.getPickupSlot(),
-                order.getRegionSnapshot(), order.getAddressSnapshot(), order.getRemark(),
+                order.getRegionSnapshot(), maskedAddress(order.getAddressSnapshot()), order.getRemark(),
                 Boolean.TRUE.equals(order.getCancelRequested()), order.getCancelRequest(),
                 order.getRejectReason(), Boolean.TRUE.equals(order.getStockReleased()),
                 order.getCreatedAt(), order.getCancelRequestedAt());

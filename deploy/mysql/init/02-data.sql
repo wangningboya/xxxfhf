@@ -18,7 +18,7 @@ INSERT INTO `role` (`id`, `name`, `permissions`, `builtin`)
 VALUES ('role_merchant', '商家',
         JSON_ARRAY(
                 'dish.manage', 'combo.manage', 'menu.manage',
-                'user.audit', 'user.view', 'user.delete',
+                'user.audit', 'user.view', 'user.delete', 'user.phone.view',
                 'region.manage', 'user.address',
                 'order.accept', 'order.view',
                 'prep.view', 'prep.export',

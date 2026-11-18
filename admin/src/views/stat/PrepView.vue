@@ -63,8 +63,9 @@
         </el-table-column>
         <el-table-column label="收货人" min-width="240">
           <template #default="{ row }">
+            <!-- 备菜只关心「这份给谁」：姓名够分拣，电话在这一页没有用途，不放 -->
             <div v-for="(contact, index) in row.contacts || []" :key="index">
-              {{ contact.contactName }} {{ contact.phone || '未留电话' }}
+              {{ contact.contactName }}
             </div>
             <div v-for="(slot, index) in row.slots || []" :key="'s' + index" class="muted">
               {{ slot.slot }}：{{ slot.qty }} 份

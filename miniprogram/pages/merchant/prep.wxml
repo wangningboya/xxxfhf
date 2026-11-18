@@ -68,15 +68,9 @@
       </view>
 
       <view class="contacts" wx:if="{{item.contacts && item.contacts.length}}">
-        <view
-          class="contact"
-          wx:for="{{item.contacts}}"
-          wx:for-item="c"
-          wx:key="phone"
-          data-phone="{{c.phone}}"
-          bindtap="onCall"
-        >
-          {{c.contactName}} {{c.phone}} · {{c.detail}}
+        <!-- 备菜只关心「这份给谁、送到哪」：电话在这一页没有用途，也不再提供点按拨号 -->
+        <view class="contact" wx:for="{{item.contacts}}" wx:for-item="c" wx:key="index">
+          {{c.contactName}} · {{c.detail}}
         </view>
       </view>
     </view>

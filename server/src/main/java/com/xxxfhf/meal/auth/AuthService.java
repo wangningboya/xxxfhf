@@ -108,6 +108,22 @@ public class AuthService {
     }
 
     /**
+     * 本人手机号明文（仅供本人使用）。
+     *
+     * <p>存在的原因只有一个：改号弹窗和新增地址的预填需要把人自己的号填回输入框。
+     * {@code /auth/me} 里故意只给掩码，否则「登录态响应」就是整包明文，抓一次包全都有了。
+     * 这里只返回当前令牌对应的那一条，不接收 userId 参数，也就没有越权取号的可能。
+     */
+    @Transactional(readOnly = true)
+    public String myPhone(String userId) {
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw BizException.unauthorized("登录已失效，请重新进入小程序");
+        }
+        return user.getPhone();
+    }
+
+    /**
      * 商家账密登录（网页后台）。
      *
      * 只认 user_type = merchant 的账号；群成员没有密码，不可能从这里登进来。

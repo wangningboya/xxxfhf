@@ -232,7 +232,9 @@ public class PrepService {
             if (address == null) {
                 return;
             }
-            contacts.add(new ContactRow(address.contactName(), address.phone(), address.detail()));
+            // 备菜页只留「谁、送到哪」：菜要做给这个人，电话对分拣没有用。
+            // 这一页最快到人最少，一旦把整批号码铺在上面，等于给每个能进后台的人发了一份通讯录
+            contacts.add(new ContactRow(address.contactName(), null, address.detail()));
         }
 
         private RegionRow toRow() {

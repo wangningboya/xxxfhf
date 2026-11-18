@@ -62,11 +62,4 @@ Page({
   onSwitchTab(e) {
     this.setData({ tab: e.currentTarget.dataset.tab });
   },
-
-  onCall(e) {
-    const phone = e.currentTarget.dataset.phone;
-    if (phone) {
-      wx.makePhoneCall({ phoneNumber: phone });
-    }
-  },
 });

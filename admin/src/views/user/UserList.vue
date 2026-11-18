@@ -197,6 +197,7 @@
       </el-form>
       <div class="muted">
         仅用于订单联系，不用于营销；用户可在小程序「我的」页查看和修改。下单时会把手机号快照进订单，改这里不影响历史订单。
+        保存与查看完整号码都会记一条操作记录。
       </div>
       <template #footer>
         <el-button @click="phoneVisible = false">取消</el-button>
@@ -287,8 +288,21 @@ const phoneSaving = ref(false);
 
 function openPhone(row) {
   phoneRow.value = row;
-  phoneValue.value = row.phone || '';
+  // 列表里是掩码（138****1234），回填明文走「查看完整手机号」接口：
+  // 该接口独立权限 user.phone.view，且每次调用写一条操作记录
+  phoneValue.value = '';
   phoneVisible.value = true;
+  http
+    .get(`/admin/user/${row.userId}/phone`)
+    .then((phone) => {
+      // 用户可能在请求返回前换了人，别把 A 的号填进 B 的弹窗
+      if (phoneRow.value === row) {
+        phoneValue.value = phone || '';
+      }
+    })
+    .catch(() => {
+      // 没权限或还没填号：留空，直接输新号也能保存
+    });
 }
 
 function onSavePhone() {

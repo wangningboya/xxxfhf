@@ -9,6 +9,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -63,12 +64,24 @@ public class UserAdminController {
      * 物理删除用户（含名下地址）。不可撤销。
      *
      * 有任意订单会返回 409 拒绝；商家账号即使直接调也删不掉（服务端只接受 customer）。
-     * 返回值为连带删除的地址条数。
+     * 返回值为连带删除的条数。
      */
     @PostMapping("/delete")
     @RequirePerm(Perms.USER_DELETE)
     public ApiResponse<Integer> delete(@Valid @RequestBody DeleteRequest request) {
         return ApiResponse.ok(userAuditService.delete(UserContext.userId(), request.userId()));
+    }
+
+    /**
+     * 查看某个用户的完整手机号。
+     *
+     * <p>列表一律给掩码，这里是唯一的明文出口：一次一个用户、写一条操作记录。
+     * 权限单独拆成 user.phone.view —— 能审核用户不等于能拿到所有人的号码。
+     */
+    @GetMapping("/{userId}/phone")
+    @RequirePerm(Perms.USER_PHONE_VIEW)
+    public ApiResponse<String> phone(@PathVariable String userId) {
+        return ApiResponse.ok(userAuditService.fullPhone(UserContext.userId(), userId));
     }
 
     public record AuditRequest(

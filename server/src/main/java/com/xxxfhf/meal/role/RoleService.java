@@ -42,6 +42,7 @@ public class RoleService {
             new PermissionItem(Perms.MENU_MANAGE, "每日菜单", "勾选盒饭、设置每日份数", false),
             new PermissionItem(Perms.USER_AUDIT, "用户审核", "审核用户准入、禁用用户", false),
             new PermissionItem(Perms.USER_VIEW, "用户查看", "只读查看用户列表与审核状态，不能通过 / 驳回", true),
+            new PermissionItem(Perms.USER_PHONE_VIEW, "查看完整手机号", "把某个用户的掩码还原成完整号码，每次查看记操作记录", false),
             new PermissionItem(Perms.REGION_MANAGE, "区域管理", "区域新增、改名、排序、停用", false),
             new PermissionItem(Perms.USER_ADDRESS, "地址维护", "维护用户收货地址（含区域归属）", false),
             new PermissionItem(Perms.ORDER_ACCEPT, "订单处理", "接单、拒单、推进订单状态", false),

@@ -4,7 +4,8 @@
       <view class="name">{{row.userNickName || '群成员'}}</view>
       <view class="status">{{order.statusLabel}}</view>
     </view>
-    <view class="meta" wx:if="{{row.userPhone}}" bindtap="onCall">📞 {{row.userPhone}}</view>
+    <!-- 接口已脱敏（前 3 后 2）：点按拨号在这里没有意义，别让用户拨到一串星号 -->
+    <view class="meta" wx:if="{{row.userPhone}}">📞 {{row.userPhone}}</view>
     <view class="meta">{{order.orderNo}}</view>
   </view>
 

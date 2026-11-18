@@ -199,10 +199,4 @@ Page({
       .catch((err) => app.toastError(err))
       .then(() => this.setData({ busy: false }));
   },
-
-  onCall() {
-    if (this.data.row && this.data.row.userPhone) {
-      wx.makePhoneCall({ phoneNumber: this.data.row.userPhone });
-    }
-  },
 });

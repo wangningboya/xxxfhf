@@ -102,6 +102,17 @@ public class AuthController {
         return ApiResponse.ok(authService.me(UserContext.userId()));
     }
 
+    /**
+     * 本人手机号明文，只给改号弹窗与地址预填回填用。
+     *
+     * <p>不在 /auth/me 里返回明文是刻意的：那是每次启动都会调的接口，
+     * 把 11 位号塞进去等于让每个页面都有机会拿到全号。
+     */
+    @GetMapping("/my-phone")
+    public ApiResponse<String> myPhone() {
+        return ApiResponse.ok(authService.myPhone(UserContext.userId()));
+    }
+
     /** 网页后台刷新页面后恢复登录态：重新聚合权限，权限被改掉即时生效。 */
     @GetMapping("/admin/me")
     public ApiResponse<AuthService.AdminMeResult> adminMe() {

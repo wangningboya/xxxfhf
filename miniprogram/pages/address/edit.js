@@ -20,10 +20,20 @@ Page({
 
   onLoad(options) {
     const id = options.id || '';
-    // 新增时用账号手机号预填，可改；编辑一律用地址原值（需求 4.8 预填规则）
-    const me = app.globalData.me;
-    const prefillPhone = !id && me && me.phone ? me.phone : '';
-    this.setData({ id, isEdit: !!id, phone: prefillPhone });
+    this.setData({ id, isEdit: !!id });
+    if (!id) {
+      // 新增时用账号手机号预填，可改（需求 4.8）。
+      // me.phone 已是掩码，回填明文必须单独取，否则用户「什么都没改」一保存就成了非法号码
+      request({ url: '/auth/my-phone' })
+        .then((phone) => {
+          if (phone && !this.data.isEdit) {
+            this.setData({ phone });
+          }
+        })
+        .catch(() => {
+          // 取不到就不预填，用户手填即可
+        });
+    }
     this.loadRegions(id);
   },
 

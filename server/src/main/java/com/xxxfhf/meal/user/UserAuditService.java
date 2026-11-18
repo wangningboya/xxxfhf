@@ -8,6 +8,7 @@ import com.xxxfhf.meal.address.AddressMapper;
 import com.xxxfhf.meal.audit.AuditActions;
 import com.xxxfhf.meal.audit.AuditService;
 import com.xxxfhf.meal.common.BizException;
+import com.xxxfhf.meal.common.MaskUtil;
 import com.xxxfhf.meal.common.PhoneValidator;
 import com.xxxfhf.meal.invite.InviteCode;
 import com.xxxfhf.meal.invite.InviteCodeMapper;
@@ -181,12 +182,41 @@ public class UserAuditService {
         auditService.record(AuditActions.TABLE_USER, user.getId(), action, summary.toString());
     }
 
-    /** 操作记录里指代一个用户：昵称 + 手机号，够认出是谁 */
+    /** 操作记录里指代一个用户：昵称 + 掩码手机号。开头 3 位 + 尾 4 位够认出是谁，拼不出完整号 */
     private static String display(User user) {
-        String name = user.getNickName() == null || user.getNickName().isBlank()
-                ? user.getId() : user.getNickName();
+        String name = displayName(user);
         return user.getPhone() == null || user.getPhone().isBlank()
-                ? name : name + " " + user.getPhone();
+                ? name : name + " " + MaskUtil.phone(user.getPhone());
+    }
+
+    /** 只要昵称；没填昵称就退回 userId。删除类记录用这个，号码不落库 */
+    private static String displayName(User user) {
+        return user.getNickName() == null || user.getNickName().isBlank()
+                ? user.getId() : user.getNickName();
+    }
+
+    /** userId 尾 6 位：人读的日志里够指到某一行，又不至于把整串 UUID 铺满 */
+    private static String idTail(String userId) {
+        if (userId == null || userId.length() <= 6) {
+            return userId == null ? "" : userId;
+        }
+        return userId.substring(userId.length() - 6);
+    }
+
+    /**
+     * 查看完整手机号（带权限 + 留痕）。
+     *
+     * <p>列表里只给掩码，真要拨号 / 核对才走这里：一次一个用户、一次一条记录。
+     * 这是「能看」与「随便能拉全表」的分界线——后者才是真正会出事的那种泄露。
+     */
+    public String fullPhone(String operatorId, String userId) {
+        User user = requireCustomer(userId);
+        auditService.record(AuditActions.TABLE_USER, userId, AuditActions.USER_PHONE_VIEW,
+                "查看完整手机号：" + displayName(user) + "｜操作人：" + operatorId);
+        if (user.getPhone() == null || user.getPhone().isBlank()) {
+            throw BizException.notFound("该用户还没填手机号");
+        }
+        return user.getPhone();
     }
 
     /** 商家代填 / 修改用户手机号（用户没填或填错时用）。 */
@@ -198,9 +228,11 @@ public class UserAuditService {
         user.setPhone(normalized);
         userMapper.updateById(user);
         log.info("商家代填手机号 userId={} 操作人={}", userId, operatorId);
+        // 摘要里只留掩码：audit_log 是长期留存的，写明文等于把脱敏又绕回去了
         auditService.record(AuditActions.TABLE_USER, userId, AuditActions.USER_PHONE,
-                "商家修改手机号：" + display(user) + "｜"
-                        + (before == null || before.isBlank() ? "原为空" : before) + " → " + normalized);
+                "商家修改手机号：" + displayName(user) + "｜原号："
+                        + (before == null || before.isBlank() ? "空" : MaskUtil.phoneShort(before))
+                        + " → " + MaskUtil.phoneShort(normalized));
         Set<String> inviteUsers = inviteUserIds(List.of(user));
         return toRow(user, inviteUsers.contains(user.getId()));
     }
@@ -236,15 +268,18 @@ public class UserAuditService {
                 .eq(Address::getUserId, userId));
         userMapper.deleteById(userId);
 
-        // 没有操作日志表，删除不可恢复，这条日志是唯一的留痕
-        log.info("删除用户 userId={} 昵称={} 手机号={} 状态={} 连带删地址={} 操作人={}",
-                userId, user.getNickName(), user.getPhone(), user.getAuditStatus(), addresses, operatorId);
+        // 没有操作日志表，删除不可恢复，这条日志是唯一的留痕。
+        // 不留手机号：日志会进文件与采集系统，删除动作本身没有「再联系这个人」的诉求
+        log.info("删除用户 userId={} 昵称={} 状态={} 连带删地址={} 操作人={}",
+                userId, user.getNickName(), user.getAuditStatus(), addresses, operatorId);
 
-        // 用户行已经删了，操作记录里必须留下昵称与手机号快照 —— 否则事后只剩一串 UUID，
-        // 谁也说不清当时删的是谁
+        // 用户行已经删了，操作记录里必须留下昵称快照 —— 否则事后只剩一串 UUID，
+        // 谁也说不清当时删的是谁。手机号不留：删除后没有任何合法用途，
+        // 而 audit_log 是长期留存的，留着就等于「删了却还在」
         auditService.record(AuditActions.TABLE_USER, userId, AuditActions.USER_DELETE,
-                "删除用户：" + display(user)
-                        + "（" + label(user.getAuditStatus()) + "）｜连带删地址 " + addresses + " 条");
+                "删除用户：" + displayName(user)
+                        + "（" + label(user.getAuditStatus()) + "）｜账号 …" + idTail(userId)
+                        + "｜连带删地址 " + addresses + " 条");
         return addresses;
     }
 
@@ -298,7 +333,8 @@ public class UserAuditService {
         } else if (viaInvite) {
             via = "invite";
         }
-        return new UserRow(user.getId(), user.getNickName(), user.getAvatarUrl(), user.getPhone(),
+        return new UserRow(user.getId(), user.getNickName(), user.getAvatarUrl(),
+                MaskUtil.phone(user.getPhone()),
                 user.getAuditStatus(), user.getRejectReason(), via,
                 user.getCreatedAt(), user.getApprovedAt(), hasNickName(user));
     }

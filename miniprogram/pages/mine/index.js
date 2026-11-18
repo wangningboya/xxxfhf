@@ -117,7 +117,18 @@ Page({
   /* ---------------- 手机号 ---------------- */
 
   onEditPhone() {
-    this.setData({ phoneEditing: true, phoneInput: (this.data.me && this.data.me.phone) || '' });
+    // me.phone 是掩码（138****1234），直接回填会把掩码当成号码再存一遍。
+    // 回填明文走 /auth/my-phone：只返回本人的那一条，不接收 userId
+    this.setData({ phoneEditing: true, phoneInput: '' });
+    request({ url: '/auth/my-phone' })
+      .then((phone) => {
+        if (this.data.phoneEditing) {
+          this.setData({ phoneInput: phone || '' });
+        }
+      })
+      .catch(() => {
+        // 取不到就留空让用户重填，不要因此挡住改号
+      });
   },
 
   onPhoneInput(e) {
