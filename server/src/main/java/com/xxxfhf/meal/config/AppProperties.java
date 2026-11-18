@@ -108,6 +108,8 @@ public class AppProperties {
         private String tokenUrl = "https://api.weixin.qq.com/cgi-bin/token";
         /** 发送订阅消息的地址。 */
         private String subscribeSendUrl = "https://api.weixin.qq.com/cgi-bin/message/subscribe/send";
+        /** 内容安全检测（msg_sec_check）的地址。 */
+        private String msgSecCheckUrl = "https://api.weixin.qq.com/wxa/msg_sec_check";
         private int timeoutSeconds = 5;
 
         public String getAppId() {
@@ -156,6 +158,14 @@ public class AppProperties {
 
         public void setSubscribeSendUrl(String subscribeSendUrl) {
             this.subscribeSendUrl = subscribeSendUrl;
+        }
+
+        public String getMsgSecCheckUrl() {
+            return msgSecCheckUrl;
+        }
+
+        public void setMsgSecCheckUrl(String msgSecCheckUrl) {
+            this.msgSecCheckUrl = msgSecCheckUrl;
         }
     }
 

@@ -40,7 +40,11 @@
       style="width: 100%"
       @selection-change="(v) => (selected = v)"
     >
-      <el-table-column type="selection" width="44" :selectable="(row) => row.auditStatus === 'pending'" />
+      <el-table-column
+        type="selection"
+        width="44"
+        :selectable="(row) => row.auditStatus === 'pending' && row.canAudit"
+      />
       <el-table-column label="用户" min-width="160">
         <template #default="{ row }">
           <div class="user">
@@ -88,15 +92,19 @@
       <el-table-column label="操作" width="230" fixed="right">
         <template #default="{ row }">
           <template v-if="auth.has('user.audit')">
-            <el-button v-if="row.auditStatus === 'pending'" link type="primary" @click="onAudit(row, 'approve')">
-              通过
-            </el-button>
-            <el-button v-if="row.auditStatus === 'pending'" link type="danger" @click="onAudit(row, 'reject')">
-              驳回
-            </el-button>
-            <el-button v-if="row.auditStatus === 'rejected'" link type="primary" @click="onAudit(row, 'approve')">
-              重新通过
-            </el-button>
+            <!-- 没填昵称的人列表照常出现，但不给通过/驳回：商家认不出是谁，点了也只能靠猜 -->
+            <span v-if="needNickName(row)" class="muted">待对方填昵称</span>
+            <template v-else>
+              <el-button v-if="row.auditStatus === 'pending'" link type="primary" @click="onAudit(row, 'approve')">
+                通过
+              </el-button>
+              <el-button v-if="row.auditStatus === 'pending'" link type="danger" @click="onAudit(row, 'reject')">
+                驳回
+              </el-button>
+              <el-button v-if="row.auditStatus === 'rejected'" link type="primary" @click="onAudit(row, 'approve')">
+                重新通过
+              </el-button>
+            </template>
             <el-button
               v-if="row.auditStatus === 'approved'"
               link
@@ -330,7 +338,17 @@ function onDelete(row) {
     .catch(() => {});
 }
 
+/** 没填昵称的人不能通过/驳回：审核列表里认不出是谁，先让对方补昵称 */
+function needNickName(row) {
+  return (row.auditStatus === 'pending' || row.auditStatus === 'rejected') && !row.canAudit;
+}
+
 function onAudit(row, action) {
+  // 兜底：后端也会拦，这里先给一句人话，省得用户看到红字报错
+  if ((action === 'approve' || action === 'reject') && !row.canAudit) {
+    ElMessage.warning('对方还没填昵称，暂时不能审核；请让对方先在「我的」页填写昵称');
+    return;
+  }
   if (action === 'reject') {
     ElMessageBox.prompt('驳回原因会展示给用户，请写清楚', '驳回申请', {
       inputPlaceholder: '如：不是本群同事，请说明身份',
@@ -365,7 +383,7 @@ function onAudit(row, action) {
 
 /** 批量通过：逐条发请求，单条失败不阻塞其余，最后汇总给一个结果 */
 async function onBatchApprove() {
-  const users = selected.value.filter((row) => row.auditStatus === 'pending');
+  const users = selected.value.filter((row) => row.auditStatus === 'pending' && row.canAudit);
   if (users.length === 0) {
     return;
   }

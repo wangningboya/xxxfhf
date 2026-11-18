@@ -76,12 +76,18 @@
 
     <view class="user-reason" wx:if="{{item.rejectReason}}">驳回原因：{{item.rejectReason}}</view>
 
+    <!-- 没填昵称：人照样在列表里，但通过/驳回置灰，免得商家凭 id 瞎点 -->
+    <view class="user-hint" wx:if="{{(item.auditStatus === 'pending' || item.auditStatus === 'rejected') && !item.canAudit}}">
+      对方还没填昵称，填完才能审核
+    </view>
+
     <view class="user-actions">
       <view
-        class="btn btn-ghost small"
+        class="btn btn-ghost small {{item.auditStatus === 'rejected' && !item.canAudit ? 'btn-disabled' : ''}}"
         wx:if="{{item.auditStatus === 'rejected' || item.auditStatus === 'disabled'}}"
         data-id="{{item.userId}}"
-        data-action="enable"
+        data-action="{{item.auditStatus === 'rejected' ? 'approve' : 'enable'}}"
+        data-can-audit="{{item.canAudit}}"
         bindtap="onAudit"
       >
         恢复
@@ -96,19 +102,21 @@
         停用
       </view>
       <view
-        class="btn btn-ghost small"
+        class="btn btn-ghost small {{item.canAudit ? '' : 'btn-disabled'}}"
         wx:if="{{item.auditStatus === 'pending'}}"
         data-id="{{item.userId}}"
         data-action="reject"
+        data-can-audit="{{item.canAudit}}"
         bindtap="onAudit"
       >
         驳回
       </view>
       <view
-        class="btn small"
+        class="btn small {{item.canAudit ? '' : 'btn-disabled'}}"
         wx:if="{{item.auditStatus === 'pending'}}"
         data-id="{{item.userId}}"
         data-action="approve"
+        data-can-audit="{{item.canAudit}}"
         bindtap="onAudit"
       >
         通过

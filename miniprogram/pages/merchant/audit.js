@@ -88,6 +88,8 @@ Page({
           rejectReason: row.rejectReason || '',
           accessVia: row.accessVia,
           avatarUrl: row.avatarUrl,
+          // 没填昵称的人列表照常显示，但通过/驳回置灰：认不出是谁，点了也只能靠猜
+          canAudit: !!row.canAudit,
         }));
         this.setData({
           list: page === 1 ? rows : this.data.list.concat(rows),
@@ -148,8 +150,12 @@ Page({
   },
 
   onAudit(e) {
-    const userId = e.currentTarget.dataset.id;
-    const action = e.currentTarget.dataset.action;
+    const { id: userId, action, canAudit } = e.currentTarget.dataset;
+    // 置灰的按钮也走这里：给一句人话，别让商家以为是网络问题
+    if ((action === 'approve' || action === 'reject') && !canAudit) {
+      wx.showToast({ title: '对方还没填昵称，暂时不能审核', icon: 'none' });
+      return;
+    }
     if (action === 'reject') {
       wx.showModal({
         title: '驳回申请',

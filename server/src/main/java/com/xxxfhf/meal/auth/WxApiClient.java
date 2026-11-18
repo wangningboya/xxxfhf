@@ -216,6 +216,72 @@ public class WxApiClient {
         }
     }
 
+    /* ==================== 内容安全 ==================== */
+
+    /** 微信「内容含违规信息」错误码。 */
+    public static final int CONTENT_RISKY = 87014;
+
+    /**
+     * 内容安全检测（msg_sec_check 2.0）。
+     *
+     * <p>只回 errcode：0 = 通过，{@link #CONTENT_RISKY} = 确认含违规内容，其余算接口异常。
+     * <b>不抛异常</b>：内容安全是附加风控，微信接口抖动不能连累改昵称这类主流程，
+     * 调用方按「异常放行」处理，把 errcode 记进日志即可。
+     *
+     * @param content 待检测文本；空串直接通过
+     * @param openid  用户 openid，可空（为空时不带，微信按调用方身份判定）
+     * @return 微信 errcode；本地失败统一返回 -1
+     */
+    public int msgSecCheck(String content, String openid) {
+        if (content == null || content.isBlank()) {
+            return 0;
+        }
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("content", content);
+        body.put("version", 2);
+        body.put("scene", 1);
+        if (openid != null && !openid.isBlank()) {
+            body.put("openid", openid);
+        }
+        String json;
+        try {
+            json = objectMapper.writeValueAsString(body);
+        } catch (Exception ex) {
+            log.warn("内容安全请求体序列化失败", ex);
+            return -1;
+        }
+        try {
+            String url = wx.getMsgSecCheckUrl() + "?access_token=" + encode(accessToken());
+            HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+                    .timeout(Duration.ofSeconds(wx.getTimeoutSeconds()))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(json, StandardCharsets.UTF_8))
+                    .build();
+            HttpResponse<String> response = httpClient.send(request,
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            if (response.statusCode() != 200) {
+                log.warn("内容安全检测返回 HTTP {}", response.statusCode());
+                return -1;
+            }
+            JsonNode node = objectMapper.readTree(response.body());
+            int errcode = node.path("errcode").asInt(-1);
+            if (errcode == CONTENT_RISKY) {
+                // 不打印文本本身：昵称、备注都可能含个人信息
+                log.info("内容安全检测命中违规内容");
+            } else if (errcode != 0) {
+                log.warn("内容安全检测异常 errcode={} errmsg={}",
+                        errcode, node.path("errmsg").asText(""));
+            }
+            return errcode;
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            return -1;
+        } catch (Exception ex) {
+            log.warn("内容安全检测请求异常", ex);
+            return -1;
+        }
+    }
+
     /**
      * 微信错误码 → 人话。写进订单时间轴给商家看，不能直接丢 errmsg 原文
      * （微信的 errmsg 常是英文或「invalid openid」这类开发向文案）。

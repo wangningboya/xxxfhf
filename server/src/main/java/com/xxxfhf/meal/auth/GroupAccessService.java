@@ -1,6 +1,7 @@
 package com.xxxfhf.meal.auth;
 
 import com.xxxfhf.meal.common.BizException;
+import com.xxxfhf.meal.common.ContentSecurityService;
 import com.xxxfhf.meal.common.NickNameValidator;
 import com.xxxfhf.meal.common.PhoneValidator;
 import com.xxxfhf.meal.audit.AuditActions;
@@ -41,16 +42,18 @@ public class GroupAccessService {
     private final ConfigService configService;
     private final InviteCodeService inviteCodeService;
     private final AuditService auditService;
+    private final ContentSecurityService contentSecurity;
 
     public GroupAccessService(UserMapper userMapper, SessionKeyStore sessionKeyStore, WxCrypto wxCrypto,
                               ConfigService configService, InviteCodeService inviteCodeService,
-                              AuditService auditService) {
+                              AuditService auditService, ContentSecurityService contentSecurity) {
         this.userMapper = userMapper;
         this.sessionKeyStore = sessionKeyStore;
         this.wxCrypto = wxCrypto;
         this.configService = configService;
         this.inviteCodeService = inviteCodeService;
         this.auditService = auditService;
+        this.contentSecurity = contentSecurity;
     }
 
     /* ---------------- 准入判定 ---------------- */
@@ -183,6 +186,10 @@ public class GroupAccessService {
     public String updateNickName(String userId, String rawNickName) {
         User user = requireUser(userId);
         String nickName = NickNameValidator.require(rawNickName);
+        // 内容安全：昵称会出现在商家审核列表里，是公开可见的文本，先过一遍微信检测
+        if (!contentSecurity.pass(user.getOpenid(), nickName)) {
+            throw BizException.param("昵称包含违规内容，请修改");
+        }
         user.setNickName(nickName);
         userMapper.updateById(user);
         log.info("用户昵称已更新 userId={}", userId);

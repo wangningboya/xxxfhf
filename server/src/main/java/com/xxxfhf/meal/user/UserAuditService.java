@@ -117,12 +117,14 @@ public class UserAuditService {
         String to = switch (action == null ? "" : action) {
             case AuditAction.APPROVE -> {
                 requireStatus(from, "审核通过", AuditStatus.PENDING, AuditStatus.REJECTED);
+                requireNickName(user);
                 user.setApprovedAt(LocalDateTime.now());
                 user.setRejectReason(null);
                 yield AuditStatus.APPROVED;
             }
             case AuditAction.REJECT -> {
                 requireStatus(from, "驳回", AuditStatus.PENDING, AuditStatus.REJECTED);
+                requireNickName(user);
                 String trimmed = reason == null ? "" : reason.trim();
                 if (trimmed.isEmpty()) {
                     throw BizException.param("驳回必须填写原因，用户端会展示该原因");
@@ -266,6 +268,19 @@ public class UserAuditService {
         throw BizException.conflict("当前状态（" + label(current) + "）不能执行「" + actionName + "」，请刷新后重试");
     }
 
+    /**
+     * 没填昵称就不能审核（通过 / 驳回都拦）。
+     *
+     * 审核列表里没昵称的用户只显示「未填昵称」，商家认不出是谁，通过和驳回都只能靠猜。
+     * 所以把「填昵称」变成审核的前置条件：列表照常展示（否则用户不知道卡在哪），
+     * 只是按钮不可用。停用 / 恢复不拦——那是管理动作，不是「认人」。
+     */
+    private static void requireNickName(User user) {
+        if (user.getNickName() == null || user.getNickName().isBlank()) {
+            throw BizException.conflict("该用户还没填昵称，暂时无法审核；请让对方先在「我的」页填写昵称");
+        }
+    }
+
     private static String label(String status) {
         return switch (status == null ? "" : status) {
             case AuditStatus.PENDING -> "待审核";
@@ -285,16 +300,21 @@ public class UserAuditService {
         }
         return new UserRow(user.getId(), user.getNickName(), user.getAvatarUrl(), user.getPhone(),
                 user.getAuditStatus(), user.getRejectReason(), via,
-                user.getCreatedAt(), user.getApprovedAt());
+                user.getCreatedAt(), user.getApprovedAt(), hasNickName(user));
+    }
+
+    private static boolean hasNickName(User user) {
+        return user.getNickName() != null && !user.getNickName().isBlank();
     }
 
     /**
      * 列表行。不含 openid、passwordHash、roleIds：后台审核用不到，也不该出现在接口响应里。
      *
      * @param accessVia group / invite / null（未准入，正常不会出现在审核列表，除非商家手动建的号）
+     * @param canAudit  是否能审核：没填昵称的用户列表照常展示，但不能通过 / 驳回
      */
     public record UserRow(String userId, String nickName, String avatarUrl, String phone,
                           String auditStatus, String rejectReason, String accessVia,
-                          LocalDateTime createdAt, LocalDateTime approvedAt) {
+                          LocalDateTime createdAt, LocalDateTime approvedAt, boolean canAudit) {
     }
 }

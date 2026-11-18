@@ -65,9 +65,38 @@ class UserAuditServiceTest {
         UserAuditService.UserRow row = service.audit(OPERATOR, TARGET, AuditAction.APPROVE, null);
 
         assertThat(row.auditStatus()).isEqualTo(AuditStatus.APPROVED);
+        assertThat(row.canAudit()).as("通过之后按钮就不再显示了").isTrue();
         assertThat(user.getApprovedAt()).as("通过时间必须落库").isNotNull();
         assertThat(user.getRejectReason()).as("通过后不应残留驳回原因").isNull();
         verify(userMapper).updateById(user);
+    }
+
+    @Test
+    @DisplayName("没填昵称不能通过：商家认不出是谁")
+    void approveRequiresNickName() {
+        User user = customer(AuditStatus.PENDING);
+        user.setNickName("  ");
+        when(userMapper.selectById(TARGET)).thenReturn(user);
+
+        assertThatThrownBy(() -> service.audit(OPERATOR, TARGET, AuditAction.APPROVE, null))
+                .isInstanceOf(BizException.class)
+                .hasMessageContaining("还没填昵称");
+
+        verify(userMapper, never()).updateById(any(User.class));
+    }
+
+    @Test
+    @DisplayName("没填昵称也不能驳回：先让对方把昵称补上")
+    void rejectRequiresNickName() {
+        User user = customer(AuditStatus.PENDING);
+        user.setNickName(null);
+        when(userMapper.selectById(TARGET)).thenReturn(user);
+
+        assertThatThrownBy(() -> service.audit(OPERATOR, TARGET, AuditAction.REJECT, "不认识"))
+                .isInstanceOf(BizException.class)
+                .hasMessageContaining("还没填昵称");
+
+        verify(userMapper, never()).updateById(any(User.class));
     }
 
     @Test
@@ -234,6 +263,8 @@ class UserAuditServiceTest {
         user.setId(TARGET);
         user.setUserType(UserType.CUSTOMER);
         user.setAuditStatus(auditStatus);
+        // 审核前置要求先填昵称；测「没昵称」的用例自己清空
+        user.setNickName("张三");
         return user;
     }
 }

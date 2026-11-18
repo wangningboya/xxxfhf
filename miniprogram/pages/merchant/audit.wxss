@@ -159,6 +159,17 @@
   color: #c0392b;
 }
 
+.user-hint {
+  margin-top: 14rpx;
+  font-size: 24rpx;
+  color: #9a9a9a;
+}
+
+/* 置灰按钮仍绑着 onAudit：点了弹一句「对方还没填昵称」，比没反应好 */
+.btn-disabled {
+  opacity: 0.45;
+}
+
 .user-actions {
   margin-top: 20rpx;
   display: flex;

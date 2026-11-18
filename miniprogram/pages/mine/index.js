@@ -47,8 +47,10 @@ Page({
     let title = '';
     let desc = '';
     if (status === 'pending') {
+      // 商家看不到昵称就没法认人，也就不能审核：先把「卡在哪」说清楚
+      const hasNick = !!(me && me.nickName && me.nickName.trim());
       title = '审核中';
-      desc = '商家通过后就能下单了';
+      desc = hasNick ? '商家通过后就能下单了' : '请先点上方昵称填写，商家才能审核';
     } else if (status === 'approved') {
       title = '已通过审核';
       desc = '可以正常下单';
