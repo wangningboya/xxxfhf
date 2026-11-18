@@ -3,6 +3,9 @@ package com.xxxfhf.meal.order;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.xxxfhf.meal.audit.AuditActions;
+import com.xxxfhf.meal.audit.AuditHelper;
+import com.xxxfhf.meal.audit.AuditService;
 import com.xxxfhf.meal.common.BizException;
 import com.xxxfhf.meal.menu.DateParam;
 import com.xxxfhf.meal.menu.ServeDateClock;
@@ -40,15 +43,17 @@ public class OrderAdminService {
     private final UserMapper userMapper;
     private final ServeDateClock clock;
     private final NotifyService notifyService;
+    private final AuditService auditService;
 
     public OrderAdminService(OrderMapper orderMapper, OrderService orderService,
                              UserMapper userMapper, ServeDateClock clock,
-                             NotifyService notifyService) {
+                             NotifyService notifyService, AuditService auditService) {
         this.orderMapper = orderMapper;
         this.orderService = orderService;
         this.userMapper = userMapper;
         this.clock = clock;
         this.notifyService = notifyService;
+        this.auditService = auditService;
     }
 
     /* ==================== 查询 ==================== */
@@ -85,7 +90,7 @@ public class OrderAdminService {
                 .eq(Boolean.TRUE.equals(cancelRequested), Order::getCancelRequested, true)
                 .in(!matchedUserIds.isEmpty(), Order::getUserId, matchedUserIds)
                 .last("ORDER BY stock_released DESC, "
-                        + "FIELD(status, 'pending_accept', 'accepted', 'making', 'ready', "
+                        + "FIELD(status, 'pending_accept', 'accepted', 'ready', "
                         + "'completed', 'cancelled', 'rejected'), created_at ASC"));
 
         Page<AdminOrderRow> mapped = new Page<>(result.getCurrent(), result.getSize(), result.getTotal());
@@ -143,6 +148,8 @@ public class OrderAdminService {
             if (Boolean.TRUE.equals(order.getStockReleased())) {
                 warnings.add(order.getOrderNo() + "：份数曾因超时未付款被释放，请确认该盒饭是否还有余量");
             }
+            auditService.record(AuditActions.TABLE_ORDER, order.getId(), AuditActions.ORDER_ACCEPT,
+                    "接单：" + order.getOrderNo());
             // 通知用户「已接单」。用更新前的对象即可：模板只用到订单号、明细、供餐日这些不变字段
             notifyService.accepted(order);
         }
@@ -170,13 +177,20 @@ public class OrderAdminService {
         orderService.releaseStock(order);
         orderService.moveToRefundingIfPaid(orderId);
         log.info("商家拒单 orderNo={} 操作人={} 原因={}", order.getOrderNo(), operatorId, trimmed);
+        auditService.record(AuditActions.TABLE_ORDER, orderId, AuditActions.ORDER_REJECT,
+                "拒单：" + order.getOrderNo() + "｜原因：" + trimmed);
         Order rejected = orderService.require(orderId);
         // 拒单必须通知到人：用户可能已经转了钱，只靠他自己刷页面发现太晚
         notifyService.rejected(rejected);
         return orderService.toView(rejected);
     }
 
-    /** 推进状态：已接单 → 制作中 → 待取餐 → 已完成。 */
+    /**
+     * 推进状态。没有「制作中」：已接单 → 出餐（ready）→ 已完成。
+     *
+     * 取送方式不改变路径，只改变 ready 那一格的叫法与通知：自取叫「待取餐」要发取餐码，
+     * 配送叫「配送中」，不发取餐通知。
+     */
     @Transactional
     public OrderService.OrderView advance(String operatorId, String orderId, String target) {
         if (target == null || target.isBlank()) {
@@ -184,8 +198,12 @@ public class OrderAdminService {
         }
         Order order = orderService.require(orderId);
         if (!OrderStatus.canAdvance(order.getStatus(), target)) {
-            throw BizException.conflict("订单当前状态（" + OrderStatus.label(order.getStatus())
-                    + "）不能推进到「" + OrderStatus.label(target) + "」");
+            String next = OrderStatus.nextOf(order.getStatus());
+            throw BizException.conflict("订单当前状态（"
+                    + OrderStatus.label(order.getStatus(), order.getDeliveryType())
+                    + "）不能推进到「" + OrderStatus.label(target, order.getDeliveryType()) + "」"
+                    + (next == null ? "" : "，下一步只能是「"
+                    + OrderStatus.label(next, order.getDeliveryType()) + "」"));
         }
         int affected = orderMapper.update(null, Wrappers.<Order>lambdaUpdate()
                 .set(Order::getStatus, target)
@@ -197,8 +215,14 @@ public class OrderAdminService {
         log.info("订单推进 orderNo={} {} -> {} 操作人={}",
                 order.getOrderNo(), order.getStatus(), target, operatorId);
         Order advanced = orderService.require(orderId);
-        if (OrderStatus.READY.equals(target)) {
-            // 只有「可取餐」这一步值得推一条，制作中之类的中间态不打扰用户
+        auditService.record(AuditActions.TABLE_ORDER, orderId, AuditActions.ORDER_ADVANCE,
+                "订单状态：" + order.getOrderNo() + " "
+                        + OrderStatus.label(order.getStatus(), advanced.getDeliveryType()) + " → "
+                        + OrderStatus.label(target, advanced.getDeliveryType()));
+        if (OrderStatus.READY.equals(target)
+                && !OrderStatus.TYPE_DELIVERY.equals(advanced.getDeliveryType())) {
+            // 只有自取单发「可以取餐了」+ 取餐码。配送单进的是同一个 ready，
+            // 但用户在等送货上门，硬套取餐模板等于告诉他「自己去拿」，是错的提醒 —— 静默不发。
             notifyService.ready(advanced);
         }
         return orderService.toView(advanced);
@@ -207,8 +231,8 @@ public class OrderAdminService {
     /**
      * 取餐核销：输 4 位码把订单推到已完成。
      *
-     * 只认「已接单 / 制作中 / 待取餐」三个状态：待接单还没做，直接核销等于凭空出餐；
-     * 已完成的不再重复核销。
+     * 只认「已接单 / 出餐」：待接单还没做，直接核销等于凭空出餐；已完成的不再重复核销。
+     * 配送单也走这里 —— 码是餐盒上的核对凭据，用户看不到不代表商家不能用。
      */
     @Transactional
     public OrderService.OrderView pickupByCode(String operatorId, String serveDateRaw, String code) {
@@ -229,21 +253,21 @@ public class OrderAdminService {
             throw BizException.notFound("没有找到取餐码 " + trimmed + " 对应的订单，请核对供餐日");
         }
         Order order = hits.get(0);
-        if (!OrderStatus.ACCEPTED.equals(order.getStatus())
-                && !OrderStatus.MAKING.equals(order.getStatus())
-                && !OrderStatus.READY.equals(order.getStatus())) {
-            throw BizException.conflict("订单当前状态是「" + OrderStatus.label(order.getStatus())
-                    + "」，不能核销");
+        if (!OrderStatus.canPickup(order.getStatus())) {
+            throw BizException.conflict("订单当前状态是「"
+                    + OrderStatus.label(order.getStatus(), order.getDeliveryType()) + "」，不能核销");
         }
 
         int affected = orderMapper.update(null, Wrappers.<Order>lambdaUpdate()
                 .set(Order::getStatus, OrderStatus.COMPLETED)
                 .eq(Order::getId, order.getId())
-                .in(Order::getStatus, List.of(OrderStatus.ACCEPTED, OrderStatus.MAKING, OrderStatus.READY)));
+                .in(Order::getStatus, List.of(OrderStatus.ACCEPTED, OrderStatus.READY)));
         if (affected == 0) {
             throw BizException.conflict("订单状态已变化，请刷新后重试");
         }
         log.info("取餐核销 orderNo={} code={} 操作人={}", order.getOrderNo(), trimmed, operatorId);
+        auditService.record(AuditActions.TABLE_ORDER, order.getId(), AuditActions.ORDER_PICKUP,
+                "取餐核销：" + order.getOrderNo() + "｜取餐码 " + trimmed);
         return orderService.toView(orderService.require(order.getId()));
     }
 
@@ -263,6 +287,8 @@ public class OrderAdminService {
                     + "」，不能确认收款");
         }
         log.info("确认收款 orderNo={} 操作人={}", order.getOrderNo(), operatorId);
+        auditService.record(AuditActions.TABLE_ORDER, orderId, AuditActions.ORDER_PAY_CONFIRM,
+                "确认收款：" + order.getOrderNo() + "｜原状态 " + PayStatus.label(order.getPayStatus()));
         return orderService.toView(orderService.require(orderId));
     }
 
@@ -285,6 +311,8 @@ public class OrderAdminService {
                     + PayStatus.label(order.getPayStatus()) + "」");
         }
         log.info("收款回退 orderNo={} 操作人={}", order.getOrderNo(), operatorId);
+        auditService.record(AuditActions.TABLE_ORDER, orderId, AuditActions.ORDER_PAY_REVERT,
+                "收款回退为未收款：" + order.getOrderNo());
         return orderService.toView(orderService.require(orderId));
     }
 
@@ -308,6 +336,8 @@ public class OrderAdminService {
                     + PayStatus.label(order.getPayStatus()) + "」");
         }
         log.info("标记退款完成 orderNo={} 操作人={}", order.getOrderNo(), operatorId);
+        auditService.record(AuditActions.TABLE_ORDER, orderId, AuditActions.ORDER_REFUND,
+                "标记退款完成：" + order.getOrderNo());
         return orderService.toView(orderService.require(orderId));
     }
 
@@ -383,6 +413,7 @@ public class OrderAdminService {
         log.info("取消申请审批 orderNo={} 结果={} 操作人={} 备注={}",
                 order.getOrderNo(), result, operatorId == null ? "系统" : operatorId,
                 trimmedRemark == null ? "" : trimmedRemark);
+        recordCancelAudit(order, result, trimmedRemark);
         Order handledOrder = orderService.require(orderId);
         if (approve) {
             // 同意了就等于这单没了，商家要及时知道，别再排进备菜
@@ -392,6 +423,35 @@ public class OrderAdminService {
     }
 
     /* ==================== 内部 ==================== */
+
+    /**
+     * 取消申请审批的操作记录。
+     *
+     * 三条路径分开记：商家同意、商家驳回、超时自动同意。第三条操作人是 system、来源是 task ——
+     * 事后看到「谁同意的」是系统，才知道当时商家根本没处理，这跟「商家点了同意」是两回事。
+     */
+    private void recordCancelAudit(Order order, String result, String remark) {
+        String action;
+        String verb;
+        if (CancelRequest.AUTO_APPROVED.equals(result)) {
+            action = AuditActions.ORDER_CANCEL_AUTO;
+            verb = "超时自动同意取消";
+        } else if (CancelRequest.APPROVED.equals(result)) {
+            action = AuditActions.ORDER_CANCEL_APPROVE;
+            verb = "同意取消申请";
+        } else {
+            action = AuditActions.ORDER_CANCEL_DENY;
+            verb = "驳回取消申请";
+        }
+        String summary = verb + "：" + order.getOrderNo()
+                + (remark == null || remark.isBlank() ? "" : "｜备注：" + remark);
+        if (CancelRequest.AUTO_APPROVED.equals(result)) {
+            auditService.record(AuditActions.TABLE_ORDER, order.getId(), action, summary,
+                    AuditHelper.SYSTEM, AuditHelper.SOURCE_TASK);
+        } else {
+            auditService.record(AuditActions.TABLE_ORDER, order.getId(), action, summary);
+        }
+    }
 
     /** 批量补用户昵称与手机号，避免逐行查用户（N+1）。 */
     private List<AdminOrderRow> toRows(List<Order> orders) {

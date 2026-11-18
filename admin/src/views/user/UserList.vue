@@ -85,7 +85,7 @@
       <el-table-column label="申请时间" width="160">
         <template #default="{ row }">{{ (row.createdAt || '').replace('T', ' ').slice(0, 16) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="190" fixed="right">
+      <el-table-column label="操作" width="230" fixed="right">
         <template #default="{ row }">
           <template v-if="auth.has('user.audit')">
             <el-button v-if="row.auditStatus === 'pending'" link type="primary" @click="onAudit(row, 'approve')">
@@ -109,7 +109,16 @@
               启用
             </el-button>
           </template>
-          <span v-else class="muted">只读</span>
+          <!-- 删除是物理删除、不可恢复，单独挂 user.delete，不跟审核混一个权限 -->
+          <el-button
+            v-if="auth.has('user.delete')"
+            link
+            type="danger"
+            @click="onDelete(row)"
+          >
+            删除
+          </el-button>
+          <span v-if="!auth.has('user.audit') && !auth.has('user.delete')" class="muted">只读</span>
         </template>
       </el-table-column>
     </el-table>
@@ -291,6 +300,34 @@ function onSavePhone() {
     .finally(() => {
       phoneSaving.value = false;
     });
+}
+
+/* ==================== 删除用户 ==================== */
+
+/**
+ * 物理删除，不可恢复。服务端还有两道闸：名下有订单会拒删、只接受 customer 类型。
+ * 删完如果这页被删空且不在第一页，回退一页，免得停在一张空表上。
+ */
+function onDelete(row) {
+  const name = row.nickName || row.userId;
+  ElMessageBox.confirm('将永久删除「' + name + '」及其名下收货地址，不可恢复。', '删除用户', {
+    type: 'warning',
+    confirmButtonText: '删除',
+    confirmButtonClass: 'el-button--danger',
+  })
+    .then(() => {
+      http
+        .post('/admin/user/delete', { userId: row.userId })
+        .then(() => {
+          ElMessage.success('已删除');
+          if (rows.value.length === 1 && page.value > 1) {
+            page.value -= 1;
+          }
+          load();
+        })
+        .catch(() => {});
+    })
+    .catch(() => {});
 }
 
 function onAudit(row, action) {

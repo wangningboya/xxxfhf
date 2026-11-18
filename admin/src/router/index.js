@@ -85,6 +85,11 @@ const routes = [
         component: () => import('../views/config/ConfigView.vue'),
         meta: { title: '系统配置', perm: 'config.manage' },
       },
+      {
+        path: 'audit',
+        component: () => import('../views/audit/AuditLogList.vue'),
+        meta: { title: '操作记录', perm: 'audit.view' },
+      },
     ],
   },
   { path: '/:pathMatch(.*)*', redirect: '/dashboard' },
@@ -139,6 +144,7 @@ export function firstAllowed(auth) {
     ['/role', ['role.manage']],
     ['/dict', ['dict.manage']],
     ['/config', ['config.manage']],
+    ['/audit', ['audit.view']],
   ];
   const found = candidates.filter(([, perms]) => auth.hasAny(perms))[0];
   return found ? found[0] : '/login';

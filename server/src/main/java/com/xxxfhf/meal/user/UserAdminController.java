@@ -18,7 +18,8 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 用户审核（商家端）。小程序商家页与网页后台共用这一套接口。
  *
- * 权限分工：列表只读用 user.view，通过 / 驳回 / 停用用 user.audit。
+ * 权限分工：列表只读用 user.view，通过 / 驳回 / 停用 / 改手机号用 user.audit，
+ * 物理删除用单独拆出来的 user.delete（不可撤销，不该跟日常审核混一个权限）。
  */
 @RestController
 @RequestMapping("/admin/user")
@@ -58,10 +59,25 @@ public class UserAdminController {
                 UserContext.userId(), request.userId(), request.phone()));
     }
 
+    /**
+     * 物理删除用户（含名下地址）。不可撤销。
+     *
+     * 有任意订单会返回 409 拒绝；商家账号即使直接调也删不掉（服务端只接受 customer）。
+     * 返回值为连带删除的地址条数。
+     */
+    @PostMapping("/delete")
+    @RequirePerm(Perms.USER_DELETE)
+    public ApiResponse<Integer> delete(@Valid @RequestBody DeleteRequest request) {
+        return ApiResponse.ok(userAuditService.delete(UserContext.userId(), request.userId()));
+    }
+
     public record AuditRequest(
             @NotBlank(message = "缺少用户 ID") String userId,
             @NotBlank(message = "缺少审核动作") String action,
             @Size(max = 200, message = "驳回原因最多 200 字") String reason) {
+    }
+
+    public record DeleteRequest(@NotBlank(message = "缺少用户 ID") String userId) {
     }
 
     public record PhoneRequest(

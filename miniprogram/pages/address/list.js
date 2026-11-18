@@ -58,10 +58,16 @@ Page({
   },
 
   onAdd() {
+    if (app.blockIfNotApproved('账号审核中，通过后才能填写地址')) {
+      return;
+    }
     wx.navigateTo({ url: '/pages/address/edit' });
   },
 
   onEdit(e) {
+    if (app.blockIfNotApproved('账号审核中，通过后才能修改地址')) {
+      return;
+    }
     const id = e.currentTarget.dataset.id;
     wx.navigateTo({ url: '/pages/address/edit?id=' + id });
   },

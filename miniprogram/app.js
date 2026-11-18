@@ -13,6 +13,41 @@ App({
     loginPromise: null,
   },
 
+  /** 上次全局错误提示的时间戳，用于节流，避免连续报错时 toast 刷屏 */
+  lastGlobalErrorToastAt: 0,
+
+  /**
+   * 全局错误兜底：页面 JS 未捕获的异常会走到这里。
+   *
+   * 错误细节对用户无意义，只弹一句友好提示；完整错误留在控制台方便开发排查。
+   */
+  onError(err) {
+    console.error('[小程序全局错误]', err);
+    this.toastGlobalError('系统开小差了，请稍后重试');
+  },
+
+  /**
+   * 未处理的 Promise 拒绝兜底。
+   *
+   * request.js 产生的 rejection 自带面向用户的 message（如「网络异常，请检查网络后重试」），
+   * 直接展示；其他来源没有可读 message，用统一文案兜住。
+   */
+  onUnhandledRejection(res) {
+    const reason = res && res.reason;
+    console.error('[未处理的 Promise 拒绝]', reason);
+    this.toastGlobalError(reason && reason.message ? reason.message : '系统开小差了，请稍后重试');
+  },
+
+  /** 带节流的全局错误提示：2 秒内只弹一条 */
+  toastGlobalError(message) {
+    const now = Date.now();
+    if (now - this.lastGlobalErrorToastAt < 2000) {
+      return;
+    }
+    this.lastGlobalErrorToastAt = now;
+    wx.showToast({ title: message, icon: 'none', duration: 2500 });
+  },
+
   onLaunch() {
     this.ensureLogin()
       .then(() => {
@@ -84,6 +119,29 @@ App({
       this.globalData.me = data;
       return data;
     });
+  },
+
+  /**
+   * 待审核用户的统一拦截（需求 3.1 / 4.17）。
+   *
+   * 准入与审核是两件事：待审核用户能看菜单、能看自己已有的地址，
+   * 但选餐、结算、自己填地址都要等商家审核通过 —— 不能等提交订单时才告诉他。
+   *
+   * 只读 `globalData.me`，拿不到状态时不拦：服务端在 `/address` 与 `/order` 上还有一道兜底，
+   * 前端这层只负责「早说一句」。
+   *
+   * @param {string} message 被拦时提示的文案
+   * @return {boolean} true 表示已拦住，调用方直接 return
+   */
+  blockIfNotApproved(message) {
+    const me = this.globalData.me;
+    if (!me || me.auditStatus === 'approved') {
+      return false;
+    }
+    // 已驳回的人不是「在等」，说「审核中」会让他一直等下去
+    const text = me.auditStatus === 'rejected' ? '账号申请已被驳回，先重新提交申请' : message;
+    wx.showToast({ title: text, icon: 'none', duration: 2000 });
+    return true;
   },
 
   /**

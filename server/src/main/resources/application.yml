@@ -64,6 +64,8 @@ app:
   schedule:
     # 每 5 分钟；要更精确改 0 * * * * *
     prepay-release-cron: "${APP_PREPAY_RELEASE_CRON:0 */5 * * * *}"
+    # 取消申请超时自动同意扫描，默认每 10 分钟
+    cancel-request-cron: "${APP_CANCEL_REQUEST_CRON:0 */10 * * * *}"
     enabled: ${APP_SCHEDULE_ENABLED:true}
   admin:
     # 商家初始账号：库里没有该 username 时创建一次，已存在则不覆盖

@@ -20,7 +20,10 @@ Page({
 
   onLoad(options) {
     const id = options.id || '';
-    this.setData({ id, isEdit: !!id });
+    // 新增时用账号手机号预填，可改；编辑一律用地址原值（需求 4.8 预填规则）
+    const me = app.globalData.me;
+    const prefillPhone = !id && me && me.phone ? me.phone : '';
+    this.setData({ id, isEdit: !!id, phone: prefillPhone });
     this.loadRegions(id);
   },
 
@@ -78,6 +81,10 @@ Page({
     if (this.data.saving) {
       return;
     }
+    // 兜底：从缓存页或历史页面栈进来时，仍然不让待审核用户写入
+    if (app.blockIfNotApproved('账号审核中，通过后才能填写地址')) {
+      return;
+    }
     const { regionIndex, contactName, phone, detail, id } = this.data;
     const region = this.data.regions[regionIndex];
     if (!region) {
@@ -88,8 +95,8 @@ Page({
       wx.showToast({ title: '请填写收货人', icon: 'none' });
       return;
     }
-    if (!/^1\d{10}$/.test(phone.trim())) {
-      wx.showToast({ title: '请填写正确的手机号', icon: 'none' });
+    if (!/^1[3-9]\d{9}$/.test(phone.trim())) {
+      wx.showToast({ title: '手机号必填，11 位（1[3-9] 开头）', icon: 'none' });
       return;
     }
     if (!detail.trim()) {

@@ -153,6 +153,12 @@ const assigning = ref(false);
 const assignTarget = ref({});
 const assignRoles = ref([]);
 
+/**
+ * 按前缀把权限项摆进四组。
+ *
+ * 这里用白名单正则，**新增权限码时必须同步加进对应组**，否则该项在弹窗里
+ * 根本不会渲染出来（能存进库、却勾不到）—— `dict.manage` 就这样漏过一次。
+ */
 const groupedPermissions = computed(() => [
   { title: '商品与菜单', items: permissions.value.filter((p) => /^(dish|combo|menu)\./.test(p.code)) },
   {
@@ -160,7 +166,10 @@ const groupedPermissions = computed(() => [
     items: permissions.value.filter((p) => /^(user|region)\./.test(p.code)),
   },
   { title: '订单与收款', items: permissions.value.filter((p) => /^(order|finance)\./.test(p.code)) },
-  { title: '统计与配置', items: permissions.value.filter((p) => /^(prep|config|role)\./.test(p.code)) },
+  {
+    title: '统计与配置',
+    items: permissions.value.filter((p) => /^(prep|config|role|dict|audit)\./.test(p.code)),
+  },
 ]);
 
 function nameOf(code) {

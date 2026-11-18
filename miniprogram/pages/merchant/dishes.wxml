@@ -15,7 +15,7 @@
 
   <view wx:for="{{dishes}}" wx:key="id" class="card">
     <view class="dish-row">
-      <image wx:if="{{item.image}}" class="dish-img" src="{{item.image}}" mode="aspectFill" />
+      <image wx:if="{{item.imageUrl}}" class="dish-img" src="{{item.imageUrl}}" mode="aspectFill" />
       <view class="dish-main">
         <view class="dish-name">
           {{item.name}}
@@ -56,7 +56,7 @@
     <view class="field">
       <text class="field-label">图片</text>
       <view class="img-box">
-        <image wx:if="{{form.image}}" class="dish-img" src="{{form.image}}" mode="aspectFill" bindtap="onChooseImage" />
+        <image wx:if="{{form.imageUrl}}" class="dish-img" src="{{form.imageUrl}}" mode="aspectFill" bindtap="onChooseImage" />
         <view wx:else class="img-add" bindtap="onChooseImage">{{uploading ? '上传中…' : '＋ 上传'}}</view>
       </view>
     </view>

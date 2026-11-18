@@ -15,7 +15,7 @@
 
   <view class="list" wx:else>
     <view class="line" wx:for="{{lines}}" wx:key="key">
-      <image class="line-cover" wx:if="{{item.cover}}" src="{{item.cover}}" mode="aspectFill" />
+      <image class="line-cover" wx:if="{{item.coverUrl}}" src="{{item.coverUrl}}" mode="aspectFill" />
       <view class="line-cover line-cover-empty" wx:else></view>
 
       <view class="line-body">

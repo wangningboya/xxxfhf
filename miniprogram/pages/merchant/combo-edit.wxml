@@ -19,11 +19,11 @@
     <view class="field cover-field">
       <text class="field-label">封面</text>
       <view class="cover-box">
-        <image wx:if="{{cover}}" class="cover-img" src="{{cover}}" mode="aspectFill" bindtap="onChooseCover" />
+        <image wx:if="{{coverPreview}}" class="cover-img" src="{{coverPreview}}" mode="aspectFill" bindtap="onChooseCover" />
         <view wx:else class="cover-add" bindtap="onChooseCover">
           {{uploading ? '上传中…' : '＋ 上传'}}
         </view>
-        <text wx:if="{{cover}}" class="cover-del" bindtap="onClearCover">移除</text>
+        <text wx:if="{{coverPreview}}" class="cover-del" bindtap="onClearCover">移除</text>
       </view>
     </view>
     <view class="field">
@@ -61,6 +61,7 @@
         {{item.name}}{{item.required ? '（必选）' : ''}}
       </view>
     </view>
+    <view class="hint">保存后，已发布的当天菜单不会自动更新，要到「每日菜单」撤下再重新发布</view>
   </view>
 
   <view class="bottom-gap"></view>

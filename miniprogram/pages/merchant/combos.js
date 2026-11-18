@@ -1,6 +1,6 @@
 const app = getApp();
 const { request } = require('../../utils/request');
-const { yuan } = require('../../utils/format');
+const { yuan, assetUrl } = require('../../utils/format');
 
 /** 盒饭管理（F-H09 列表部分）：上下架、排序、进编辑页。 */
 Page({
@@ -40,6 +40,7 @@ Page({
           id: combo.id,
           name: combo.name,
           cover: combo.cover,
+          coverUrl: assetUrl(combo.cover),
           priceText: yuan(combo.price),
           desc: combo.desc || '',
           status: combo.status,

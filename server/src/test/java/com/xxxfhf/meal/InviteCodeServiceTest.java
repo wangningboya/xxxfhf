@@ -67,7 +67,7 @@ class InviteCodeServiceTest {
         assertThatThrownBy(() -> service.create(721, "u_merchant_1"))
                 .isInstanceOf(BizException.class)
                 .hasMessageContaining("30 天");
-        verify(inviteCodeMapper, never()).insert(any());
+        verify(inviteCodeMapper, never()).insert(any(InviteCode.class));
     }
 
     @Test

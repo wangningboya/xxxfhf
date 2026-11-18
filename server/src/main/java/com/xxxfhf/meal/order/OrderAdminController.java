@@ -75,7 +75,7 @@ public class OrderAdminController {
                 UserContext.userId(), request.orderId(), request.reason()));
     }
 
-    /** 推进状态：making / ready / completed。 */
+    /** 推进状态：accepted → ready → completed。自取与配送共用 ready，只是文案不同。 */
     @PostMapping("/advance")
     @RequirePerm(Perms.ORDER_ACCEPT)
     public ApiResponse<OrderService.OrderView> advance(@Valid @RequestBody AdvanceRequest request) {

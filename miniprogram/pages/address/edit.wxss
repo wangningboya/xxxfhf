@@ -47,6 +47,12 @@ page {
   flex-shrink: 0;
 }
 
+/* 必填星号：手机号为必填项（需求 4.8） */
+.req {
+  color: #e54d42;
+  margin-left: 4rpx;
+}
+
 .value {
   flex: 1;
   font-size: 28rpx;

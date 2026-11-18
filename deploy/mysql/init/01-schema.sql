@@ -68,15 +68,24 @@ CREATE TABLE IF NOT EXISTS `address` (
     `region_id`    VARCHAR(32)  NOT NULL COMMENT '所属区域，必填',
     `region_name`  VARCHAR(64)           DEFAULT NULL COMMENT '区域名称冗余，便于列表展示',
     `contact_name` VARCHAR(32)           DEFAULT NULL COMMENT '收货人',
-    `phone`        VARCHAR(20)           DEFAULT NULL COMMENT '联系电话',
+    `phone`        VARCHAR(20)  NOT NULL COMMENT '联系电话，必填（见需求 4.8）',
     `detail`       VARCHAR(255) NOT NULL COMMENT '详细地址（区域内门牌）',
     `tag`          VARCHAR(32)           DEFAULT NULL COMMENT '家 / 公司',
     `source`       VARCHAR(16)  NOT NULL DEFAULT 'user' COMMENT 'merchant/user',
     `status`       VARCHAR(16)  NOT NULL DEFAULT 'active' COMMENT 'active 可用 / pending 待确认 / rejected 已驳回',
     `reject_reason` VARCHAR(200)          DEFAULT NULL COMMENT '驳回原因，status=rejected 时有值',
+    -- 审计四列（N-27）。pending 队列要按提交时间先来先审，所以 created_at 同时是业务字段。
+    -- created_by / updated_by 存操作人 user_id；无登录态的定时任务写 'system'。
+    `created_at`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间（用户提交时刻）',
+    `created_by`   VARCHAR(32)           DEFAULT NULL COMMENT '创建人 user_id，系统写 system',
+    `updated_at`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后修改时间',
+    `updated_by`   VARCHAR(32)           DEFAULT NULL COMMENT '最后修改人 user_id，系统写 system',
     PRIMARY KEY (`id`),
     KEY `idx_address_user_status` (`user_id`, `status`),
-    KEY `idx_address_region` (`region_id`)
+    KEY `idx_address_region` (`region_id`),
+    -- 待办队列的默认查询：status='pending' 按提交时间正序。没有这个索引，
+    -- 待确认积到几千条时每次进页面都是一次全表扫
+    KEY `idx_address_status_created` (`status`, `created_at`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT ='收货地址';
 
 -- -----------------------------------------------------------------------------
@@ -170,7 +179,7 @@ CREATE TABLE IF NOT EXISTS `order` (
     `spec_amount`      INT         NOT NULL DEFAULT 0 COMMENT '规格差价合计（分），当前为 0',
     `delivery_fee`     INT         NOT NULL DEFAULT 0 COMMENT '配送费（分）',
     `total_amount`     INT         NOT NULL DEFAULT 0 COMMENT '合计（分）',
-    `status`           VARCHAR(24) NOT NULL COMMENT 'pending_accept/accepted/making/ready/completed/cancelled/rejected',
+    `status`           VARCHAR(24) NOT NULL COMMENT 'pending_accept/accepted/ready(自取=待取餐，配送=配送中)/completed/cancelled/rejected',
     `cancel_requested` TINYINT(1)  NOT NULL DEFAULT 0 COMMENT '取消申请中，为 1 时禁止接单',
     `cancel_request`   JSON                 DEFAULT NULL COMMENT '取消申请与处理结果',
     `cancel_requested_at` DATETIME          DEFAULT NULL COMMENT '取消申请提交时间，超时自动同意按此列扫描',
@@ -277,5 +286,33 @@ CREATE TABLE IF NOT EXISTS `dict_item` (
     UNIQUE KEY `uk_dict_item` (`type_code`, `item_value`),
     KEY `idx_dict_item_type` (`type_code`, `sort`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT ='字典项';
+
+-- -----------------------------------------------------------------------------
+-- 14. 操作记录 audit_log（N-27）
+--
+-- 是谁、什么时候、对哪条记录、做了什么。**追加型表**：只 insert，不 update、不 delete
+-- （真要清理按 created_at 归档），因此没有 updated_at / updated_by —— 一行写进去就不会再改，
+-- 再挂两列「最后修改人」永远为空，只会误导。
+--
+-- 与 address 等表上的审计四列分工：
+--   行内四列回答「这条记录最后是谁动的」；本表回答「谁在什么时候动了它、动了什么」。
+-- 只存 summary 一句话，不存改前改后完整快照：回溯时回业务表看现状，历史值对该项目价值不高。
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `audit_log` (
+    `id`          VARCHAR(32)  NOT NULL COMMENT '主键',
+    `table_name`  VARCHAR(32)  NOT NULL COMMENT '对象表：address / user / order',
+    `record_id`   VARCHAR(32)  NOT NULL COMMENT '对象主键',
+    `action`      VARCHAR(32)  NOT NULL COMMENT '动作码，如 address.approve / order.accept',
+    `summary`     VARCHAR(500) NOT NULL COMMENT '一句话说明，人读的，含关键字段前后值',
+    `operator_id` VARCHAR(32)  NOT NULL COMMENT '操作人 user_id；定时任务写 system',
+    `operator_name` VARCHAR(64)         DEFAULT NULL COMMENT '操作人当时的昵称/账号快照，改名后仍可读',
+    `source`      VARCHAR(16)  NOT NULL COMMENT 'admin 网页后台 / miniprogram 小程序 / task 定时任务',
+    `created_at`  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '记录时间',
+    PRIMARY KEY (`id`),
+    -- 点某条地址/订单看它的历史
+    KEY `idx_audit_record` (`table_name`, `record_id`),
+    -- 列表页按时间倒序翻页
+    KEY `idx_audit_created` (`created_at`)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT ='操作记录';
 
 SET FOREIGN_KEY_CHECKS = 1;

@@ -1,7 +1,11 @@
 package com.xxxfhf.meal;
 
+import com.xxxfhf.meal.address.AddressMapper;
+import com.xxxfhf.meal.audit.AuditActions;
+import com.xxxfhf.meal.audit.AuditService;
 import com.xxxfhf.meal.common.BizException;
 import com.xxxfhf.meal.invite.InviteCodeMapper;
+import com.xxxfhf.meal.order.OrderMapper;
 import com.xxxfhf.meal.user.AuditAction;
 import com.xxxfhf.meal.user.AuditStatus;
 import com.xxxfhf.meal.user.User;
@@ -39,6 +43,16 @@ class UserAuditServiceTest {
     @Mock
     private InviteCodeMapper inviteCodeMapper;
 
+    @Mock
+    private AddressMapper addressMapper;
+
+    @Mock
+    private OrderMapper orderMapper;
+
+    /** 留痕是审核动作的副作用，这里 mock 掉；有专门一行断言确认它确实被调用了 */
+    @Mock
+    private AuditService auditService;
+
     @InjectMocks
     private UserAuditService service;
 
@@ -54,6 +68,21 @@ class UserAuditServiceTest {
         assertThat(user.getApprovedAt()).as("通过时间必须落库").isNotNull();
         assertThat(user.getRejectReason()).as("通过后不应残留驳回原因").isNull();
         verify(userMapper).updateById(user);
+    }
+
+    @Test
+    @DisplayName("审核动作必须留痕：动作码与对象都对")
+    void auditWritesAuditLog() {
+        User user = customer(AuditStatus.PENDING);
+        when(userMapper.selectById(TARGET)).thenReturn(user);
+
+        service.audit(OPERATOR, TARGET, AuditAction.APPROVE, null);
+
+        verify(auditService).record(
+                org.mockito.ArgumentMatchers.eq(AuditActions.TABLE_USER),
+                org.mockito.ArgumentMatchers.eq(TARGET),
+                org.mockito.ArgumentMatchers.eq(AuditActions.USER_APPROVE),
+                org.mockito.ArgumentMatchers.contains("审核通过用户"));
     }
 
     @Test
@@ -79,7 +108,7 @@ class UserAuditServiceTest {
                 .isInstanceOf(BizException.class)
                 .hasMessageContaining("驳回必须填写原因");
 
-        verify(userMapper, never()).updateById(any());
+        verify(userMapper, never()).updateById(any(User.class));
     }
 
     @Test
@@ -92,7 +121,7 @@ class UserAuditServiceTest {
                 .isInstanceOf(BizException.class)
                 .hasMessageContaining("已通过");
 
-        verify(userMapper, never()).updateById(any());
+        verify(userMapper, never()).updateById(any(User.class));
     }
 
     @Test
@@ -152,7 +181,52 @@ class UserAuditServiceTest {
                 .isInstanceOf(BizException.class)
                 .hasMessageContaining("未知的审核动作");
 
-        verify(userMapper, never()).updateById(any());
+        verify(userMapper, never()).updateById(any(User.class));
+    }
+
+    @Test
+    @DisplayName("有订单的用户不能删，只能停用")
+    void cannotDeleteUserWithOrders() {
+        User user = customer(AuditStatus.APPROVED);
+        when(userMapper.selectById(TARGET)).thenReturn(user);
+        when(orderMapper.selectCount(any())).thenReturn(2L);
+
+        assertThatThrownBy(() -> service.delete(OPERATOR, TARGET))
+                .isInstanceOf(BizException.class)
+                .hasMessageContaining("2 笔订单");
+
+        // 拒删时不能动任何数据：用户和地址都得原样留着
+        verify(userMapper, never()).deleteById(any(String.class));
+        verify(addressMapper, never()).delete(any());
+    }
+
+    @Test
+    @DisplayName("无订单时一并删掉用户与名下地址")
+    void deleteRemovesUserAndAddresses() {
+        User user = customer(AuditStatus.REJECTED);
+        when(userMapper.selectById(TARGET)).thenReturn(user);
+        when(orderMapper.selectCount(any())).thenReturn(0L);
+        when(addressMapper.delete(any())).thenReturn(3);
+
+        int removed = service.delete(OPERATOR, TARGET);
+
+        assertThat(removed).as("返回连带删除的地址条数").isEqualTo(3);
+        verify(userMapper).deleteById(TARGET);
+    }
+
+    @Test
+    @DisplayName("商家账号即使直接调接口也删不掉")
+    void cannotDeleteMerchant() {
+        User merchant = new User();
+        merchant.setId(TARGET);
+        merchant.setUserType(UserType.MERCHANT);
+        when(userMapper.selectById(TARGET)).thenReturn(merchant);
+
+        assertThatThrownBy(() -> service.delete(OPERATOR, TARGET))
+                .isInstanceOf(BizException.class)
+                .hasMessageContaining("只能操作群成员");
+
+        verify(userMapper, never()).deleteById(any(String.class));
     }
 
     private static User customer(String auditStatus) {

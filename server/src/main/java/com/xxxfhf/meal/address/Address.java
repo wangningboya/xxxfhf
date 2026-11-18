@@ -3,15 +3,19 @@ package com.xxxfhf.meal.address;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.xxxfhf.meal.audit.AuditEntity;
 
 /**
  * 收货地址。**必须挂一个区域**，不允许存在无区域地址（需求 4.7）。
  *
  * 与常规电商最大的不同：主体由**商家维护**，用户自己新增的地址要等商家确认才能选用。
  * 自取单不涉及地址，也就不涉及区域。
+ *
+ * 继承 {@link AuditEntity}：除「谁建的、谁改的」留痕外，created_at 还是待确认队列的
+ * 排序依据（先来先审），所以它同时是业务字段（N-27）。
  */
 @TableName("address")
-public class Address {
+public class Address extends AuditEntity {
 
     @TableId(type = IdType.ASSIGN_UUID)
     private String id;

@@ -1,16 +1,28 @@
 package com.xxxfhf.meal.address;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.xxxfhf.meal.audit.AuditActions;
+import com.xxxfhf.meal.audit.AuditHelper;
+import com.xxxfhf.meal.audit.AuditService;
 import com.xxxfhf.meal.common.BizException;
+import com.xxxfhf.meal.common.PageResult;
 import com.xxxfhf.meal.common.PhoneValidator;
 import com.xxxfhf.meal.region.Region;
 import com.xxxfhf.meal.region.RegionService;
+import com.xxxfhf.meal.user.User;
+import com.xxxfhf.meal.user.UserMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 收货地址管理。
@@ -29,10 +41,15 @@ public class AddressService {
 
     private final AddressMapper addressMapper;
     private final RegionService regionService;
+    private final UserMapper userMapper;
+    private final AuditService auditService;
 
-    public AddressService(AddressMapper addressMapper, RegionService regionService) {
+    public AddressService(AddressMapper addressMapper, RegionService regionService,
+                          UserMapper userMapper, AuditService auditService) {
         this.addressMapper = addressMapper;
         this.regionService = regionService;
+        this.userMapper = userMapper;
+        this.auditService = auditService;
     }
 
     /** 某个用户的全部地址（含待确认的），用户端与商家端都用这一个查询。 */
@@ -44,6 +61,65 @@ public class AddressService {
                 .eq(Address::getUserId, userId)
                 .orderByAsc(Address::getStatus)
                 .orderByAsc(Address::getRegionName));
+    }
+
+    /**
+     * 商家端地址队列（跨用户），默认看待确认。
+     *
+     * 为什么不再以「选用户」为入口：工作台那个「待确认地址」数字本来就是全库口径，
+     * 点进来却落在一个必须先选人的空页面上，等于让人自己去猜该看谁。地址审核天然是队列。
+     *
+     * @param status   active / pending / rejected，空则全部
+     * @param userId   只看某个用户的（原来的用法，现在降级成筛选条件）
+     * @param keyword  联系人 / 手机号 / 详细地址模糊匹配
+     */
+    public PageResult<AddressRow> page(String status, String userId, String regionId, String keyword,
+                                       int page, int pageSize) {
+        String kw = keyword == null ? "" : keyword.trim();
+        // 待确认队列要「先来的先审」，所以正序；其余页签看最近发生的，倒序。
+        // 片段是常量，不含用户输入。
+        boolean pendingQueue = "pending".equals(status);
+        String orderBy = pendingQueue
+                ? "ORDER BY created_at ASC"
+                : "ORDER BY FIELD(status, 'pending', 'rejected', 'active'), created_at DESC";
+
+        Page<Address> pager = new Page<>(Math.max(page, 1), Math.min(Math.max(pageSize, 1), 100));
+        IPage<Address> result = addressMapper.selectPage(pager, Wrappers.<Address>lambdaQuery()
+                .eq(status != null && !status.isBlank(), Address::getStatus, status)
+                .eq(userId != null && !userId.isBlank(), Address::getUserId, userId)
+                .eq(regionId != null && !regionId.isBlank(), Address::getRegionId, regionId)
+                .and(!kw.isEmpty(), w -> w.like(Address::getContactName, kw)
+                        .or().like(Address::getPhone, kw)
+                        .or().like(Address::getDetail, kw))
+                .last(orderBy));
+
+        Map<String, User> users = usersOf(result.getRecords());
+        List<AddressRow> rows = new ArrayList<>(result.getRecords().size());
+        for (Address address : result.getRecords()) {
+            User user = users.get(address.getUserId());
+            rows.add(new AddressRow(address.getId(), address.getUserId(),
+                    user == null ? null : user.getNickName(),
+                    user == null ? null : user.getPhone(),
+                    user == null ? null : user.getAuditStatus(),
+                    address.getRegionId(), address.getRegionName(), address.getContactName(),
+                    address.getPhone(), address.getDetail(), address.getTag(),
+                    address.getSource(), address.getStatus(), address.getRejectReason(),
+                    address.getCreatedAt()));
+        }
+        return new PageResult<>(rows, result.getTotal(), result.getCurrent(), result.getSize());
+    }
+
+    /** 一次查完本页涉及的账号，避免逐行查用户表 */
+    private Map<String, User> usersOf(List<Address> addresses) {
+        if (addresses.isEmpty()) {
+            return Map.of();
+        }
+        List<String> ids = addresses.stream().map(Address::getUserId).distinct().toList();
+        Map<String, User> map = new HashMap<>(ids.size());
+        for (User user : userMapper.selectBatchIds(ids)) {
+            map.put(user.getId(), user);
+        }
+        return map;
     }
 
     /** 商家录入 / 修改：直接可用。 */
@@ -64,10 +140,14 @@ public class AddressService {
         if (address.getId() == null) {
             addressMapper.insert(address);
             log.info("商家新增地址 id={} userId={}", address.getId(), cmd.userId());
+            auditService.record(AuditActions.TABLE_ADDRESS, address.getId(), AuditActions.ADDRESS_CREATE,
+                    "商家新增地址：" + describe(address));
         } else {
             addressMapper.updateById(address);
             clearRejectReason(address.getId());
             log.info("商家修改地址 id={} userId={}", address.getId(), cmd.userId());
+            auditService.record(AuditActions.TABLE_ADDRESS, address.getId(), AuditActions.ADDRESS_UPDATE,
+                    "商家修改地址：" + describe(address));
         }
         return address;
     }
@@ -97,10 +177,15 @@ public class AddressService {
         if (creating) {
             addressMapper.insert(address);
             log.info("用户新增地址 id={} userId={}（待确认）", address.getId(), userId);
+            auditService.record(AuditActions.TABLE_ADDRESS, address.getId(), AuditActions.ADDRESS_CREATE,
+                    "用户新增地址（待确认）：" + describe(address));
         } else {
             addressMapper.updateById(address);
             clearRejectReason(address.getId());
             log.info("用户修改地址 id={} userId={}（重新待确认）", address.getId(), userId);
+            // 用户把地址改到别的区域时，商家必须能在流水里看到 —— 配送范围是商家的判断，不是用户的
+            auditService.record(AuditActions.TABLE_ADDRESS, address.getId(), AuditActions.ADDRESS_UPDATE,
+                    "用户修改地址（重新待确认）：" + describe(address));
         }
         return address;
     }
@@ -115,9 +200,9 @@ public class AddressService {
         if (addressId == null) {
             return;
         }
-        addressMapper.update(null, Wrappers.<Address>lambdaUpdate()
+        addressMapper.update(null, AuditHelper.stamp(Wrappers.<Address>lambdaUpdate()
                 .set(Address::getRejectReason, null)
-                .eq(Address::getId, addressId));
+                .eq(Address::getId, addressId)));
     }
 
     /**
@@ -145,23 +230,40 @@ public class AddressService {
         }
         // 用条件更新而不是 updateById：updateById 会跳过 null 字段，
         // 导致「从驳回改回可用」时旧原因清不掉，用户端一直挂着一句过期的话
-        addressMapper.update(null, Wrappers.<Address>lambdaUpdate()
+        addressMapper.update(null, AuditHelper.stamp(Wrappers.<Address>lambdaUpdate()
                 .set(Address::getStatus, target)
                 .set(Address::getRejectReason, "rejected".equals(target) ? trimmed : null)
-                .eq(Address::getId, addressId));
+                .eq(Address::getId, addressId)));
 
         address.setStatus(target);
         address.setRejectReason("rejected".equals(target) ? trimmed : null);
         log.info("地址状态变更 id={} -> {} 原因={}", addressId, target, trimmed);
+
+        String action = switch (target) {
+            case "active" -> AuditActions.ADDRESS_APPROVE;
+            case "rejected" -> AuditActions.ADDRESS_REJECT;
+            default -> AuditActions.ADDRESS_REVOKE;
+        };
+        String verb = switch (target) {
+            case "active" -> "通过地址";
+            case "rejected" -> "驳回地址";
+            default -> "收回地址为待确认";
+        };
+        auditService.record(AuditActions.TABLE_ADDRESS, addressId, action,
+                verb + "：" + describe(address)
+                        + ("rejected".equals(target) ? "｜原因：" + trimmed : ""));
         return address;
     }
 
     /** 删除。历史订单存的是地址快照，删地址不影响已下的单。 */
     @Transactional
     public void delete(String addressId) {
-        require(addressId);
+        Address address = require(addressId);
         addressMapper.deleteById(addressId);
         log.info("删除地址 id={}", addressId);
+        // 描述要在删除前取：删完对象还在内存里，但这一行已经查不回来了
+        auditService.record(AuditActions.TABLE_ADDRESS, addressId, AuditActions.ADDRESS_DELETE,
+                "删除地址：" + describe(address));
     }
 
     public Address require(String id) {
@@ -199,7 +301,7 @@ public class AddressService {
         address.setRegionName(region.getName());
         address.setContactName(contactName);
         address.setDetail(detail);
-        address.setPhone(PhoneValidator.optional(cmd.phone()));
+        address.setPhone(PhoneValidator.require(cmd.phone()));
         address.setTag(trimToNull(cmd.tag()));
     }
 
@@ -211,11 +313,43 @@ public class AddressService {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
+    /** 操作记录里指代一条地址：区域 + 门牌 + 联系人，够认出是哪条 */
+    private static String describe(Address address) {
+        StringBuilder text = new StringBuilder();
+        if (address.getRegionName() != null) {
+            text.append(address.getRegionName()).append(' ');
+        }
+        if (address.getDetail() != null) {
+            text.append(address.getDetail());
+        }
+        if (address.getContactName() != null) {
+            text.append('（').append(address.getContactName());
+            if (address.getPhone() != null) {
+                text.append(' ').append(address.getPhone());
+            }
+            text.append('）');
+        }
+        return text.toString();
+    }
+
+    /**
+     * 地址队列行：地址本体 + 归属账号。
+     *
+     * 不直接把实体塞进响应：表格要看「这是谁提的」，而实体上没有昵称；
+     * 同时审计四列对前端隐藏，提交时间只能由这里显式带出来。
+     */
+    public record AddressRow(String id, String userId, String userName, String userPhone,
+                             String userAuditStatus, String regionId, String regionName,
+                             String contactName, String phone, String detail, String tag,
+                             String source, String status, String rejectReason,
+                             LocalDateTime createdAt) {
+    }
+
     /**
      * 保存入参。
      *
      * @param id 为空 = 新增；非空 = 修改
-     * @param phone 可选（自取单不需要手机号），填了才校验格式
+     * @param phone 必填（需求 4.8：配送送达后要能联系到人），11 位大陆手机号
      */
     public record AddressCommand(String id, String userId, String regionId, String contactName,
                                  String phone, String detail, String tag) {

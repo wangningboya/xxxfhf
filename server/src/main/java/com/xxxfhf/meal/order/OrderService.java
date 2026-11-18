@@ -20,6 +20,8 @@ import com.xxxfhf.meal.menu.DateParam;
 import com.xxxfhf.meal.menu.MenuStatus;
 import com.xxxfhf.meal.menu.ServeDateClock;
 import com.xxxfhf.meal.notify.NotifyService;
+import com.xxxfhf.meal.user.User;
+import com.xxxfhf.meal.user.UserMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DuplicateKeyException;
@@ -58,6 +60,7 @@ public class OrderService {
     private final OrderMapper orderMapper;
     private final DailyMenuMapper menuMapper;
     private final AddressService addressService;
+    private final UserMapper userMapper;
     private final ServeDateClock clock;
     private final ConfigService configService;
     private final OrderNumberService numberService;
@@ -66,13 +69,14 @@ public class OrderService {
     private final DictService dictService;
 
     public OrderService(OrderMapper orderMapper, DailyMenuMapper menuMapper,
-                        AddressService addressService, ServeDateClock clock,
+                        AddressService addressService, UserMapper userMapper, ServeDateClock clock,
                         ConfigService configService, OrderNumberService numberService,
                         AccessGuard accessGuard, NotifyService notifyService,
                         DictService dictService) {
         this.orderMapper = orderMapper;
         this.menuMapper = menuMapper;
         this.addressService = addressService;
+        this.userMapper = userMapper;
         this.clock = clock;
         this.configService = configService;
         this.numberService = numberService;
@@ -167,6 +171,15 @@ public class OrderService {
                     address.getDetail(), address.getRegionName(), address.getTag());
         } else {
             pickupSlot = requirePickupSlot(cmd.pickupSlot());
+            // 自取单没有地址可留电话，商家找人是靠账号手机号（需求 4.8）
+            User user = userMapper.selectById(userId);
+            String phone = user == null ? null : user.getPhone();
+            if (phone == null || phone.isBlank()) {
+                throw BizException.param("请先在「我的」页填写手机号，方便商家联系你取餐");
+            }
+            // 自取单也写快照：只填联系人（昵称）与电话，地址区域留空。
+            // 之后用户改了账号手机号，历史单上的联系电话也不变 —— 与配送单同一原则
+            addressSnapshot = new AddressSnapshot(user.getNickName(), phone.trim(), null, null, null);
         }
 
         int goodsAmount = 0;
@@ -588,10 +601,16 @@ public class OrderService {
         String status = order.getStatus();
         String payStatus = order.getPayStatus();
         // 中文名与配色优先取字典：商家改个说法不用发版。
-        // 字典缺项时回退到代码里的静态标签，绝不出现空标签
+        // 字典缺项时回退到代码里的静态标签，绝不出现空标签。
+        // ready 例外：一个状态两种叫法（自取「待取餐」、配送「配送中」），
+        // 字典一项只能存一个名，这一项由代码按取送方式算，不吃字典
+        String statusLabel = OrderStatus.READY.equals(status)
+                ? OrderStatus.label(status, order.getDeliveryType())
+                : dictService.label(DictCodes.ORDER_STATUS, status,
+                        OrderStatus.label(status, order.getDeliveryType()));
         return new OrderView(order.getId(), order.getOrderNo(), order.getServeDate(),
                 order.getDeliveryType(), status,
-                dictService.label(DictCodes.ORDER_STATUS, status, OrderStatus.label(status)),
+                statusLabel,
                 dictService.tagType(DictCodes.ORDER_STATUS, status),
                 payStatus,
                 dictService.label(DictCodes.PAY_STATUS, payStatus, PayStatus.label(payStatus)),

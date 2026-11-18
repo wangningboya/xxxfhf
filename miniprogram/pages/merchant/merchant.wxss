@@ -105,6 +105,16 @@ page {
   flex-wrap: wrap;
 }
 
+/* 页面内提示条：菜单页与盒饭编辑页共用 */
+.hint {
+  font-size: 24rpx;
+  color: #a86b00;
+  background: #fff8e6;
+  border-radius: 12rpx;
+  padding: 16rpx 24rpx;
+  margin-bottom: 20rpx;
+}
+
 .chip {
   padding: 10rpx 24rpx;
   margin: 0 14rpx 14rpx 0;

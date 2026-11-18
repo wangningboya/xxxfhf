@@ -75,26 +75,6 @@ class WxCryptoTest {
         assertThat(crypto.decrypt(b64(KEY), "!!!not-base64!!!", b64(IV))).isNull();
     }
 
-    @Test
-    @DisplayName("手机号取 purePhoneNumber，缺失时回落到 phoneNumber")
-    void decodePhone() throws Exception {
-        String withPure = encrypt("{\"phoneNumber\":\"+8613800138000\",\"purePhoneNumber\":\"13800138000\"}");
-        assertThat(crypto.requirePhone(b64(KEY), withPure, b64(IV))).isEqualTo("13800138000");
-
-        String onlyPhoneNumber = encrypt("{\"phoneNumber\":\"13800138001\"}");
-        assertThat(crypto.requirePhone(b64(KEY), onlyPhoneNumber, b64(IV))).isEqualTo("13800138001");
-    }
-
-    @Test
-    @DisplayName("解密结果里没有手机号时抛业务异常")
-    void missingPhoneThrows() throws Exception {
-        String encrypted = encrypt("{\"foo\":\"bar\"}");
-
-        assertThatThrownBy(() -> crypto.requirePhone(b64(KEY), encrypted, b64(IV)))
-                .isInstanceOf(BizException.class)
-                .hasMessageContaining("手机号");
-    }
-
     /* ---------------- 辅助 ---------------- */
 
     private static String encrypt(String plain) throws Exception {

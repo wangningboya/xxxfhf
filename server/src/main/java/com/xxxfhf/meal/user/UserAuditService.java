@@ -3,10 +3,16 @@ package com.xxxfhf.meal.user;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.xxxfhf.meal.address.Address;
+import com.xxxfhf.meal.address.AddressMapper;
+import com.xxxfhf.meal.audit.AuditActions;
+import com.xxxfhf.meal.audit.AuditService;
 import com.xxxfhf.meal.common.BizException;
 import com.xxxfhf.meal.common.PhoneValidator;
 import com.xxxfhf.meal.invite.InviteCode;
 import com.xxxfhf.meal.invite.InviteCodeMapper;
+import com.xxxfhf.meal.order.Order;
+import com.xxxfhf.meal.order.OrderMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -30,10 +36,18 @@ public class UserAuditService {
 
     private final UserMapper userMapper;
     private final InviteCodeMapper inviteCodeMapper;
+    private final AddressMapper addressMapper;
+    private final OrderMapper orderMapper;
+    private final AuditService auditService;
 
-    public UserAuditService(UserMapper userMapper, InviteCodeMapper inviteCodeMapper) {
+    public UserAuditService(UserMapper userMapper, InviteCodeMapper inviteCodeMapper,
+                            AddressMapper addressMapper, OrderMapper orderMapper,
+                            AuditService auditService) {
         this.userMapper = userMapper;
         this.inviteCodeMapper = inviteCodeMapper;
+        this.addressMapper = addressMapper;
+        this.orderMapper = orderMapper;
+        this.auditService = auditService;
     }
 
     /**
@@ -136,8 +150,41 @@ public class UserAuditService {
         userMapper.updateById(user);
         log.info("用户审核 userId={} {} -> {} 操作人={}", userId, from, to, operatorId);
 
+        recordAudit(user, from, to, reason);
+
         Set<String> inviteUsers = inviteUserIds(List.of(user));
         return toRow(user, inviteUsers.contains(user.getId()));
+    }
+
+    /** 审核动作 → 操作记录动作码。单独成方法，避免审核流程里再堆一层分支。 */
+    private void recordAudit(User user, String from, String to, String reason) {
+        String action = switch (to) {
+            case AuditStatus.APPROVED -> AuditActions.USER_APPROVE;
+            case AuditStatus.REJECTED -> AuditActions.USER_REJECT;
+            case AuditStatus.DISABLED -> AuditActions.USER_DISABLE;
+            default -> AuditActions.USER_ENABLE;
+        };
+        StringBuilder summary = new StringBuilder();
+        summary.append(switch (to) {
+            case AuditStatus.APPROVED -> "审核通过用户";
+            case AuditStatus.REJECTED -> "驳回用户";
+            case AuditStatus.DISABLED -> "停用用户";
+            default -> "恢复用户";
+        });
+        summary.append('：').append(display(user))
+                .append('（').append(label(from)).append(" → ").append(label(to)).append('）');
+        if (AuditStatus.REJECTED.equals(to) && reason != null && !reason.isBlank()) {
+            summary.append("｜原因：").append(reason.trim());
+        }
+        auditService.record(AuditActions.TABLE_USER, user.getId(), action, summary.toString());
+    }
+
+    /** 操作记录里指代一个用户：昵称 + 手机号，够认出是谁 */
+    private static String display(User user) {
+        String name = user.getNickName() == null || user.getNickName().isBlank()
+                ? user.getId() : user.getNickName();
+        return user.getPhone() == null || user.getPhone().isBlank()
+                ? name : name + " " + user.getPhone();
     }
 
     /** 商家代填 / 修改用户手机号（用户没填或填错时用）。 */
@@ -145,11 +192,58 @@ public class UserAuditService {
     public UserRow updatePhone(String operatorId, String userId, String phone) {
         User user = requireCustomer(userId);
         String normalized = PhoneValidator.require(phone);
+        String before = user.getPhone();
         user.setPhone(normalized);
         userMapper.updateById(user);
         log.info("商家代填手机号 userId={} 操作人={}", userId, operatorId);
+        auditService.record(AuditActions.TABLE_USER, userId, AuditActions.USER_PHONE,
+                "商家修改手机号：" + display(user) + "｜"
+                        + (before == null || before.isBlank() ? "原为空" : before) + " → " + normalized);
         Set<String> inviteUsers = inviteUserIds(List.of(user));
         return toRow(user, inviteUsers.contains(user.getId()));
+    }
+
+    /**
+     * 物理删除用户，并连带删掉他名下的收货地址（需求 4.17「删除用户」）。
+     *
+     * <p>两条硬约束：
+     * <ul>
+     *   <li><b>有订单就拒删</b>：订单里的 userId 是对账与客诉追溯的线索，删了就断链。已取消、已拒单同样算，<br>
+     *       因为它们仍是凭证。要收回权限请走「停用」。</li>
+     *   <li><b>不把邀请码退回去</b>：{@code invite_code.used_by} 保留原值不置空。置空会让这个码<br>
+     *       变回「未使用」而能被第二个人再用一遍。</li>
+     * </ul>
+     *
+     * <p>删地址不会误伤历史订单：订单里存的是下单那一刻的 {@code addressSnapshot} JSON 副本，<br>
+     * 不引用 address 表。
+     *
+     * @return 连带删除的地址条数，仅用于日志与前端提示
+     */
+    @Transactional
+    public int delete(String operatorId, String userId) {
+        User user = requireCustomer(userId);
+
+        Long orderCount = orderMapper.selectCount(Wrappers.<Order>lambdaQuery()
+                .eq(Order::getUserId, userId));
+        long orders = orderCount == null ? 0L : orderCount;
+        if (orders > 0) {
+            throw BizException.conflict("该用户有 " + orders + " 笔订单，只能停用，不能删除");
+        }
+
+        int addresses = addressMapper.delete(Wrappers.<Address>lambdaQuery()
+                .eq(Address::getUserId, userId));
+        userMapper.deleteById(userId);
+
+        // 没有操作日志表，删除不可恢复，这条日志是唯一的留痕
+        log.info("删除用户 userId={} 昵称={} 手机号={} 状态={} 连带删地址={} 操作人={}",
+                userId, user.getNickName(), user.getPhone(), user.getAuditStatus(), addresses, operatorId);
+
+        // 用户行已经删了，操作记录里必须留下昵称与手机号快照 —— 否则事后只剩一串 UUID，
+        // 谁也说不清当时删的是谁
+        auditService.record(AuditActions.TABLE_USER, userId, AuditActions.USER_DELETE,
+                "删除用户：" + display(user)
+                        + "（" + label(user.getAuditStatus()) + "）｜连带删地址 " + addresses + " 条");
+        return addresses;
     }
 
     private User requireCustomer(String userId) {

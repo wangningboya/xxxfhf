@@ -15,7 +15,7 @@
 
   <view wx:for="{{combos}}" wx:key="id" class="card">
     <view class="combo-head">
-      <image wx:if="{{item.cover}}" class="combo-cover" src="{{item.cover}}" mode="aspectFill" />
+      <image wx:if="{{item.coverUrl}}" class="combo-cover" src="{{item.coverUrl}}" mode="aspectFill" />
       <view class="combo-main">
         <view class="combo-name">
           {{item.name}}

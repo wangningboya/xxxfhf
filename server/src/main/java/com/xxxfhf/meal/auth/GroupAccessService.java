@@ -3,6 +3,8 @@ package com.xxxfhf.meal.auth;
 import com.xxxfhf.meal.common.BizException;
 import com.xxxfhf.meal.common.NickNameValidator;
 import com.xxxfhf.meal.common.PhoneValidator;
+import com.xxxfhf.meal.audit.AuditActions;
+import com.xxxfhf.meal.audit.AuditService;
 import com.xxxfhf.meal.config.ConfigKey;
 import com.xxxfhf.meal.config.ConfigService;
 import com.xxxfhf.meal.invite.InviteCodeService;
@@ -38,14 +40,17 @@ public class GroupAccessService {
     private final WxCrypto wxCrypto;
     private final ConfigService configService;
     private final InviteCodeService inviteCodeService;
+    private final AuditService auditService;
 
     public GroupAccessService(UserMapper userMapper, SessionKeyStore sessionKeyStore, WxCrypto wxCrypto,
-                              ConfigService configService, InviteCodeService inviteCodeService) {
+                              ConfigService configService, InviteCodeService inviteCodeService,
+                              AuditService auditService) {
         this.userMapper = userMapper;
         this.sessionKeyStore = sessionKeyStore;
         this.wxCrypto = wxCrypto;
         this.configService = configService;
         this.inviteCodeService = inviteCodeService;
+        this.auditService = auditService;
     }
 
     /* ---------------- 准入判定 ---------------- */
@@ -153,8 +158,13 @@ public class GroupAccessService {
     public String updatePhone(String userId, String phone) {
         User user = requireUser(userId);
         String normalized = PhoneValidator.require(phone);
+        String before = user.getPhone();
         user.setPhone(normalized);
         userMapper.updateById(user);
+        // 用户自己改也要留痕：改到别的小区可能就是改配送范围，商家事后要对得上
+        auditService.record(AuditActions.TABLE_USER, userId, AuditActions.USER_PHONE,
+                "用户自行修改手机号｜"
+                        + (before == null || before.isBlank() ? "原为空" : before) + " → " + normalized);
         return normalized;
     }
 

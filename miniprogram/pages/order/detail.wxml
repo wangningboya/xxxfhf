@@ -2,7 +2,12 @@
   <view class="status-card">
     <view class="status-label">{{order.statusLabel}}</view>
     <view class="status-pay">收款：{{order.payStatusLabel}}</view>
-    <view class="status-code" wx:if="{{order.pickupCode && (order.status === 'accepted' || order.status === 'making' || order.status === 'ready')}}">
+    <!-- 取餐码只给自取单看，且只在「待取餐 / 已完成」出现：
+         商家没接单就没码，配送单的码留给商家核对，客户这侧不显示 -->
+    <view
+      class="status-code"
+      wx:if="{{order.pickupCode && order.deliveryType === 'pickup' && (order.status === 'ready' || order.status === 'completed')}}"
+    >
       取餐码 {{order.pickupCode}}
     </view>
   </view>
@@ -64,7 +69,10 @@
     <view class="sum-row"><text>取送方式</text><text>{{deliveryTypeText}}</text></view>
     <view class="sum-row" wx:if="{{order.pickupSlot}}"><text>取餐时段</text><text>{{order.pickupSlot}}</text></view>
     <block wx:if="{{order.address}}">
-      <view class="sum-row"><text>收货地址</text><text>{{order.address.regionName}} {{order.address.detail}}</text></view>
+      <!-- 自取单的快照只有联系人与电话，没有地址，那行不渲染 -->
+      <view class="sum-row" wx:if="{{order.address.regionName || order.address.detail}}">
+        <text>收货地址</text><text>{{order.address.regionName}} {{order.address.detail}}</text>
+      </view>
       <view class="sum-row"><text>联系人</text><text>{{order.address.contactName}} {{order.address.phone}}</text></view>
     </block>
     <view class="sum-row" wx:if="{{order.remark}}"><text>备注</text><text>{{order.remark}}</text></view>

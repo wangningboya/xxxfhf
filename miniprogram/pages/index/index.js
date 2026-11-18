@@ -1,6 +1,6 @@
 const app = getApp();
 const { request } = require('../../utils/request');
-const { yuan, dateStr, addDays, dayLabel } = require('../../utils/format');
+const { yuan, dateStr, addDays, dayLabel, assetUrl } = require('../../utils/format');
 const cartUtil = require('../../utils/cart');
 
 Page({
@@ -153,6 +153,7 @@ Page({
           comboId: item.comboId,
           name: item.name,
           cover: item.cover,
+          coverUrl: assetUrl(item.cover),
           price: Number(item.price || 0),
           priceText: yuan(item.price),
           dishesText: (item.dishes || []).map((d) => d.name + '×' + d.qty).join('、'),
@@ -221,6 +222,7 @@ Page({
           comboId: item.comboId,
           name: item.name,
           cover: item.cover,
+          coverUrl: assetUrl(item.cover),
           desc: item.desc || '',
           priceText: yuan(item.price),
           dishesText: (item.dishes || []).map((d) => d.name + '×' + d.qty).join('、'),
@@ -254,6 +256,10 @@ Page({
     const comboId = e.currentTarget.dataset.id;
     const item = this.data.viewItems.find((v) => v.comboId === comboId);
     if (!item) {
+      return;
+    }
+    // 待审核用户只能看，不能选：拦住要在这里，不能等他填完地址、提交订单才说
+    if (app.blockIfNotApproved('账号审核中，通过后才能选餐')) {
       return;
     }
     if (!this.data.menu.orderable) {

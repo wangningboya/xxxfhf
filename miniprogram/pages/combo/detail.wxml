@@ -1,5 +1,5 @@
 <view class="page" wx:if="{{!loading && item}}">
-  <image class="cover" wx:if="{{item.cover}}" src="{{item.cover}}" mode="aspectFill" />
+  <image class="cover" wx:if="{{coverUrl}}" src="{{coverUrl}}" mode="aspectFill" />
   <view class="cover cover-empty" wx:else>暂无图片</view>
 
   <view class="card">
@@ -54,8 +54,8 @@
       <text class="total-label">合计</text>
       <text class="total-amount">¥{{totalText}}</text>
     </view>
-    <view class="add-btn {{orderable ? '' : 'add-btn-disabled'}}" bindtap="onAdd">
-      {{browse ? '暂不供应，仅可浏览' : (orderable ? '加入购物车' : '当前不可下单')}}
+    <view class="add-btn {{orderable && approved ? '' : 'add-btn-disabled'}}" bindtap="onAdd">
+      {{!approved ? '账号审核中，暂不能选餐' : (browse ? '暂不供应，仅可浏览' : (orderable ? '加入购物车' : '当前不可下单'))}}
     </view>
   </view>
 </view>

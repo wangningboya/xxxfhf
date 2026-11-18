@@ -3,6 +3,7 @@ package com.xxxfhf.meal.address;
 import com.xxxfhf.meal.auth.Perms;
 import com.xxxfhf.meal.auth.RequirePerm;
 import com.xxxfhf.meal.common.ApiResponse;
+import com.xxxfhf.meal.common.PageResult;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -12,8 +13,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
 
 /**
  * 地址维护（商家端）：主路径。商家录的地址直接可用，用户提交的在这里确认。
@@ -28,10 +27,22 @@ public class AdminAddressController {
         this.addressService = addressService;
     }
 
+    /**
+     * 地址队列（跨用户）。默认落「待确认」。
+     *
+     * userId 从必填改为可选：进页面就该看到待办，而不是先被要求选一个人。
+     * 想「只看某个人的地址」时把它当筛选条件传进来，行为与原来的 listByUser 一致。
+     */
     @GetMapping("/list")
     @RequirePerm(Perms.USER_ADDRESS)
-    public ApiResponse<List<Address>> list(@RequestParam String userId) {
-        return ApiResponse.ok(addressService.listByUser(userId));
+    public ApiResponse<PageResult<AddressService.AddressRow>> list(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String userId,
+            @RequestParam(required = false) String regionId,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int pageSize) {
+        return ApiResponse.ok(addressService.page(status, userId, regionId, keyword, page, pageSize));
     }
 
     @PostMapping("/save")

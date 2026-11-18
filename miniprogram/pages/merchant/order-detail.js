@@ -38,7 +38,7 @@ Page({
           dishesText: (item.dishes || []).map((d) => d.name + '×' + d.qty).join('、'),
           specText: (item.specs || []).map((s) => s.groupName + '：' + s.optionName).join('　'),
         }));
-        const next = this.nextOf(order.status);
+        const next = this.nextOf(order.status, order.deliveryType);
         this.setData({
           row,
           order,
@@ -56,16 +56,22 @@ Page({
       .catch((err) => app.toastError(err));
   },
 
-  /** 状态机在服务端也有校验，这里只是决定按钮显示什么 */
-  nextOf(status) {
+  /**
+   * 状态机在服务端也有校验，这里只是决定按钮显示什么。
+   * 没有「制作中」，自取与配送也不分叉：接单后都进 ready，
+   * 只是自取说「取餐」、配送说「送达」。
+   */
+  nextOf(status, deliveryType) {
+    const delivery = deliveryType === 'delivery';
     if (status === 'accepted') {
-      return { status: 'making', label: '开始制作' };
-    }
-    if (status === 'making') {
-      return { status: 'ready', label: '做好了，可取餐' };
+      return delivery
+        ? { status: 'ready', label: '开始配送' }
+        : { status: 'ready', label: '做好了，可取餐' };
     }
     if (status === 'ready') {
-      return { status: 'completed', label: '确认已完成' };
+      return delivery
+        ? { status: 'completed', label: '确认已送达' }
+        : { status: 'completed', label: '确认已完成' };
     }
     return { status: '', label: '' };
   },

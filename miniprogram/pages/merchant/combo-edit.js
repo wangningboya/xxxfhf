@@ -1,7 +1,7 @@
 const app = getApp();
 const { request, getToken } = require('../../utils/request');
 const { apiBase } = require('../../config');
-const { yuan } = require('../../utils/format');
+const { yuan, assetUrl } = require('../../utils/format');
 
 /**
  * 盒饭编辑（F-H09 编辑部分）。
@@ -17,6 +17,8 @@ Page({
     name: '',
     priceYuan: '',
     cover: '',
+    /** 预览用的完整地址；cover 存的是相对路径，提交时用它，别混成一个字段 */
+    coverPreview: '',
     desc: '',
     sort: '',
     dishes: [],
@@ -51,6 +53,7 @@ Page({
           name: combo.name || '',
           priceYuan: yuan(combo.price),
           cover: combo.cover || '',
+          coverPreview: assetUrl(combo.cover),
           desc: combo.desc || '',
           sort: combo.sort === null || combo.sort === undefined ? '' : String(combo.sort),
           dishes: (combo.dishes || []).map((d) => ({
@@ -125,7 +128,8 @@ Page({
         const filePath = res.tempFiles[0].tempFilePath;
         this.setData({ uploading: true });
         wx.uploadFile({
-          url: apiBase + '/upload',
+          // 上传接口挂在 /admin/file 下（与后台网页同一入口），不是根路径的 /upload
+          url: apiBase + '/admin/file/upload',
           filePath,
           name: 'file',
           header: { Authorization: 'Bearer ' + getToken() },
@@ -137,7 +141,11 @@ Page({
               body = {};
             }
             if (uploadRes.statusCode === 200 && body.code === 0 && body.data) {
-              this.setData({ cover: body.data.url, uploading: false });
+              this.setData({
+                cover: body.data.url,
+                coverPreview: assetUrl(body.data.url),
+                uploading: false,
+              });
             } else {
               this.setData({ uploading: false });
               app.toastError({ message: body.message || '上传失败' });
@@ -153,7 +161,7 @@ Page({
   },
 
   onClearCover() {
-    this.setData({ cover: '' });
+    this.setData({ cover: '', coverPreview: '' });
   },
 
   /* ---------------- 组成菜品 ---------------- */

@@ -87,8 +87,8 @@ Page({
           return;
         }
         const phone = (res.content || '').trim();
-        if (!/^1\d{10}$/.test(phone)) {
-          wx.showToast({ title: '手机号应为 11 位', icon: 'none' });
+        if (!/^1[3-9]\d{9}$/.test(phone)) {
+          wx.showToast({ title: '手机号应为 11 位（1[3-9] 开头）', icon: 'none' });
           return;
         }
         request({ url: '/admin/user/phone', method: 'POST', data: { userId: user.userId, phone } })
@@ -198,7 +198,8 @@ Page({
         userId: this.data.selectedUser.userId,
         regionId: regions[0].id,
         contactName: '',
-        phone: '',
+        // 手机号必填（需求 4.8），新增时预填所选用户的手机号，可改
+        phone: (this.data.selectedUser.phone || '').trim(),
         detail: '',
         tag: '',
       },
@@ -260,8 +261,8 @@ Page({
       wx.showToast({ title: '请填写联系人', icon: 'none' });
       return;
     }
-    if (!form.phone || !/^1\d{10}$/.test(form.phone.trim())) {
-      wx.showToast({ title: '请填写 11 位手机号', icon: 'none' });
+    if (!form.phone || !/^1[3-9]\d{9}$/.test(form.phone.trim())) {
+      wx.showToast({ title: '手机号必填，11 位（1[3-9] 开头）', icon: 'none' });
       return;
     }
     if (!form.detail || !form.detail.trim()) {

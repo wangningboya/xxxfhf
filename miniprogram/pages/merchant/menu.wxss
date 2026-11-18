@@ -1,14 +1,5 @@
 @import "./merchant.wxss";
 
-.hint {
-  font-size: 24rpx;
-  color: #a86b00;
-  background: #fff8e6;
-  border-radius: 12rpx;
-  padding: 16rpx 24rpx;
-  margin-bottom: 20rpx;
-}
-
 .combo {
   background: #ffffff;
   border-radius: 20rpx;

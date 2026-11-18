@@ -26,18 +26,4 @@ public final class PhoneValidator {
         }
         return trimmed;
     }
-
-    /**
-     * 可选手机号：空值放行并返回 null，填了就必须合法。
-     *
-     * 用于收货地址 —— 自取单不需要手机号（需求 4.8），但配送单需要；
-     * 同一个地址表两种场景共用，所以只能「填了才校验」，不能强制必填。
-     */
-    public static String optional(String phone) {
-        String trimmed = phone == null ? "" : phone.trim();
-        if (trimmed.isEmpty()) {
-            return null;
-        }
-        return require(trimmed);
-    }
 }

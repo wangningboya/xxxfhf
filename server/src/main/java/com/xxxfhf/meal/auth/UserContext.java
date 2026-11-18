@@ -28,6 +28,16 @@ public final class UserContext {
         return user;
     }
 
+    /**
+     * 取当前用户，没有则返回 null。
+     *
+     * 定时任务与事件回调里没有请求上下文，写操作日志的人要能「没有操作人」而不是抛 401 ——
+     * 那种场景下抛异常会把整批任务带崩。
+     */
+    public static CurrentUser peek() {
+        return HOLDER.get();
+    }
+
     public static String userId() {
         return require().userId();
     }

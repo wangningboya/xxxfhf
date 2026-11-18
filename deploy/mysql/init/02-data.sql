@@ -18,12 +18,13 @@ INSERT INTO `role` (`id`, `name`, `permissions`, `builtin`)
 VALUES ('role_merchant', '商家',
         JSON_ARRAY(
                 'dish.manage', 'combo.manage', 'menu.manage',
-                'user.audit', 'user.view',
+                'user.audit', 'user.view', 'user.delete',
                 'region.manage', 'user.address',
                 'order.accept', 'order.view',
                 'prep.view', 'prep.export',
                 'order.payment', 'finance.view',
-                'config.manage', 'role.manage', 'dict.manage'
+                'config.manage', 'role.manage', 'dict.manage',
+                'audit.view'
         ),
         1)
 ON DUPLICATE KEY UPDATE `permissions` = VALUES(`permissions`), `builtin` = VALUES(`builtin`);
@@ -74,8 +75,7 @@ ON DUPLICATE KEY UPDATE `type_code` = `type_code`;
 INSERT INTO `dict_item` (`id`, `type_code`, `item_value`, `item_label`, `tag_type`, `sort`, `status`, `builtin`)
 VALUES ('di-ord-01', 'order_status', 'pending_accept', '待接单', 'warning', 10, 'active', 1),
        ('di-ord-02', 'order_status', 'accepted', '已接单', 'primary', 20, 'active', 1),
-       ('di-ord-03', 'order_status', 'making', '制作中', 'warning', 30, 'active', 1),
-       ('di-ord-04', 'order_status', 'ready', '待取餐', 'success', 40, 'active', 1),
+       ('di-ord-04', 'order_status', 'ready', '待取餐', 'success', 30, 'active', 1),
        ('di-ord-05', 'order_status', 'completed', '已完成', 'success', 50, 'active', 1),
        ('di-ord-06', 'order_status', 'cancelled', '已取消', 'info', 60, 'active', 1),
        ('di-ord-07', 'order_status', 'rejected', '已拒单', 'danger', 70, 'active', 1),

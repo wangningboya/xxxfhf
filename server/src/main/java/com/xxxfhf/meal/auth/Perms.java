@@ -20,6 +20,8 @@ public final class Perms {
     public static final String USER_AUDIT = "user.audit";
     /** 只读查看用户列表与审核状态 */
     public static final String USER_VIEW = "user.view";
+    /** 物理删除用户（含名下地址）；不可撤销，与「停用」是两回事 */
+    public static final String USER_DELETE = "user.delete";
     /** 区域新增、改名、排序、停用 */
     public static final String REGION_MANAGE = "region.manage";
     /** 维护用户收货地址 */
@@ -42,15 +44,18 @@ public final class Perms {
     public static final String ROLE_MANAGE = "role.manage";
     /** 数据字典维护 */
     public static final String DICT_MANAGE = "dict.manage";
+    /** 查看操作记录（谁在什么时候改了哪条数据） */
+    public static final String AUDIT_VIEW = "audit.view";
 
     /** 内置「商家」角色的全部权限。 */
     public static final String[] ALL = {
             DISH_MANAGE, COMBO_MANAGE, MENU_MANAGE,
-            USER_AUDIT, USER_VIEW,
+            USER_AUDIT, USER_VIEW, USER_DELETE,
             REGION_MANAGE, USER_ADDRESS,
             ORDER_ACCEPT, ORDER_VIEW,
             PREP_VIEW, PREP_EXPORT,
             ORDER_PAYMENT, FINANCE_VIEW,
-            CONFIG_MANAGE, ROLE_MANAGE, DICT_MANAGE
+            CONFIG_MANAGE, ROLE_MANAGE, DICT_MANAGE,
+            AUDIT_VIEW
     };
 }

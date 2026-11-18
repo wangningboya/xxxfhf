@@ -58,7 +58,7 @@
 
     <view class="menu-list">
       <view class="menu-item" wx:for="{{viewItems}}" wx:key="comboId">
-        <image class="menu-cover" wx:if="{{item.cover}}" src="{{item.cover}}" mode="aspectFill" />
+        <image class="menu-cover" wx:if="{{item.coverUrl}}" src="{{item.coverUrl}}" mode="aspectFill" />
         <view class="menu-cover menu-cover-empty" wx:else>暂无图</view>
 
         <view class="menu-body" data-id="{{item.comboId}}" bindtap="onOpenCombo">
@@ -72,7 +72,7 @@
 
         <view class="menu-add-wrap">
           <view
-            class="menu-add {{item.soldOut || !menu.orderable ? 'menu-add-disabled' : ''}}"
+            class="menu-add {{item.soldOut || !menu.orderable || auditStatus !== 'approved' ? 'menu-add-disabled' : ''}}"
             data-id="{{item.comboId}}"
             bindtap="onQuickAdd"
           >
@@ -94,7 +94,7 @@
     </view>
     <view class="menu-list" wx:else>
       <view class="menu-item" wx:for="{{allItems}}" wx:key="comboId">
-        <image class="menu-cover" wx:if="{{item.cover}}" src="{{item.cover}}" mode="aspectFill" />
+        <image class="menu-cover" wx:if="{{item.coverUrl}}" src="{{item.coverUrl}}" mode="aspectFill" />
         <view class="menu-cover menu-cover-empty" wx:else>暂无图</view>
 
         <view class="menu-body" data-id="{{item.comboId}}" bindtap="onOpenCombo">

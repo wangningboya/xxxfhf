@@ -44,8 +44,9 @@ http.interceptors.response.use(
     if (body.code === 0) {
       return body.data;
     }
+    // notified: 已在本拦截器弹过 ElMessage，main.js 的 unhandledrejection 兜底据此去重
     ElMessage.error(body.message || '操作失败');
-    return Promise.reject({ code: body.code, message: body.message });
+    return Promise.reject({ code: body.code, message: body.message, notified: true });
   },
   (error) => {
     const status = error.response ? error.response.status : 0;
@@ -62,7 +63,7 @@ http.interceptors.response.use(
     } else {
       ElMessage.error(body.message || '服务暂时不可用，请稍后重试');
     }
-    return Promise.reject({ code: status, message: body.message });
+    return Promise.reject({ code: status, message: body.message, notified: true });
   }
 );
 

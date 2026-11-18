@@ -1,5 +1,6 @@
 const app = getApp();
 const { request, getToken } = require('../../utils/request');
+const { assetUrl } = require('../../utils/format');
 const { apiBase } = require('../../config');
 
 /**
@@ -42,7 +43,13 @@ Page({
     const kw = encodeURIComponent(this.data.keyword || '');
     const status = this.data.status ? '&status=' + this.data.status : '';
     request({ url: '/admin/dish/list?keyword=' + kw + status })
-      .then((list) => this.setData({ dishes: list || [], loading: false }))
+      .then((list) => this.setData({
+        // image 是相对路径（要原样回传保存），imageUrl 才是给 <image src> 用的完整地址
+        dishes: (list || []).map((dish) => Object.assign({}, dish, {
+          imageUrl: assetUrl(dish.image),
+        })),
+        loading: false,
+      }))
       .catch((err) => {
         this.setData({ loading: false });
         app.toastError(err);
@@ -55,7 +62,7 @@ Page({
   },
 
   onNew() {
-    this.setData({ form: { id: '', name: '', image: '', sort: this.data.dishes.length + 1 } });
+    this.setData({ form: { id: '', name: '', image: '', imageUrl: '', sort: this.data.dishes.length + 1 } });
   },
 
   onEdit(e) {
@@ -68,6 +75,7 @@ Page({
         id: dish.id,
         name: dish.name,
         image: dish.image || '',
+        imageUrl: dish.imageUrl || '',
         sort: dish.sort || 0,
       },
     });
@@ -92,7 +100,8 @@ Page({
       success: (res) => {
         this.setData({ uploading: true });
         wx.uploadFile({
-          url: apiBase + '/upload',
+          // 上传接口挂在 /admin/file 下（与后台网页同一入口），不是根路径的 /upload
+          url: apiBase + '/admin/file/upload',
           filePath: res.tempFiles[0].tempFilePath,
           name: 'file',
           header: { Authorization: 'Bearer ' + getToken() },
@@ -104,7 +113,10 @@ Page({
               body = {};
             }
             if (uploadRes.statusCode === 200 && body.code === 0 && body.data) {
-              const form = Object.assign({}, this.data.form, { image: body.data.url });
+              const form = Object.assign({}, this.data.form, {
+                image: body.data.url,
+                imageUrl: assetUrl(body.data.url),
+              });
               this.setData({ form, uploading: false });
             } else {
               this.setData({ uploading: false });

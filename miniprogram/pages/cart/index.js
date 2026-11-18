@@ -1,5 +1,6 @@
+const app = getApp();
 const { request } = require('../../utils/request');
-const { yuan } = require('../../utils/format');
+const { yuan, assetUrl } = require('../../utils/format');
 const cartUtil = require('../../utils/cart');
 
 Page({
@@ -26,6 +27,7 @@ Page({
         comboId: item.comboId,
         name: item.name,
         cover: item.cover,
+        coverUrl: assetUrl(item.cover),
         specText: item.specText,
         qty: item.qty,
         unitText: yuan(unit),
@@ -115,6 +117,10 @@ Page({
   onCheckout() {
     if (!this.data.count) {
       wx.showToast({ title: '购物车是空的', icon: 'none' });
+      return;
+    }
+    // 待审核用户：车里可能有拦截之前加的东西，走到结算前就要说清
+    if (app.blockIfNotApproved('账号审核中，通过后才能下单')) {
       return;
     }
     if (this.data.cutoff) {

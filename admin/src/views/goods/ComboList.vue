@@ -113,6 +113,14 @@
             </el-checkbox>
           </el-checkbox-group>
           <div class="muted">规格组在「规格组」页维护，这里只选用</div>
+          <el-alert
+            type="info"
+            :closable="false"
+            show-icon
+            title="保存后，已发布的当天菜单不会自动更新"
+            description="要到「每日菜单」撤下 → 保存 → 重新发布才生效；草稿态菜单下次保存时自动用上新配置。"
+            style="margin-top: 8px"
+          />
         </el-form-item>
       </el-form>
 

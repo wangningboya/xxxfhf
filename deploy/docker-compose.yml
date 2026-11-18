@@ -1,15 +1,14 @@
 # =============================================================================
-# Docker Compose：nginx + app + mysql（单台云服务器）
+# Docker Compose：mysql（单台云服务器）
 #
 # 用法：
-#   1. cp .env.example .env 并填好密码与密钥
-#   2. docker compose up -d --build
-#   3. docker compose ps          # 三个服务都应为 healthy/running
-#   4. curl http://127.0.0.1/api/health
+#   1. cp .env.example .env 并填好密码
+#   2. docker compose up -d
+#   3. docker compose ps          # mysql 应为 healthy/running
 #
 # 说明：
-#   - mysql 不映射端口到宿主机，只在内部网络可达（3306 不对外）
-#   - 图片卷 upload-data 同时挂给 app（读写）与 nginx（只读），Nginx 直接静态输出
+#   - mysql 端口只绑定 127.0.0.1，供宿主机上的服务连接，不对外暴露
+#   - nginx 已在宿主机安装；app 以 jar 包形式在宿主机运行，均不由 compose 管理
 # =============================================================================
 
 name: meal-order
@@ -28,6 +27,8 @@ services:
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_0900_ai_ci
+    ports:
+      - "127.0.0.1:3306:3306"
     volumes:
       - mysql-data:/var/lib/mysql
       - ./mysql/my.cnf:/etc/mysql/conf.d/my.cnf:ro
@@ -42,71 +43,9 @@ services:
     networks:
       - internal
 
-  app:
-    build:
-      context: ../server
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    depends_on:
-      mysql:
-        condition: service_healthy
-    environment:
-      TZ: Asia/Shanghai
-      # 生产 profile：镜像里已 ENV 成 prod，这里再显式写一次，
-      # 让「这个容器跑的是哪套配置」在 compose 文件里一眼可见
-      SPRING_PROFILES_ACTIVE: "prod"
-      APP_DB_URL: "jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-meal_order}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true"
-      APP_DB_USER: ${MYSQL_USER:-meal}
-      APP_DB_PASSWORD: ${MYSQL_PASSWORD}
-      APP_JWT_SECRET: ${APP_JWT_SECRET}
-      APP_WX_APP_ID: ${APP_WX_APP_ID}
-      APP_WX_APP_SECRET: ${APP_WX_APP_SECRET}
-      APP_UPLOAD_DIR: /data/upload
-      APP_LOG_DIR: /app/logs
-      APP_SCHEDULE_ENABLED: "true"
-      APP_PREPAY_RELEASE_CRON: "0 */5 * * * *"
-      # 商家初始账号：首次启动自动创建，已存在则不覆盖
-      APP_ADMIN_USERNAME: ${APP_ADMIN_USERNAME:-admin}
-      APP_ADMIN_PASSWORD: ${APP_ADMIN_PASSWORD:-admin}
-      APP_ADMIN_INIT_ENABLED: ${APP_ADMIN_INIT_ENABLED:-true}
-    volumes:
-      - upload-data:/data/upload
-      - app-logs:/app/logs
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/ready || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 40s
-    networks:
-      - internal
-
-  nginx:
-    image: nginx:1.27-alpine
-    restart: unless-stopped
-    depends_on:
-      app:
-        condition: service_started
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
-      - ./nginx/certs:/etc/nginx/certs:ro
-      - upload-data:/data/upload:ro
-      # 网页后台静态文件：本地 npm run build 产出 dist，Nginx 直接托管在 /admin/
-      - ../admin/dist:/data/admin:ro
-      - nginx-logs:/var/log/nginx
-    networks:
-      - internal
-
 networks:
   internal:
     driver: bridge
 
 volumes:
   mysql-data:
-  upload-data:
-  app-logs:
-  nginx-logs:

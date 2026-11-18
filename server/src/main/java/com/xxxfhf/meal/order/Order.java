@@ -56,7 +56,7 @@ public class Order {
     private Integer deliveryFee;
     private Integer totalAmount;
 
-    /** pending_accept / accepted / making / ready / completed / cancelled / rejected */
+    /** pending_accept / accepted / ready / completed / cancelled / rejected（ready：自取=待取餐，配送=配送中） */
     private String status;
 
     /** 取消申请中。为 true 时商家端禁用接单，必须先批或驳 */

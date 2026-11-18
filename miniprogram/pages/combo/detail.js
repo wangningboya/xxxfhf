@@ -1,6 +1,6 @@
 const app = getApp();
 const { request } = require('../../utils/request');
-const { yuan, delta } = require('../../utils/format');
+const { yuan, delta, assetUrl } = require('../../utils/format');
 const cartUtil = require('../../utils/cart');
 
 Page({
@@ -22,10 +22,17 @@ Page({
     selected: {},
     qty: 1,
     maxQty: 99,
+    /** 审核已通过：待审核用户只能看，按钮置灰（需求 3.1 / 4.17） */
+    approved: true,
   },
 
   onLoad(options) {
-    this.setData({ comboId: options.comboId || '', serveDate: options.serveDate || '' });
+    const me = app.globalData.me;
+    this.setData({
+      comboId: options.comboId || '',
+      serveDate: options.serveDate || '',
+      approved: !me || me.auditStatus === 'approved',
+    });
     this.load();
   },
 
@@ -92,6 +99,8 @@ Page({
     this.setData({
       loading: false,
       item,
+      /** 封面单独算一份完整地址：item.cover 是相对路径，还要用于加购，不能就地改 */
+      coverUrl: assetUrl(item.cover),
       orderable: orderable && maxQty > 0,
       browse: !!browse,
       desc: item.desc || '',
@@ -160,6 +169,9 @@ Page({
   },
 
   onAdd() {
+    if (app.blockIfNotApproved('账号审核中，通过后才能选餐')) {
+      return;
+    }
     if (!this.data.orderable) {
       wx.showToast({ title: '当前不可下单', icon: 'none' });
       return;

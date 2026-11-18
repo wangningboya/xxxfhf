@@ -215,7 +215,7 @@
             plain
             @click="onAdvance(detail)"
           >
-            {{ nextLabel(detail.order.status) }}
+            {{ nextLabel(detail.order.status, detail.order.deliveryType) }}
           </el-button>
           <el-button
             v-if="detail.order.payStatus !== 'paid' && detail.order.payStatus !== 'refunded' && auth.has('order.payment')"
@@ -271,7 +271,6 @@ const route = useRoute();
 const STATUS = [
   { value: 'pending_accept', label: '待接单' },
   { value: 'accepted', label: '已接单' },
-  { value: 'making', label: '制作中' },
   { value: 'ready', label: '待取餐' },
   { value: 'completed', label: '已完成' },
   { value: 'cancelled', label: '已取消' },
@@ -383,14 +382,27 @@ function refreshDetail() {
   load();
 }
 
+/** 没有「制作中」：一条直线 已接单 → 出餐(ready) → 已完成，配送方式不改变路径 */
 function nextStatus(current) {
-  const map = { accepted: 'making', making: 'ready', ready: 'completed' };
-  return map[current] || '';
+  if (current === 'accepted') {
+    return 'ready';
+  }
+  if (current === 'ready') {
+    return 'completed';
+  }
+  return '';
 }
 
-function nextLabel(current) {
-  const map = { accepted: '开始制作', making: '出餐待取', ready: '完成订单' };
-  return map[current] || '';
+/** 同一个 ready，自取是「完成订单」、配送是「确认已送达」；出餐那一步同理 */
+function nextLabel(current, deliveryType) {
+  const delivery = deliveryType === 'delivery';
+  if (current === 'accepted') {
+    return delivery ? '开始配送' : '出餐待取';
+  }
+  if (current === 'ready') {
+    return delivery ? '确认已送达' : '完成订单';
+  }
+  return '';
 }
 
 function onAdvance(row) {

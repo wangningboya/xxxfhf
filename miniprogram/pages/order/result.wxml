@@ -13,7 +13,11 @@
       <text class="row-label">供餐日</text>
       <text class="row-value">{{order.serveDate}}</text>
     </view>
-    <view class="row" wx:if="{{order.pickupCode}}">
+    <!-- 刚下单是「待接单」，取餐码要等商家出餐才展示，见订单详情；配送单不展示码 -->
+    <view
+      class="row"
+      wx:if="{{order.pickupCode && order.deliveryType === 'pickup' && (order.status === 'ready' || order.status === 'completed')}}"
+    >
       <text class="row-label">取餐码</text>
       <text class="row-code">{{order.pickupCode}}</text>
     </view>

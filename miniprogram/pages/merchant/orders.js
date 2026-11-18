@@ -7,7 +7,6 @@ const dict = require('../../utils/dict');
 const FALLBACK_STATUS = [
   { key: 'pending_accept', label: '待接单' },
   { key: 'accepted', label: '已接单' },
-  { key: 'making', label: '制作中' },
   { key: 'ready', label: '待取餐' },
   { key: 'completed', label: '已完成' },
   { key: 'cancelled', label: '已取消' },

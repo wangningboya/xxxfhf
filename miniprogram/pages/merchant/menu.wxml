@@ -19,6 +19,7 @@
     </view>
   </view>
 
+  <view class="hint">改了盒饭的规格组或菜品后，这份菜单要「撤下 → 保存 → 发布」才会生效；已下的单不受影响</view>
   <view class="hint" wx:if="{{cutoff}}">这一天已截单，改动不影响已下的订单</view>
 
   <view class="empty" wx:if="{{!loading && !combos.length}}">

@@ -13,7 +13,6 @@ const dict = require('../../utils/dict');
 const FALLBACK_STATUS = [
   { key: 'pending_accept', label: '待接单' },
   { key: 'accepted', label: '已接单' },
-  { key: 'making', label: '制作中' },
   { key: 'ready', label: '待取餐' },
   { key: 'completed', label: '已完成' },
   { key: 'rejected', label: '已拒单' },
@@ -90,6 +89,8 @@ Page({
           serveDate: order.serveDate,
           status: order.status,
           statusLabel: order.statusLabel,
+          // 取餐码只在自取单展示，列表要带配送方式才判断得出
+          deliveryType: order.deliveryType,
           // 配色优先用服务端下发的 statusTag（同一份字典算出来的），
           // 本地字典还没加载时也能正确上色
           tagClass: 'tag-' + (order.statusTag || dict.tagType('order_status', order.status)),

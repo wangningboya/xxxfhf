@@ -27,6 +27,15 @@
     </div>
 
     <el-alert
+      type="info"
+      :closable="false"
+      show-icon
+      title="改了盒饭的规格组或菜品，已发布的菜单不会自动跟着变"
+      description="要到「盒饭管理」改完保存后，回到这里走一遍「撤下 → 保存 → 发布」，用户端才会看到新的规格与菜品。已下的单不受影响。"
+      style="margin-bottom: 12px"
+    />
+
+    <el-alert
       v-if="view.cutoff"
       type="warning"
       :closable="false"

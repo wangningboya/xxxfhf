@@ -30,7 +30,10 @@
       <text class="order-date">供餐日 {{item.serveDate}} · {{item.qty}} 份</text>
       <text class="order-amount">¥{{item.totalText}}</text>
     </view>
-    <view class="order-code" wx:if="{{item.pickupCode && (item.status === 'accepted' || item.status === 'making' || item.status === 'ready')}}">
+    <view
+      class="order-code"
+      wx:if="{{item.pickupCode && item.deliveryType === 'pickup' && (item.status === 'ready' || item.status === 'completed')}}"
+    >
       取餐码 {{item.pickupCode}}
     </view>
   </view>
