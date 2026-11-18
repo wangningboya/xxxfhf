@@ -7,6 +7,7 @@ import com.xxxfhf.meal.audit.AuditActions;
 import com.xxxfhf.meal.audit.AuditHelper;
 import com.xxxfhf.meal.audit.AuditService;
 import com.xxxfhf.meal.common.BizException;
+import com.xxxfhf.meal.common.ContentSecurityService;
 import com.xxxfhf.meal.common.MaskUtil;
 import com.xxxfhf.meal.common.PageResult;
 import com.xxxfhf.meal.common.PhoneValidator;
@@ -44,13 +45,16 @@ public class AddressService {
     private final RegionService regionService;
     private final UserMapper userMapper;
     private final AuditService auditService;
+    private final ContentSecurityService contentSecurity;
 
     public AddressService(AddressMapper addressMapper, RegionService regionService,
-                          UserMapper userMapper, AuditService auditService) {
+                          UserMapper userMapper, AuditService auditService,
+                          ContentSecurityService contentSecurity) {
         this.addressMapper = addressMapper;
         this.regionService = regionService;
         this.userMapper = userMapper;
         this.auditService = auditService;
+        this.contentSecurity = contentSecurity;
     }
 
     /** 某个用户的全部地址（含待确认的），用户端与商家端都用这一个查询。 */
@@ -136,7 +140,7 @@ public class AddressService {
             throw BizException.param("不能把地址改到其他用户名下");
         }
         address.setUserId(cmd.userId());
-        fill(address, cmd);
+        fill(address, cmd, cmd.userId());
         address.setSource("merchant");
         address.setStatus("active");
 
@@ -173,7 +177,7 @@ public class AddressService {
             }
         }
         address.setUserId(userId);
-        fill(address, cmd);
+        fill(address, cmd, userId);
         address.setSource("user");
         address.setStatus("pending");
 
@@ -278,7 +282,7 @@ public class AddressService {
     }
 
     /** 字段填充与校验。区域必填且必须存在、启用。 */
-    private void fill(Address address, AddressCommand cmd) {
+    private void fill(Address address, AddressCommand cmd, String userId) {
         String regionId = cmd.regionId() == null ? "" : cmd.regionId().trim();
         if (regionId.isEmpty()) {
             throw BizException.param("请选择所属区域");
@@ -293,6 +297,7 @@ public class AddressService {
         if (contactName.isEmpty()) {
             throw BizException.param("请填写收货人");
         }
+        requireContentOk(userId, contactName, "收货人姓名包含违规内容，请修改");
         String detail = cmd.detail() == null ? "" : cmd.detail().trim();
         if (detail.isEmpty()) {
             throw BizException.param("请填写详细地址");
@@ -314,6 +319,23 @@ public class AddressService {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    /**
+     * 收货人姓名先过内容安全。
+     *
+     * <p>它会被拼进配送单与备菜表，传播面比昵称大；只有命中违规才拒，
+     * 检测接口不可用时放行（熟人小店，挡住正常用户比漏一句话更糟）。
+     */
+    private void requireContentOk(String userId, String content, String message) {
+        if (content == null) {
+            return;
+        }
+        User user = userId == null ? null : userMapper.selectById(userId);
+        String openid = user == null ? null : user.getOpenid();
+        if (!contentSecurity.pass(userId, openid, content)) {
+            throw BizException.param(message);
+        }
     }
 
     /** 操作记录里指代一条地址：区域 + 门牌 + 联系人，够认出是哪条 */

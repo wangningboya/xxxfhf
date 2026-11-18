@@ -32,15 +32,6 @@ Page({
     // 进入页面就定下幂等号。同一页面重复提交只会产生一单，
     // 用户退回去改了再进来的算新的一单 —— 那是他的真实意图
     this.setData({ requestId: 'r' + Date.now() + Math.floor(Math.random() * 100000) });
-    // 自取单要用账号手机号拦截（需求 4.8），必须拿最新的：
-    // 用户可能刚在「我的」页填过、或刚被商家在后台代填，缓存不可靠
-    app.refreshMe()
-      .then((me) => {
-        this.mePhone = (me && me.phone) || '';
-      })
-      .catch(() => {
-        this.mePhone = (app.globalData.me && app.globalData.me.phone) || '';
-      });
   },
 
   onShow() {
@@ -179,22 +170,8 @@ Page({
       });
       return;
     }
-    // 自取单没有地址可留电话，账号必须已填手机号，否则商家找不到人（需求 4.8）
-    const mePhone = this.mePhone || (app.globalData.me && app.globalData.me.phone) || '';
-    if (this.data.deliveryType === 'pickup' && !mePhone) {
-      wx.showModal({
-        title: '还差一步',
-        content: '自取单需要留一个联系电话，请先在「我的」页填写手机号',
-        confirmText: '去填写',
-        success: (res) => {
-          if (res.confirm) {
-            wx.switchTab({ url: '/pages/mine/index' });
-          }
-        },
-      });
-      return;
-    }
-
+    // 自取单不强制留手机号：到店报 4 位取餐码即可核销，电话不是必要信息。
+    // 账号里填过号会带进订单快照，商家仍能在售后窗口内联系到人
     this.setData({ submitting: true });
     // loading 遮罩：挡住页面上的其他点击，配合按钮禁用双保险防重复提交
     wx.showLoading({ title: '提交中', mask: true });

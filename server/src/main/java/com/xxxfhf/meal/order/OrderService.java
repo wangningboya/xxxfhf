@@ -8,6 +8,7 @@ import com.xxxfhf.meal.address.AddressService;
 import com.xxxfhf.meal.auth.AccessGuard;
 import com.xxxfhf.meal.audit.AuditHelper;
 import com.xxxfhf.meal.common.BizException;
+import com.xxxfhf.meal.common.ContentSecurityService;
 import com.xxxfhf.meal.common.MaskUtil;
 import com.xxxfhf.meal.config.ConfigKey;
 import com.xxxfhf.meal.config.ConfigService;
@@ -71,12 +72,14 @@ public class OrderService {
     private final NotifyService notifyService;
     private final DictService dictService;
     private final OrderStatusLogService statusLogService;
+    private final ContentSecurityService contentSecurity;
 
     public OrderService(OrderMapper orderMapper, DailyMenuMapper menuMapper,
                         AddressService addressService, UserMapper userMapper, ServeDateClock clock,
                         ConfigService configService, OrderNumberService numberService,
                         AccessGuard accessGuard, NotifyService notifyService,
-                        DictService dictService, OrderStatusLogService statusLogService) {
+                        DictService dictService, OrderStatusLogService statusLogService,
+                        ContentSecurityService contentSecurity) {
         this.orderMapper = orderMapper;
         this.menuMapper = menuMapper;
         this.addressService = addressService;
@@ -88,6 +91,7 @@ public class OrderService {
         this.notifyService = notifyService;
         this.dictService = dictService;
         this.statusLogService = statusLogService;
+        this.contentSecurity = contentSecurity;
     }
 
     /* ==================== 下单 ==================== */
@@ -212,7 +216,9 @@ public class OrderService {
         // 收款方式不在这里预置：下单时还没付钱，方式由用户点「我已完成付款」时选（需求 4.10）
         order.setPickupSlot(pickupSlot);
         order.setStockReleased(false);
-        order.setRemark(truncate(cmd.remark(), 255));
+        String remark = trimToNull(cmd.remark());
+        requireContentOk(userId, remark, "备注包含违规内容，请修改后再提交");
+        order.setRemark(truncate(remark, 255));
         LocalDateTime now = LocalDateTime.now();
         order.setCreatedAt(now);
 
@@ -475,6 +481,7 @@ public class OrderService {
         }
 
         String trimmedReason = truncate(reason, 200);
+        requireContentOk(userId, trimmedReason, "取消原因包含违规内容，请修改后再提交");
         boolean cutoff = clock.isCutoff(order.getServeDate());
 
         if (!cutoff) {
@@ -671,6 +678,23 @@ public class OrderService {
     private static String trimToNull(String value) {
         String trimmed = trim(value);
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    /**
+     * 用户填的自由文本先过内容安全。
+     *
+     * <p>只有命中违规才拒（87014），检测接口不可用时放行——熟人小店的场景里，
+     * 把正常用户挡在门外比漏掉一句话更糟。备注会进配送单与备菜表，传播面比昵称大。
+     */
+    private void requireContentOk(String userId, String content, String message) {
+        if (content == null) {
+            return;
+        }
+        User user = userMapper.selectById(userId);
+        String openid = user == null ? null : user.getOpenid();
+        if (!contentSecurity.pass(userId, openid, content)) {
+            throw BizException.param(message);
+        }
     }
 
     private static String truncate(String value, int max) {

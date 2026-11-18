@@ -174,13 +174,30 @@ public class PrepService {
                 .map(c -> c.name() + " ×" + c.qty())
                 .reduce((a, b) -> a + "、" + b).orElse("");
         String contacts = row.contacts().stream()
-                .map(c -> (c.contactName() == null ? "" : c.contactName())
-                        + (c.detail() == null ? "" : "（" + c.detail() + "）"))
+                .map(c -> cell(c.contactName()) + (c.detail() == null ? "" : "（" + cell(c.detail()) + "）"))
                 .reduce((a, b) -> a + "；" + b).orElse("");
         String slots = row.slots().stream()
                 .map(s -> (s.slot() == null ? "未填时段" : s.slot()) + "：" + s.qty() + " 份")
                 .reduce((a, b) -> a + "、" + b).orElse("");
         return new RegionExcelRow(row.regionName(), row.qty(), row.orderCount(), combos, contacts, slots);
+    }
+
+    /**
+     * 导出单元格防公式注入。
+     *
+     * <p>收货人姓名和详细地址是用户自己填的：开头一个 {@code =} 就能让 Excel、
+     * WPS、Numbers 在商家打开表格时执行公式（=HYPERLINK 外发数据是常见玩法）。
+     * 加单引号后 Excel 按文本处理，显示时看不到这个引号。
+     */
+    static String cell(String value) {
+        if (value == null || value.isEmpty()) {
+            return "";
+        }
+        char first = value.charAt(0);
+        if (first == '=' || first == '+' || first == '-' || first == '@') {
+            return "'" + value;
+        }
+        return value;
     }
 
     /* ==================== 聚合中间态 ==================== */
