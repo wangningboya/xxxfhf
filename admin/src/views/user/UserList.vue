@@ -195,7 +195,9 @@
           <el-input v-model="phoneValue" maxlength="20" placeholder="11 位大陆手机号" clearable />
         </el-form-item>
       </el-form>
-      <div class="muted">仅用于配送联系。下单时会把手机号快照进订单，改这里不影响历史订单。</div>
+      <div class="muted">
+        仅用于订单联系，不用于营销；用户可在小程序「我的」页查看和修改。下单时会把手机号快照进订单，改这里不影响历史订单。
+      </div>
       <template #footer>
         <el-button @click="phoneVisible = false">取消</el-button>
         <el-button type="primary" :loading="phoneSaving" @click="onSavePhone">保存</el-button>

@@ -41,6 +41,10 @@
         bindinput="onInput"
       />
     </view>
+    <!-- 用途告知：收集目的、范围、政策入口（隐私整改 P0-10） -->
+    <view class="hint">
+      仅用于配送或取餐时联系你，不用于营销。<text class="hint-link" bindtap="onOpenPrivacy">查看《隐私政策》</text>
+    </view>
 
     <view class="row row-column">
       <text class="label">详细地址</text>

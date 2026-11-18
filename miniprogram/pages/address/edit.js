@@ -77,6 +77,16 @@ Page({
     this.setData({ tag: this.data.tag === tag ? '' : tag });
   },
 
+  /** 用途告知里的政策入口：政策页（P0-01）建好前降级提示，避免点击无反应 */
+  onOpenPrivacy() {
+    wx.navigateTo({
+      url: '/pages/privacy/index',
+      fail: () => {
+        wx.showToast({ title: '隐私政策页即将上线', icon: 'none' });
+      },
+    });
+  },
+
   onSave() {
     if (this.data.saving) {
       return;

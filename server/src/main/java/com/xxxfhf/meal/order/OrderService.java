@@ -175,15 +175,9 @@ public class OrderService {
                     address.getDetail(), address.getRegionName(), address.getTag());
         } else {
             pickupSlot = requirePickupSlot(cmd.pickupSlot());
-            // 自取单没有地址可留电话，商家找人是靠账号手机号（需求 4.8）
-            User user = userMapper.selectById(userId);
-            String phone = user == null ? null : user.getPhone();
-            if (phone == null || phone.isBlank()) {
-                throw BizException.param("请先在「我的」页填写手机号，方便商家联系你取餐");
-            }
-            // 自取单也写快照：只填联系人（昵称）与电话，地址区域留空。
-            // 之后用户改了账号手机号，历史单上的联系电话也不变 —— 与配送单同一原则
-            addressSnapshot = new AddressSnapshot(user.getNickName(), phone.trim(), null, null, null);
+            // 自取单没有地址，电话不强制填：取餐靠 4 位取餐码核销，商家不需要电话也能履约
+            // （隐私整改 P0-08；微信《收集用户手机号规范》里「到店点餐/取餐」手机号非必要）
+            addressSnapshot = pickupSnapshot(userMapper.selectById(userId));
         }
 
         int goodsAmount = 0;
@@ -641,6 +635,17 @@ public class OrderService {
             throw BizException.param("取餐时段已调整，请重新选择");
         }
         return slot;
+    }
+
+    /**
+     * 自取单快照：联系人固定为昵称，电话选填（可能是 null），详细地址与区域留空。
+     * 快照一经写入不再随账号手机号变化，与配送单同一原则。
+     */
+    static AddressSnapshot pickupSnapshot(User user) {
+        if (user == null) {
+            return null;
+        }
+        return new AddressSnapshot(user.getNickName(), trimToNull(user.getPhone()), null, null, null);
     }
 
     private static String trim(String value) {

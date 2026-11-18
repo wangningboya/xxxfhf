@@ -187,7 +187,7 @@ public class GroupAccessService {
         User user = requireUser(userId);
         String nickName = NickNameValidator.require(rawNickName);
         // 内容安全：昵称会出现在商家审核列表里，是公开可见的文本，先过一遍微信检测
-        if (!contentSecurity.pass(user.getOpenid(), nickName)) {
+        if (!contentSecurity.pass(user.getId(), user.getOpenid(), nickName)) {
             throw BizException.param("昵称包含违规内容，请修改");
         }
         user.setNickName(nickName);

@@ -166,7 +166,9 @@
         </el-form-item>
         <el-form-item label="手机号" required>
           <el-input v-model="form.phone" maxlength="11" placeholder="11 位手机号" />
-          <div class="muted">送到后按这个号联系取餐人；新增时自动带入归属用户的手机号，可改</div>
+          <div class="muted">
+            仅用于配送或取餐时联系收货人，不用于营销。送到后按这个号联系；新增时自动带入归属用户的手机号，可改。
+          </div>
         </el-form-item>
         <el-form-item label="详细地址" required>
           <el-input v-model="form.detail" type="textarea" :rows="2" maxlength="120" />

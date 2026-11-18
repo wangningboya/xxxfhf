@@ -64,7 +64,7 @@
         <el-table-column label="收货人" min-width="240">
           <template #default="{ row }">
             <div v-for="(contact, index) in row.contacts || []" :key="index">
-              {{ contact.contactName }} {{ contact.phone }}
+              {{ contact.contactName }} {{ contact.phone || '未留电话' }}
             </div>
             <div v-for="(slot, index) in row.slots || []" :key="'s' + index" class="muted">
               {{ slot.slot }}：{{ slot.qty }} 份

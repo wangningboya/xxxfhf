@@ -83,6 +83,18 @@ page {
   line-height: 1.5;
 }
 
+/* 手机号用途告知（隐私整改 P0-10）：与输入值左对齐，弱化但可读 */
+.hint {
+  padding: 0 0 20rpx 150rpx;
+  font-size: 22rpx;
+  color: #9a9a9a;
+  line-height: 1.6;
+}
+
+.hint-link {
+  color: #d97600;
+}
+
 .arrow {
   font-size: 34rpx;
   color: #c8c8c8;

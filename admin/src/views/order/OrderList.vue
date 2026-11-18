@@ -150,7 +150,7 @@
             {{ deliveryTypeLabel(detail.order.deliveryType) }}
           </el-descriptions-item>
           <el-descriptions-item v-if="detail.order.address" label="收货信息" :span="2">
-            {{ detail.order.address.contactName }} {{ detail.order.address.phone }}<br />
+            {{ detail.order.address.contactName }} {{ detail.order.address.phone || '未留电话' }}<br />
             {{ detail.order.address.regionName }} {{ detail.order.address.detail }}
           </el-descriptions-item>
           <el-descriptions-item label="备注" :span="2">{{ detail.order.remark || '—' }}</el-descriptions-item>
