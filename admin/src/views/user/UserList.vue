@@ -388,7 +388,9 @@ async function onBatchApprove() {
   }
   ElMessage.success('已通过 ' + ok + ' 位');
   if (failed.length) {
-    ElMessageBox.alert('以下用户未通过：' + failed.join('、'), '部分失败', { type: 'warning' });
+    ElMessageBox.alert('以下用户未通过：' + failed.join('、'), '部分失败', { type: 'warning' })
+      // 同生成邀请码的结果提示：点 × 关闭会 reject，需接住避免全局兜底误报
+      .catch(() => {});
   }
   load();
 }
@@ -412,7 +414,9 @@ function onCreateInvite() {
             '邀请码：' + result.code + '\n有效期至 ' + (result.expireAt || '').replace('T', ' ').slice(0, 16),
             '生成成功',
             { type: 'success' }
-          );
+          )
+            // 点 × 关闭结果提示框也会 reject，不接住会被全局兜底当成"未知错误"
+            .catch(() => {});
         })
         .catch(() => {});
     })

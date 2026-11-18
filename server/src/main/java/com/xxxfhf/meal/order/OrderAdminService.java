@@ -3,10 +3,10 @@ package com.xxxfhf.meal.order;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.xxxfhf.meal.audit.AuditActions;
 import com.xxxfhf.meal.audit.AuditHelper;
-import com.xxxfhf.meal.audit.AuditService;
 import com.xxxfhf.meal.common.BizException;
+import com.xxxfhf.meal.dict.DictCodes;
+import com.xxxfhf.meal.dict.DictService;
 import com.xxxfhf.meal.menu.DateParam;
 import com.xxxfhf.meal.menu.ServeDateClock;
 import com.xxxfhf.meal.notify.NotifyService;
@@ -43,17 +43,20 @@ public class OrderAdminService {
     private final UserMapper userMapper;
     private final ServeDateClock clock;
     private final NotifyService notifyService;
-    private final AuditService auditService;
+    private final OrderStatusLogService statusLogService;
+    private final DictService dictService;
 
     public OrderAdminService(OrderMapper orderMapper, OrderService orderService,
                              UserMapper userMapper, ServeDateClock clock,
-                             NotifyService notifyService, AuditService auditService) {
+                             NotifyService notifyService, OrderStatusLogService statusLogService,
+                             DictService dictService) {
         this.orderMapper = orderMapper;
         this.orderService = orderService;
         this.userMapper = userMapper;
         this.clock = clock;
         this.notifyService = notifyService;
-        this.auditService = auditService;
+        this.statusLogService = statusLogService;
+        this.dictService = dictService;
     }
 
     /* ==================== 查询 ==================== */
@@ -134,9 +137,11 @@ public class OrderAdminService {
                 skipped.add(order.getOrderNo() + "：用户已申请取消，请先批或驳再处理");
                 continue;
             }
+            // 业务时间戳与流转记录取同一个 now：两处差几毫秒，排查时会以为是两次操作
+            LocalDateTime now = LocalDateTime.now();
             int affected = orderMapper.update(null, Wrappers.<Order>lambdaUpdate()
                     .set(Order::getStatus, OrderStatus.ACCEPTED)
-                    .set(Order::getAcceptedAt, LocalDateTime.now())
+                    .set(Order::getAcceptedAt, now)
                     .eq(Order::getId, orderId)
                     .eq(Order::getStatus, OrderStatus.PENDING_ACCEPT)
                     .eq(Order::getCancelRequested, false));
@@ -148,8 +153,8 @@ public class OrderAdminService {
             if (Boolean.TRUE.equals(order.getStockReleased())) {
                 warnings.add(order.getOrderNo() + "：份数曾因超时未付款被释放，请确认该盒饭是否还有余量");
             }
-            auditService.record(AuditActions.TABLE_ORDER, order.getId(), AuditActions.ORDER_ACCEPT,
-                    "接单：" + order.getOrderNo());
+            statusLogService.record(order.getId(), OrderLogActions.ORDER_ACCEPT,
+                    OrderStatus.PENDING_ACCEPT, OrderStatus.ACCEPTED, null, now);
             // 通知用户「已接单」。用更新前的对象即可：模板只用到订单号、明细、供餐日这些不变字段
             notifyService.accepted(order);
         }
@@ -174,11 +179,12 @@ public class OrderAdminService {
                     + OrderStatus.label(order.getStatus()) + "」");
         }
 
+        // 先记拒单再动份数与收款：时间轴上「已拒单」要排在「转入待退款」之前
+        statusLogService.record(orderId, OrderLogActions.ORDER_REJECT,
+                OrderStatus.PENDING_ACCEPT, OrderStatus.REJECTED, trimmed, LocalDateTime.now());
         orderService.releaseStock(order);
         orderService.moveToRefundingIfPaid(orderId);
         log.info("商家拒单 orderNo={} 操作人={} 原因={}", order.getOrderNo(), operatorId, trimmed);
-        auditService.record(AuditActions.TABLE_ORDER, orderId, AuditActions.ORDER_REJECT,
-                "拒单：" + order.getOrderNo() + "｜原因：" + trimmed);
         Order rejected = orderService.require(orderId);
         // 拒单必须通知到人：用户可能已经转了钱，只靠他自己刷页面发现太晚
         notifyService.rejected(rejected);
@@ -215,10 +221,10 @@ public class OrderAdminService {
         log.info("订单推进 orderNo={} {} -> {} 操作人={}",
                 order.getOrderNo(), order.getStatus(), target, operatorId);
         Order advanced = orderService.require(orderId);
-        auditService.record(AuditActions.TABLE_ORDER, orderId, AuditActions.ORDER_ADVANCE,
-                "订单状态：" + order.getOrderNo() + " "
-                        + OrderStatus.label(order.getStatus(), advanced.getDeliveryType()) + " → "
-                        + OrderStatus.label(target, advanced.getDeliveryType()));
+        // 出餐与完成分成两个动作码：目标状态不同，商家在时间轴上一眼能看出这单走到哪一步
+        statusLogService.record(orderId,
+                OrderStatus.READY.equals(target) ? OrderLogActions.ORDER_READY : OrderLogActions.ORDER_COMPLETE,
+                order.getStatus(), target, null, LocalDateTime.now());
         if (OrderStatus.READY.equals(target)
                 && !OrderStatus.TYPE_DELIVERY.equals(advanced.getDeliveryType())) {
             // 只有自取单发「可以取餐了」+ 取餐码。配送单进的是同一个 ready，
@@ -266,29 +272,51 @@ public class OrderAdminService {
             throw BizException.conflict("订单状态已变化，请刷新后重试");
         }
         log.info("取餐核销 orderNo={} code={} 操作人={}", order.getOrderNo(), trimmed, operatorId);
-        auditService.record(AuditActions.TABLE_ORDER, order.getId(), AuditActions.ORDER_PICKUP,
-                "取餐核销：" + order.getOrderNo() + "｜取餐码 " + trimmed);
+        // 核销的目标态也是「已完成」，但和商家手动点「完成订单」分成两个动作码：
+        // 事后要分得清这单是输码核对的，还是直接点了按钮
+        statusLogService.record(order.getId(), OrderLogActions.ORDER_PICKUP,
+                order.getStatus(), OrderStatus.COMPLETED, "取餐码 " + trimmed, LocalDateTime.now());
         return orderService.toView(orderService.require(order.getId()));
     }
 
     /* ==================== 收款与退款 ==================== */
 
-    /** 确认收款：未收款 / 用户声称已付款 → 已确认收款。 */
+    /**
+     * 确认收款：未收款 / 用户声称已付款 → 已确认收款。
+     *
+     * <p><b>收款方式必填</b>（需求 4.10 / N-33）：现金单用户根本不点【我已完成付款】，
+     * 若确认时不再选一次，这类单永远没有方式值。前端默认带出用户申报值、可改，
+     * 两条记录值不同就是「用户说微信、实际收现金」的差异依据。
+     *
+     * <p><b>两端都调这个接口</b>：网页后台 {@code OrderList.vue} 与小程序
+     * {@code pages/merchant/order-detail} 都走 {@code POST /admin/order/payment}，
+     * 所以必填校验落地时两端弹窗必须同步上线，否则小程序端确认收款会直接 400。
+     *
+     * <p>合法值以字典 {@code pay_method} 为准：商家在字典里新增的方式也能直接收，
+     * 代码里不再写死三个常量。
+     */
     @Transactional
-    public OrderService.OrderView confirmPayment(String operatorId, String orderId) {
+    public OrderService.OrderView confirmPayment(String operatorId, String orderId,
+                                                 String payMethodRaw) {
         Order order = orderService.require(orderId);
+        String payMethod = dictService.requireValue(DictCodes.PAY_METHOD, "收款方式",
+                payMethodRaw, "确认收款");
+        LocalDateTime now = LocalDateTime.now();
         int affected = orderMapper.update(null, Wrappers.<Order>lambdaUpdate()
                 .set(Order::getPayStatus, PayStatus.PAID)
-                .set(Order::getPaidAt, LocalDateTime.now())
+                .set(Order::getPaidAt, now)
+                .set(Order::getPayMethod, payMethod)
                 .eq(Order::getId, orderId)
                 .in(Order::getPayStatus, List.of(PayStatus.UNPAID, PayStatus.CLAIMED)));
         if (affected == 0) {
             throw BizException.conflict("当前收款状态是「" + PayStatus.label(order.getPayStatus())
                     + "」，不能确认收款");
         }
-        log.info("确认收款 orderNo={} 操作人={}", order.getOrderNo(), operatorId);
-        auditService.record(AuditActions.TABLE_ORDER, orderId, AuditActions.ORDER_PAY_CONFIRM,
-                "确认收款：" + order.getOrderNo() + "｜原状态 " + PayStatus.label(order.getPayStatus()));
+        log.info("确认收款 orderNo={} 操作人={} 方式={}",
+                order.getOrderNo(), operatorId, payMethod);
+        // from 取更新前的收款状态：未收款直接确认、用户声称后确认，时间轴上能分清这两种来路
+        statusLogService.record(orderId, OrderLogActions.PAY_CONFIRM,
+                order.getPayStatus(), PayStatus.PAID, null, payMethod, now);
         return orderService.toView(orderService.require(orderId));
     }
 
@@ -311,8 +339,8 @@ public class OrderAdminService {
                     + PayStatus.label(order.getPayStatus()) + "」");
         }
         log.info("收款回退 orderNo={} 操作人={}", order.getOrderNo(), operatorId);
-        auditService.record(AuditActions.TABLE_ORDER, orderId, AuditActions.ORDER_PAY_REVERT,
-                "收款回退为未收款：" + order.getOrderNo());
+        statusLogService.record(orderId, OrderLogActions.PAY_REVERT,
+                PayStatus.PAID, PayStatus.UNPAID, null, LocalDateTime.now());
         return orderService.toView(orderService.require(orderId));
     }
 
@@ -325,9 +353,10 @@ public class OrderAdminService {
     @Transactional
     public OrderService.OrderView refund(String operatorId, String orderId) {
         Order order = orderService.require(orderId);
+        LocalDateTime now = LocalDateTime.now();
         int affected = orderMapper.update(null, Wrappers.<Order>lambdaUpdate()
                 .set(Order::getPayStatus, PayStatus.REFUNDED)
-                .set(Order::getRefundedAt, LocalDateTime.now())
+                .set(Order::getRefundedAt, now)
                 .set(Order::getRefundOperator, operatorId)
                 .eq(Order::getId, orderId)
                 .eq(Order::getPayStatus, PayStatus.REFUNDING));
@@ -336,8 +365,8 @@ public class OrderAdminService {
                     + PayStatus.label(order.getPayStatus()) + "」");
         }
         log.info("标记退款完成 orderNo={} 操作人={}", order.getOrderNo(), operatorId);
-        auditService.record(AuditActions.TABLE_ORDER, orderId, AuditActions.ORDER_REFUND,
-                "标记退款完成：" + order.getOrderNo());
+        statusLogService.record(orderId, OrderLogActions.PAY_REFUND,
+                PayStatus.REFUNDING, PayStatus.REFUNDED, null, now);
         return orderService.toView(orderService.require(orderId));
     }
 
@@ -376,14 +405,20 @@ public class OrderAdminService {
             throw BizException.conflict("该订单没有待处理的取消申请");
         }
         String trimmedRemark = remark == null || remark.isBlank() ? null : remark.trim();
+        LocalDateTime now = LocalDateTime.now();
         CancelRequest origin = order.getCancelRequest();
         CancelRequest handled = new CancelRequest(
                 origin == null ? null : origin.reason(),
                 origin == null ? null : origin.appliedAt(),
-                LocalDateTime.now(),
+                now,
                 result,
                 operatorId,
                 trimmedRemark);
+
+        // 定时任务没有登录态，操作人与来源必须显式给 —— 事后看到「系统同意的」，
+        // 才知道当时商家根本没处理，这跟「商家点了同意」是两回事
+        String actorId = operatorId == null ? AuditHelper.SYSTEM : operatorId;
+        String source = operatorId == null ? AuditHelper.SOURCE_TASK : AuditHelper.source();
 
         if (approve) {
             int affected = orderMapper.update(null, Wrappers.<Order>lambdaUpdate()
@@ -396,6 +431,10 @@ public class OrderAdminService {
             if (affected == 0) {
                 throw BizException.conflict("申请状态已变化，请刷新后重试");
             }
+            // 同意取消与超时自动同意共用一个动作码，靠来源（admin / task）区分：
+            // 同一件事的两种触发方式，拆两个码只会让前端文案维护两份
+            statusLogService.record(orderId, OrderLogActions.ORDER_CANCEL,
+                    order.getStatus(), OrderStatus.CANCELLED, trimmedRemark, actorId, source, now);
             orderService.releaseStock(order);
             orderService.moveToRefundingIfPaid(orderId);
         } else {
@@ -408,12 +447,14 @@ public class OrderAdminService {
             if (affected == 0) {
                 throw BizException.conflict("申请状态已变化，请刷新后重试");
             }
+            // 驳回不改订单状态，属事件类；不记的话时间轴上会出现「申请取消」却查不到结果
+            statusLogService.record(orderId, OrderLogActions.EVENT_CANCEL_DENY,
+                    null, null, trimmedRemark, actorId, source, now);
         }
 
         log.info("取消申请审批 orderNo={} 结果={} 操作人={} 备注={}",
                 order.getOrderNo(), result, operatorId == null ? "系统" : operatorId,
                 trimmedRemark == null ? "" : trimmedRemark);
-        recordCancelAudit(order, result, trimmedRemark);
         Order handledOrder = orderService.require(orderId);
         if (approve) {
             // 同意了就等于这单没了，商家要及时知道，别再排进备菜
@@ -423,35 +464,6 @@ public class OrderAdminService {
     }
 
     /* ==================== 内部 ==================== */
-
-    /**
-     * 取消申请审批的操作记录。
-     *
-     * 三条路径分开记：商家同意、商家驳回、超时自动同意。第三条操作人是 system、来源是 task ——
-     * 事后看到「谁同意的」是系统，才知道当时商家根本没处理，这跟「商家点了同意」是两回事。
-     */
-    private void recordCancelAudit(Order order, String result, String remark) {
-        String action;
-        String verb;
-        if (CancelRequest.AUTO_APPROVED.equals(result)) {
-            action = AuditActions.ORDER_CANCEL_AUTO;
-            verb = "超时自动同意取消";
-        } else if (CancelRequest.APPROVED.equals(result)) {
-            action = AuditActions.ORDER_CANCEL_APPROVE;
-            verb = "同意取消申请";
-        } else {
-            action = AuditActions.ORDER_CANCEL_DENY;
-            verb = "驳回取消申请";
-        }
-        String summary = verb + "：" + order.getOrderNo()
-                + (remark == null || remark.isBlank() ? "" : "｜备注：" + remark);
-        if (CancelRequest.AUTO_APPROVED.equals(result)) {
-            auditService.record(AuditActions.TABLE_ORDER, order.getId(), action, summary,
-                    AuditHelper.SYSTEM, AuditHelper.SOURCE_TASK);
-        } else {
-            auditService.record(AuditActions.TABLE_ORDER, order.getId(), action, summary);
-        }
-    }
 
     /** 批量补用户昵称与手机号，避免逐行查用户（N+1）。 */
     private List<AdminOrderRow> toRows(List<Order> orders) {

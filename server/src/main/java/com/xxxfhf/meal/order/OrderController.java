@@ -56,10 +56,11 @@ public class OrderController {
         return ApiResponse.ok(orderService.detail(userId, orderId));
     }
 
-    /** 我已完成付款 → 收款状态置为「用户声称已付款」，等商家核对。 */
+    /** 我已完成付款 → 收款状态置为「用户声称已付款」，等商家核对。收款方式必填。 */
     @PostMapping("/claim-paid")
-    public ApiResponse<OrderService.OrderView> claimPaid(@Valid @RequestBody IdRequest request) {
-        return ApiResponse.ok(orderService.claimPaid(UserContext.userId(), request.orderId()));
+    public ApiResponse<OrderService.OrderView> claimPaid(@Valid @RequestBody ClaimPaidRequest request) {
+        return ApiResponse.ok(orderService.claimPaid(
+                UserContext.userId(), request.orderId(), request.payMethod()));
     }
 
     /** 取消 / 申请取消。截单前直接取消，截单后转为申请等商家审批。 */
@@ -70,6 +71,15 @@ public class OrderController {
     }
 
     public record IdRequest(@NotBlank(message = "缺少订单 ID") String orderId) {
+    }
+
+    /**
+     * 我已完成付款。{@code payMethod} 不带 {@code @NotBlank} ——
+     * 校验交给 {@code DictService.requireValue}（字典 {@code pay_method} 里启用着的项才算合法），
+     * 让它同时覆盖「缺值」与「已停用 / 不存在的值」，错误文案也能说清是哪种情况。
+     */
+    public record ClaimPaidRequest(@NotBlank(message = "缺少订单 ID") String orderId,
+                                   String payMethod) {
     }
 
     public record CancelRequest(@NotBlank(message = "缺少订单 ID") String orderId,

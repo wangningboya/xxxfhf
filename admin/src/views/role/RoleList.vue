@@ -67,9 +67,17 @@
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="110" fixed="right">
+          <el-table-column label="登录状态" width="160">
+            <template #default="{ row }">
+              <el-tag v-if="row.lockedUntil" type="danger" size="small">锁定中</el-tag>
+              <span v-else-if="row.loginFailCount > 0" class="muted">已失败 {{ row.loginFailCount }} 次</span>
+              <span v-else class="muted">正常</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="160" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" @click="openAssign(row)">分配角色</el-button>
+              <el-button v-if="row.lockedUntil" link type="danger" @click="onUnlock(row)">解锁</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -267,6 +275,24 @@ function onAssign() {
     .finally(() => {
       assigning.value = false;
     });
+}
+
+/** 解除登录锁定：密码连续失败 3 次会锁 30 分钟，这里是提前放行 */
+function onUnlock(row) {
+  ElMessageBox.confirm(
+    '解除「' + (row.displayName || row.username) + '」的登录锁定？解除后可立即重新登录。',
+    '解锁账号'
+  )
+    .then(() => {
+      http
+        .post('/admin/role/unlock', { userId: row.userId })
+        .then(() => {
+          ElMessage.success('已解锁');
+          load();
+        })
+        .catch(() => {});
+    })
+    .catch(() => {});
 }
 
 onMounted(load);

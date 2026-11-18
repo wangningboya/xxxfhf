@@ -1,11 +1,14 @@
 package com.xxxfhf.meal.notify;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.xxxfhf.meal.audit.AuditHelper;
 import com.xxxfhf.meal.auth.WxApiClient;
 import com.xxxfhf.meal.config.ConfigKey;
 import com.xxxfhf.meal.config.ConfigService;
 import com.xxxfhf.meal.order.Order;
 import com.xxxfhf.meal.order.OrderItem;
+import com.xxxfhf.meal.order.OrderLogActions;
+import com.xxxfhf.meal.order.OrderStatusLogService;
 import com.xxxfhf.meal.user.User;
 import com.xxxfhf.meal.user.UserMapper;
 import com.xxxfhf.meal.user.UserType;
@@ -50,13 +53,16 @@ public class NotifyService {
     private final ConfigService configService;
     private final UserMapper userMapper;
     private final ObjectMapper objectMapper;
+    private final OrderStatusLogService statusLogService;
 
     public NotifyService(WxApiClient wxApiClient, ConfigService configService,
-                         UserMapper userMapper, ObjectMapper objectMapper) {
+                         UserMapper userMapper, ObjectMapper objectMapper,
+                         OrderStatusLogService statusLogService) {
         this.wxApiClient = wxApiClient;
         this.configService = configService;
         this.userMapper = userMapper;
         this.objectMapper = objectMapper;
+        this.statusLogService = statusLogService;
     }
 
     /* ==================== 对外：五类通知 ==================== */
@@ -103,12 +109,17 @@ public class NotifyService {
         if (order == null) {
             return;
         }
+        // 操作人与来源在**触发这一刻**取好：afterCommit 里 ThreadLocal 虽然还在同一线程，
+        // 但把上下文带过去才说得清「这条通知是哪次操作引发的」（需求 4.20）。
+        String operatorId = AuditHelper.actor();
+        String source = AuditHelper.source();
         Runnable task = () -> {
             try {
-                doFire(type, order);
+                doFire(type, order, operatorId, source);
             } catch (Exception ex) {
                 // 兜底：这里再漏出去就会影响主流程
                 log.warn("推送 {} 失败 orderNo={}", type.code(), order.getOrderNo(), ex);
+                recordNotify(order, type, false, "发送异常：" + ex.getMessage(), operatorId, source);
             }
         };
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
@@ -123,17 +134,23 @@ public class NotifyService {
         }
     }
 
-    private void doFire(NotifyType type, Order order) {
+    private void doFire(NotifyType type, Order order, String operatorId, String source) {
         Template template = templates().get(type.code());
         if (template == null || template.templateId() == null || template.templateId().isBlank()) {
-            // 模板还没申请下来，静默跳过（F-I01 未完成时系统也要能跑）
+            // 模板还没申请下来，静默跳过（F-I01 未完成时系统也要能跑），但要留下痕迹：
+            // 时间轴上「通知未送达｜模板未配置」能一眼看出是配置问题，不是没点按钮
             log.debug("订阅消息模板未配置，跳过 type={}", type.code());
+            recordNotify(order, type, false, "模板未配置", operatorId, source);
             return;
         }
 
         List<String> openids = resolveOpenids(type.recipient(), order);
         if (openids.isEmpty()) {
             log.debug("没有可推送的接收人 type={} orderNo={}", type.code(), order.getOrderNo());
+            recordNotify(order, type, false,
+                    type.recipient() == NotifyType.Recipient.MERCHANT
+                            ? "没有已绑定微信的商家账号" : "下单用户未绑定微信",
+                    operatorId, source);
             return;
         }
 
@@ -141,19 +158,51 @@ public class NotifyService {
         String page = fillPage(template.page(), order);
 
         int ok = 0;
+        String firstFail = null;
         for (String openid : openids) {
             Map<String, String> data = new LinkedHashMap<>();
             for (Map.Entry<String, String> entry : template.fields().entrySet()) {
                 String raw = vars.get(entry.getValue());
                 data.put(entry.getKey(), clamp(entry.getKey(), raw));
             }
-            if (wxApiClient.sendSubscribe(openid, template.templateId(), page, data)) {
+            WxApiClient.SendResult result = wxApiClient.sendSubscribe(
+                    openid, template.templateId(), page, data);
+            if (result.ok()) {
                 ok++;
+            } else if (firstFail == null) {
+                firstFail = result.describe();
             }
         }
-        if (ok > 0) {
+        if (ok == openids.size()) {
             log.info("推送 {} 成功 orderNo={} 接收人={}", type.code(), order.getOrderNo(), ok);
+            recordNotify(order, type, true, "已发送 " + ok + " 人", operatorId, source);
+        } else {
+            log.warn("推送 {} 部分失败 orderNo={} 成功={} 总数={}",
+                    type.code(), order.getOrderNo(), ok, openids.size());
+            recordNotify(order, type, false,
+                    "成功 " + ok + " / 失败 " + (openids.size() - ok) + " 人："
+                            + (firstFail == null ? "未知原因" : firstFail),
+                    operatorId, source);
         }
+    }
+
+    /**
+     * 把推送结果写进订单时间轴（需求 4.20 的 {@code event.notify} / {@code event.notify_fail}）。
+     *
+     * <p>成功也记，不只记失败：只有失败记录时，「商家说通知了、用户说没收到」仍然各执一词；
+     * 成功与失败成对出现，才能证明这一刻系统确实发过。
+     *
+     * <p>这里写库失败由 {@code OrderStatusLogService} 内部吞掉，不会反过来影响推送流程。
+     */
+    private void recordNotify(Order order, NotifyType type, boolean ok, String detail,
+                              String operatorId, String source) {
+        if (order.getId() == null) {
+            return;
+        }
+        // 走独立事务：这里在 afterCommit 里执行，原事务已提交，直接 insert 会被回滚掉
+        statusLogService.recordNotify(order.getId(),
+                ok ? OrderLogActions.EVENT_NOTIFY : OrderLogActions.EVENT_NOTIFY_FAIL,
+                type.label() + "｜" + detail, operatorId, source);
     }
 
     /**

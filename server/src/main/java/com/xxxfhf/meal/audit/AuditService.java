@@ -72,7 +72,7 @@ public class AuditService {
             entry.setAction(action);
             entry.setSummary(truncate(summary));
             entry.setOperatorId(operatorId == null ? AuditHelper.SYSTEM : operatorId);
-            entry.setOperatorName(resolveOperatorName(entry.getOperatorId()));
+            entry.setOperatorName(operatorName(entry.getOperatorId()));
             entry.setSource(source == null ? AuditHelper.SOURCE_TASK : source);
             entry.setCreatedAt(LocalDateTime.now());
             auditLogMapper.insert(entry);
@@ -87,8 +87,11 @@ public class AuditService {
      *
      * 每次写入查一次用户表（主键查，代价可忽略）：存快照而不是读时 join，
      * 是为了账号改名或被删之后历史记录仍读得出当时是谁。
+     *
+     * <p>公开给 {@code OrderStatusLogService} 复用：订单流转记录同样要存快照，
+     * 「昵称优先、其次账号、再退 id」这套口径只能有一份，两份迟早会分叉。
      */
-    private String resolveOperatorName(String operatorId) {
+    public String operatorName(String operatorId) {
         if (AuditHelper.SYSTEM.equals(operatorId)) {
             return "系统";
         }
@@ -107,7 +110,7 @@ public class AuditService {
     /**
      * 操作记录列表，时间倒序。
      *
-     * @param tableName 对象类型：address / user / order，空则全部
+     * @param tableName 对象类型：address / user，空则全部（订单域已迁至 order_status_log）
      * @param action    动作码，空则全部
      * @param operator  操作人名称模糊匹配
      * @param keyword   说明或对象 ID 模糊匹配
@@ -156,12 +159,12 @@ public class AuditService {
         return switch (tableName) {
             case AuditActions.TABLE_ADDRESS -> "地址";
             case AuditActions.TABLE_USER -> "用户";
-            case AuditActions.TABLE_ORDER -> "订单";
             default -> tableName;
         };
     }
 
-    static String sourceLabel(String source) {
+    /** 来源中文名。订单流转记录的时间轴也用同一套口径，故对外公开。 */
+    public static String sourceLabel(String source) {
         if (source == null) {
             return "";
         }

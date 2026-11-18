@@ -56,6 +56,13 @@ public class AuthInterceptor implements HandlerInterceptor {
         if (user == null) {
             throw BizException.unauthorized("登录已失效，请重新进入小程序");
         }
+
+        // 令牌版本比对：库里 token_version 被调大（踢人）后，旧令牌立即失效
+        int currentVersion = user.getTokenVersion() == null ? 0 : user.getTokenVersion();
+        if (payload.tokenVersion() != currentVersion) {
+            throw BizException.unauthorized("登录已失效，请重新登录");
+        }
+
         if (AuditStatus.DISABLED.equals(user.getAuditStatus())) {
             throw BizException.forbidden("账号已被禁用，请联系群管理员");
         }

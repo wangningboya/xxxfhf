@@ -59,6 +59,15 @@ public class User {
 
     private LocalDateTime approvedAt;
 
+    /** 账密连续失败次数；登录成功清零，到 3 触发锁定（商家账号才用得到） */
+    private Integer loginFailCount;
+
+    /** 锁定截止时间；到期自动解锁，管理员可提前解除 */
+    private LocalDateTime lockUntil;
+
+    /** 令牌版本号；踢人 = +1，与令牌内 ver 不一致即 401（见 JwtService） */
+    private Integer tokenVersion;
+
     /* ---------------- getters / setters ---------------- */
 
     public String getId() {
@@ -171,5 +180,29 @@ public class User {
 
     public void setApprovedAt(LocalDateTime approvedAt) {
         this.approvedAt = approvedAt;
+    }
+
+    public Integer getLoginFailCount() {
+        return loginFailCount;
+    }
+
+    public void setLoginFailCount(Integer loginFailCount) {
+        this.loginFailCount = loginFailCount;
+    }
+
+    public LocalDateTime getLockUntil() {
+        return lockUntil;
+    }
+
+    public void setLockUntil(LocalDateTime lockUntil) {
+        this.lockUntil = lockUntil;
+    }
+
+    public Integer getTokenVersion() {
+        return tokenVersion;
+    }
+
+    public void setTokenVersion(Integer tokenVersion) {
+        this.tokenVersion = tokenVersion;
     }
 }

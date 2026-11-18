@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xxxfhf.meal.address.Address;
 import com.xxxfhf.meal.address.AddressService;
 import com.xxxfhf.meal.auth.AccessGuard;
+import com.xxxfhf.meal.audit.AuditHelper;
 import com.xxxfhf.meal.common.BizException;
 import com.xxxfhf.meal.config.ConfigKey;
 import com.xxxfhf.meal.config.ConfigService;
@@ -36,6 +37,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * 下单与用户端订单操作。
@@ -67,12 +69,13 @@ public class OrderService {
     private final AccessGuard accessGuard;
     private final NotifyService notifyService;
     private final DictService dictService;
+    private final OrderStatusLogService statusLogService;
 
     public OrderService(OrderMapper orderMapper, DailyMenuMapper menuMapper,
                         AddressService addressService, UserMapper userMapper, ServeDateClock clock,
                         ConfigService configService, OrderNumberService numberService,
                         AccessGuard accessGuard, NotifyService notifyService,
-                        DictService dictService) {
+                        DictService dictService, OrderStatusLogService statusLogService) {
         this.orderMapper = orderMapper;
         this.menuMapper = menuMapper;
         this.addressService = addressService;
@@ -83,6 +86,7 @@ public class OrderService {
         this.accessGuard = accessGuard;
         this.notifyService = notifyService;
         this.dictService = dictService;
+        this.statusLogService = statusLogService;
     }
 
     /* ==================== 下单 ==================== */
@@ -210,13 +214,18 @@ public class OrderService {
         order.setStatus(OrderStatus.PENDING_ACCEPT);
         order.setCancelRequested(false);
         order.setPayStatus(PayStatus.UNPAID);
-        order.setPayMethod("offline_transfer");
+        // 收款方式不在这里预置：下单时还没付钱，方式由用户点「我已完成付款」时选（需求 4.10）
         order.setPickupSlot(pickupSlot);
         order.setStockReleased(false);
         order.setRemark(truncate(cmd.remark(), 255));
-        order.setCreatedAt(LocalDateTime.now());
+        LocalDateTime now = LocalDateTime.now();
+        order.setCreatedAt(now);
 
         insertWithRetry(order, serveDate);
+        // 时间轴第一条。代客下单（商家替用户下）时操作人自动记成商家、来源记 admin ——
+        // 留痕要记「谁点的」，不是「订单归谁」
+        statusLogService.record(order.getId(), OrderLogActions.ORDER_CREATE, null,
+                OrderStatus.PENDING_ACCEPT, null, now);
 
         log.info("创建订单 orderNo={} userId={} serveDate={} 金额={}分",
                 order.getOrderNo(), userId, serveDate, order.getTotalAmount());
@@ -272,7 +281,9 @@ public class OrderService {
             if (comboId.isEmpty()) {
                 throw BizException.param("明细缺少盒饭 ID");
             }
-            if (!seen.add(comboId)) {
+            // 去重按「盒饭 + 规格」算：同盒饭选不同规格（白米饭 / 杂粮饭）是两行，允许同单；
+            // 只有盒饭和规格都相同才算重复提交。口径必须与小程序购物车 lineKey 一致
+            if (!seen.add(itemKey(comboId, input.optionIds()))) {
                 throw BizException.param("同一盒饭请合并份数，不要重复提交");
             }
             DailyMenu menu = byCombo.get(comboId);
@@ -296,6 +307,25 @@ public class OrderService {
                     snapshot.dishes() == null ? List.of() : snapshot.dishes(), specs));
         }
         return result;
+    }
+
+    /**
+     * 明细行的去重标识：盒饭 ID + 排序后的规格选项（顺序无关、去空格与重复项）。
+     *
+     * 前端购物车按「盒饭 + 规格」分两行（cart.js 的 lineKey 同口径），
+     * 服务端去重若只按 comboId，会把用户同盒饭买两种主食误判为重复提交。
+     */
+    private static String itemKey(String comboId, List<String> optionIds) {
+        Set<String> unique = new TreeSet<>();
+        if (optionIds != null) {
+            for (String id : optionIds) {
+                String trimmed = trim(id);
+                if (!trimmed.isEmpty()) {
+                    unique.add(trimmed);
+                }
+            }
+        }
+        return comboId + "|" + String.join(",", unique);
     }
 
     /**
@@ -392,10 +422,19 @@ public class OrderService {
 
     /* ==================== 用户操作 ==================== */
 
-    /** 用户点「我已完成付款」→ 声称已付款。**不是已收款**，钱还没核对。 */
+    /**
+     * 用户点「我已完成付款」→ 声称已付款。**不是已收款**，钱还没核对。
+     *
+     * <p>收款方式必填（需求 4.10）：只有付款人知道用的什么方式，缺值直接 400，
+     * 不落「已声称但没记方式」的半截状态 —— 那种单子事后对账时无法断定是漏填还是没填。
+     *
+     * <p>合法值以字典 {@code pay_method} 为准（商家可自己加项），不再写死三个常量。
+     */
     @Transactional
-    public OrderView claimPaid(String userId, String orderId) {
+    public OrderView claimPaid(String userId, String orderId, String payMethodRaw) {
         Order order = requireOwned(orderId, userId);
+        String payMethod = dictService.requireValue(DictCodes.PAY_METHOD, "收款方式",
+                payMethodRaw, "标记付款");
         if (OrderStatus.isFinal(order.getStatus())) {
             throw BizException.conflict("订单已结束（" + OrderStatus.label(order.getStatus()) + "），无法标记付款");
         }
@@ -404,15 +443,21 @@ public class OrderService {
                     + "」，无需重复操作");
         }
 
+        LocalDateTime now = LocalDateTime.now();
         int affected = orderMapper.update(null, Wrappers.<Order>lambdaUpdate()
                 .set(Order::getPayStatus, PayStatus.CLAIMED)
-                .set(Order::getClaimedAt, LocalDateTime.now())
+                .set(Order::getClaimedAt, now)
+                .set(Order::getPayMethod, payMethod)
                 .eq(Order::getId, orderId)
                 .eq(Order::getPayStatus, PayStatus.UNPAID));
         if (affected == 0) {
             throw BizException.conflict("收款状态已变化，请刷新后重试");
         }
-        log.info("用户声称已付款 orderNo={} userId={}", order.getOrderNo(), userId);
+        // 用户侧最关键的一条记录：「我八点就点了已付款」「我用微信付的」现在都有据可查
+        statusLogService.record(orderId, OrderLogActions.PAY_CLAIM,
+                PayStatus.UNPAID, PayStatus.CLAIMED, null, payMethod, now);
+        log.info("用户声称已付款 orderNo={} userId={} 方式={}",
+                order.getOrderNo(), userId, payMethod);
         return toView(require(orderId));
     }
 
@@ -439,6 +484,7 @@ public class OrderService {
 
         if (!cutoff) {
             // 截单前：直接取消。条件更新防并发（另一个入口可能同时拒单）
+            LocalDateTime now = LocalDateTime.now();
             int affected = orderMapper.update(null, Wrappers.<Order>lambdaUpdate()
                     .set(Order::getStatus, OrderStatus.CANCELLED)
                     .set(Order::getCancelRequested, false)
@@ -447,6 +493,10 @@ public class OrderService {
             if (affected == 0) {
                 throw BizException.conflict("订单状态已变化，请刷新后重试");
             }
+            // 先记流转再动份数与收款：时间轴上「已取消」要排在「转入待退款」之前，
+            // 两条都带同一个 now，靠毫秒级先后保持顺序
+            statusLogService.record(orderId, OrderLogActions.ORDER_CANCEL,
+                    OrderStatus.PENDING_ACCEPT, OrderStatus.CANCELLED, trimmedReason, now);
             releaseStock(order);
             moveToRefundingIfPaid(orderId);
             log.info("用户取消订单 orderNo={}（截单前）", order.getOrderNo());
@@ -460,16 +510,20 @@ public class OrderService {
         if (Boolean.TRUE.equals(order.getCancelRequested())) {
             throw BizException.conflict("已提交取消申请，等待商家处理");
         }
-        CancelRequest request = new CancelRequest(trimmedReason, LocalDateTime.now(), null, null, null, null);
+        LocalDateTime appliedAt = LocalDateTime.now();
+        CancelRequest request = new CancelRequest(trimmedReason, appliedAt, null, null, null, null);
         int affected = orderMapper.update(null, Wrappers.<Order>lambdaUpdate()
                 .set(Order::getCancelRequested, true)
                 .set(Order::getCancelRequest, request)
-                .set(Order::getCancelRequestedAt, LocalDateTime.now())
+                .set(Order::getCancelRequestedAt, appliedAt)
                 .eq(Order::getId, orderId)
                 .eq(Order::getCancelRequested, false));
         if (affected == 0) {
             throw BizException.conflict("已提交取消申请，等待商家处理");
         }
+        // 事件类：订单状态没变，但这条必须留 —— 否则「申请取消却没有结果」查不到源头
+        statusLogService.record(orderId, OrderLogActions.EVENT_CANCEL_APPLY,
+                null, null, trimmedReason, appliedAt);
         log.info("用户提交取消申请 orderNo={} 原因={}", order.getOrderNo(), trimmedReason);
         Order requested = require(orderId);
         // 通知商家：不推的话这条申请只会躺在订单列表里等人翻（工作台角标是第二道保险）
@@ -489,10 +543,18 @@ public class OrderService {
         if (!PayStatus.CLAIMED.equals(pay) && !PayStatus.PAID.equals(pay)) {
             return;
         }
-        orderMapper.update(null, Wrappers.<Order>lambdaUpdate()
+        int affected = orderMapper.update(null, Wrappers.<Order>lambdaUpdate()
                 .set(Order::getPayStatus, PayStatus.REFUNDING)
                 .eq(Order::getId, orderId)
                 .in(Order::getPayStatus, List.of(PayStatus.CLAIMED, PayStatus.PAID)));
+        if (affected == 0) {
+            // 并发下另一条路径已经改过收款状态，这里没真正发生流转就不该留记录
+            return;
+        }
+        // 操作人跟随触发方：用户自己取消记小程序、商家拒单记后台、超时自动记系统，
+        // 与「谁让这笔钱变成待退」的事实一致
+        statusLogService.record(orderId, OrderLogActions.PAY_REFUNDING,
+                pay, PayStatus.REFUNDING, null, LocalDateTime.now());
         log.info("订单转入待退款 orderNo={} 原收款状态={}", order.getOrderNo(), pay);
     }
 
@@ -515,9 +577,10 @@ public class OrderService {
             return false;
         }
         // 条件更新：pay_status = 'unpaid' 写进 WHERE，避免「查的时候没付款、更新的时候已声称」
+        LocalDateTime now = LocalDateTime.now();
         int affected = orderMapper.update(null, Wrappers.<Order>lambdaUpdate()
                 .set(Order::getStockReleased, true)
-                .set(Order::getStockReleasedAt, LocalDateTime.now())
+                .set(Order::getStockReleasedAt, now)
                 .eq(Order::getId, orderId)
                 .eq(Order::getStatus, OrderStatus.PENDING_ACCEPT)
                 .eq(Order::getPayStatus, PayStatus.UNPAID)
@@ -526,6 +589,9 @@ public class OrderService {
             return false;
         }
         releaseStock(order);
+        // 订单状态没变（仍在待接单），但份数被系统收走了 —— 不记的话商家会以为份数凭空少了一份
+        statusLogService.record(orderId, OrderLogActions.EVENT_STOCK_RELEASE, null, null,
+                "超时未付款，份数已释放", AuditHelper.SYSTEM, AuditHelper.SOURCE_TASK, now);
         log.info("超时未付款释放份数 orderNo={} serveDate={}", order.getOrderNo(), order.getServeDate());
         return true;
     }    /* ==================== 内部 ==================== */
@@ -615,6 +681,11 @@ public class OrderService {
                 payStatus,
                 dictService.label(DictCodes.PAY_STATUS, payStatus, PayStatus.label(payStatus)),
                 dictService.tagType(DictCodes.PAY_STATUS, payStatus),
+                order.getPayMethod(),
+                // 字典优先（商家改了显示名要跟着变）；字典项被删则落到兜底：
+                // 内置三项给中文，商家自建项原样显示存值（需求：字典没了显示原 code）
+                dictService.label(DictCodes.PAY_METHOD, order.getPayMethod(),
+                        PayMethod.label(order.getPayMethod())),
                 order.getItems(), order.getGoodsAmount(), order.getSpecAmount(),
                 order.getDeliveryFee(), order.getTotalAmount(),
                 order.getPickupCode(), order.getPickupSlot(),
@@ -659,6 +730,7 @@ public class OrderService {
     public record OrderView(String orderId, String orderNo, LocalDate serveDate, String deliveryType,
                             String status, String statusLabel, String statusTag,
                             String payStatus, String payStatusLabel, String payStatusTag,
+                            String payMethod, String payMethodLabel,
                             List<OrderItem> items, Integer goodsAmount, Integer specAmount,
                             Integer deliveryFee, Integer totalAmount,
                             String pickupCode, String pickupSlot,

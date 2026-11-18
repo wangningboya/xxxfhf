@@ -35,6 +35,9 @@ CREATE TABLE IF NOT EXISTS `user` (
     `reject_reason` VARCHAR(255)          DEFAULT NULL COMMENT '驳回原因',
     `phone`         VARCHAR(20)           DEFAULT NULL COMMENT '手机号，商家填或用户授权',
     `role_ids`      JSON                  DEFAULT NULL COMMENT '角色 ID 数组；决定后台权限',
+    `login_fail_count` INT      NOT NULL DEFAULT 0 COMMENT '账密连续失败次数；登录成功清零，到 3 触发锁定',
+    `lock_until`    DATETIME              DEFAULT NULL COMMENT '锁定截止时间；到期自动解锁，管理员可提前解除',
+    `token_version` INT          NOT NULL DEFAULT 0 COMMENT '令牌版本号；踢人 = +1，与令牌内 ver 不一致即 401',
     `created_at`    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `approved_at`   DATETIME              DEFAULT NULL COMMENT '审核通过时间',
     PRIMARY KEY (`id`),
@@ -184,7 +187,7 @@ CREATE TABLE IF NOT EXISTS `order` (
     `cancel_request`   JSON                 DEFAULT NULL COMMENT '取消申请与处理结果',
     `cancel_requested_at` DATETIME          DEFAULT NULL COMMENT '取消申请提交时间，超时自动同意按此列扫描',
     `pay_status`       VARCHAR(16) NOT NULL DEFAULT 'unpaid' COMMENT 'unpaid/claimed/paid/refunding/refunded',
-    `pay_method`       VARCHAR(24)          DEFAULT NULL COMMENT 'offline_transfer/wxpay',
+    `pay_method`       VARCHAR(64)          DEFAULT NULL COMMENT '收款方式：字典 pay_method 的 item_value（宽度与 dict_item.item_value 一致）；当前值，下单时为空，用户申报或商家确认收款时写入',
     `pickup_code`      CHAR(4)              DEFAULT NULL COMMENT '4 位取餐码，当日唯一',
     `pickup_slot`      VARCHAR(32)          DEFAULT NULL COMMENT '自取时段，仅自取单有值',
     `stock_released`   TINYINT(1)  NOT NULL DEFAULT 0 COMMENT '份数是否已被超时释放',
@@ -300,19 +303,52 @@ CREATE TABLE IF NOT EXISTS `dict_item` (
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `audit_log` (
     `id`          VARCHAR(32)  NOT NULL COMMENT '主键',
-    `table_name`  VARCHAR(32)  NOT NULL COMMENT '对象表：address / user / order',
+    `table_name`  VARCHAR(32)  NOT NULL COMMENT '对象表：address / user（订单域见 order_status_log）',
     `record_id`   VARCHAR(32)  NOT NULL COMMENT '对象主键',
-    `action`      VARCHAR(32)  NOT NULL COMMENT '动作码，如 address.approve / order.accept',
+    `action`      VARCHAR(32)  NOT NULL COMMENT '动作码，如 address.approve / user.disable',
     `summary`     VARCHAR(500) NOT NULL COMMENT '一句话说明，人读的，含关键字段前后值',
     `operator_id` VARCHAR(32)  NOT NULL COMMENT '操作人 user_id；定时任务写 system',
     `operator_name` VARCHAR(64)         DEFAULT NULL COMMENT '操作人当时的昵称/账号快照，改名后仍可读',
     `source`      VARCHAR(16)  NOT NULL COMMENT 'admin 网页后台 / miniprogram 小程序 / task 定时任务',
     `created_at`  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '记录时间',
     PRIMARY KEY (`id`),
-    -- 点某条地址/订单看它的历史
+    -- 点某条地址/用户看它的历史
     KEY `idx_audit_record` (`table_name`, `record_id`),
     -- 列表页按时间倒序翻页
     KEY `idx_audit_created` (`created_at`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT ='操作记录';
+
+-- -----------------------------------------------------------------------------
+-- 15. 订单状态流转记录 order_status_log（N-30）
+--
+-- 订单域**不复用** audit_log：那张表服务的是「运维追责」，只存一句话摘要；
+-- 而这里要的是「商家看懂这一单」—— from_status → to_status 是结构化字段，
+-- 前端才能按状态上色、算节点耗时。混在通用表里只能从中文句子里抠状态值。
+--
+-- **追加型**：只 insert，不改不删（清理按 created_at 归档），所以没有 updated_at / updated_by。
+--
+-- created_at 用 DATETIME(3) 而不是 DATETIME：接单后立刻点出餐，两条记录常常落在同一秒内，
+-- 只到秒时「时间正序」会退化成随机序，时间轴可能把出餐排在接单前面。
+-- 存毫秒只用于排序，界面仍显示到秒。
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `order_status_log` (
+    `id`            VARCHAR(32)  NOT NULL COMMENT '主键',
+    `order_id`      VARCHAR(32)  NOT NULL COMMENT '订单主键',
+    `log_type`      VARCHAR(16)  NOT NULL COMMENT 'order 订单状态线 / pay 收款状态线 / event 业务事件',
+    `action`        VARCHAR(32)  NOT NULL COMMENT '动作码，如 order.accept / pay.confirm / event.cancel_apply',
+    `from_status`   VARCHAR(32)           DEFAULT NULL COMMENT '变更前存值；无前值（如下单）为空',
+    `to_status`     VARCHAR(32)           DEFAULT NULL COMMENT '变更后存值；event 类为空',
+    `remark`        VARCHAR(200)          DEFAULT NULL COMMENT '补充说明：拒单原因、取消原因、释放原因等',
+    -- 方式值只在 pay.claim（用户申报）与 pay.confirm（商家确认）两条上有值，
+    -- 两条含义不同靠 action 区分；不单开「方式变更」记录，两行并排即是差异依据。
+    `pay_method`    VARCHAR(64)           DEFAULT NULL COMMENT '收款方式快照：字典 pay_method 的 item_value（宽度与 dict_item.item_value 一致）；仅 pay.claim 与 pay.confirm 有值',
+    `operator_id`   VARCHAR(32)  NOT NULL COMMENT '操作人 user_id；系统任务写 system',
+    `operator_name` VARCHAR(64)           DEFAULT NULL COMMENT '操作人当时的名称快照',
+    `source`        VARCHAR(16)  NOT NULL COMMENT 'admin 网页后台 / miniprogram 小程序 / task 定时任务',
+    `created_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '发生时间（毫秒仅用于排序）',
+    PRIMARY KEY (`id`),
+    -- 本期唯一查询形态：某订单的全部记录，按时间正序
+    KEY `idx_osl_order` (`order_id`, `created_at`)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT ='订单状态流转记录';
 
 SET FOREIGN_KEY_CHECKS = 1;

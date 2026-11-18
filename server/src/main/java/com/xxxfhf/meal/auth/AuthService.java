@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -31,6 +32,12 @@ import java.util.Set;
 public class AuthService {
 
     private static final Logger log = LoggerFactory.getLogger(AuthService.class);
+
+    /** 登录失败锁定阈值：连续失败这么多次触发锁定 */
+    private static final int LOGIN_FAIL_LOCK_THRESHOLD = 3;
+
+    /** 锁定时长（分钟），到期自动解锁 */
+    private static final long LOCK_MINUTES = 30;
 
     private final WxApiClient wxApiClient;
     private final SessionKeyStore sessionKeyStore;
@@ -79,7 +86,7 @@ public class AuthService {
             throw BizException.forbidden("账号已被禁用，请联系群管理员");
         }
 
-        String token = jwtService.issue(user.getId(), user.getUserType());
+        String token = jwtService.issue(user.getId(), user.getUserType(), tokenVersion(user));
         GroupAccessService.AccessState access = groupAccessService.resolve(user);
         return new LoginResult(token, user.getId(), user.getNickName(), user.getAvatarUrl(),
                 access.accessGranted(), access.accessVia(),
@@ -105,28 +112,70 @@ public class AuthService {
      *
      * 只认 user_type = merchant 的账号；群成员没有密码，不可能从这里登进来。
      * 账号不存在与密码错误返回同一句提示，避免被用来试探哪些账号存在。
+     *
+     * 登录失败锁定（防暴力穷举）：连续失败 3 次锁 30 分钟，期间即使密码正确也拒绝；
+     * 到期自动解锁，管理员也可在「账号授权」页提前解除。锁定状态落库，重启不丢。
      */
-    @Transactional(readOnly = true)
+    @Transactional
     public AdminLoginResult adminLogin(String username, String rawPassword) {
         User user = userMapper.selectOne(Wrappers.<User>lambdaQuery()
                 .eq(User::getUsername, username)
                 .eq(User::getUserType, UserType.MERCHANT));
 
+        // 锁定中直接拒绝。不先验密码：不能让穷举者靠报错差异猜出「密码其实是对的」
+        if (user != null && user.getLockUntil() != null && user.getLockUntil().isAfter(LocalDateTime.now())) {
+            long minutes = Math.max(1, Duration.between(LocalDateTime.now(), user.getLockUntil()).toMinutes());
+            log.warn("商家登录被拒：账号锁定中 username={} 剩余约 {} 分钟", username, minutes);
+            throw BizException.tooMany("失败次数过多，账号已锁定，约 " + minutes + " 分钟后自动解锁，或由管理员在「账号授权」页解除");
+        }
+
         if (user == null || !passwordService.matches(rawPassword, user.getPasswordHash())) {
             log.warn("商家登录失败，账号或密码错误 username={}", username);
+            // 账号存在才计数；不存在的账号无处落锁定状态，靠 nginx 限流挡穷举
+            if (user != null) {
+                recordLoginFailure(user);
+            }
             throw BizException.unauthorized("账号或密码错误");
         }
         if (AuditStatus.DISABLED.equals(user.getAuditStatus())) {
             throw BizException.forbidden("账号已停用，请联系管理员");
         }
 
+        // 登录成功清零计数与锁定。用 LambdaUpdate 而非 updateById：后者跳过 null 字段，lock_until 清不掉
+        userMapper.update(null, Wrappers.<User>lambdaUpdate()
+                .eq(User::getId, user.getId())
+                .set(User::getLoginFailCount, 0)
+                .set(User::getLockUntil, null));
+
         Set<String> permissions = resolvePermissions(user.getRoleIds());
-        String token = jwtService.issue(user.getId(), UserType.MERCHANT);
+        String token = jwtService.issue(user.getId(), UserType.MERCHANT, tokenVersion(user));
         log.info("商家登录成功 userId={} username={} 权限数={}", user.getId(), username, permissions.size());
 
         String displayName = user.getNickName() == null || user.getNickName().isBlank()
                 ? username : user.getNickName();
         return new AdminLoginResult(token, user.getId(), username, displayName, List.copyOf(permissions));
+    }
+
+    /** 版本号统一取值：新建用户实体未填充时按 0，与库列默认值一致。 */
+    private static int tokenVersion(User user) {
+        return user.getTokenVersion() == null ? 0 : user.getTokenVersion();
+    }
+
+    /** 连续失败计数：到 3 次锁 30 分钟并清零计数（锁到期后重新数），未到阈值则累加。 */
+    private void recordLoginFailure(User user) {
+        int fails = (user.getLoginFailCount() == null ? 0 : user.getLoginFailCount()) + 1;
+        if (fails >= LOGIN_FAIL_LOCK_THRESHOLD) {
+            userMapper.update(null, Wrappers.<User>lambdaUpdate()
+                    .eq(User::getId, user.getId())
+                    .set(User::getLoginFailCount, 0)
+                    .set(User::getLockUntil, LocalDateTime.now().plusMinutes(LOCK_MINUTES)));
+            log.warn("商家账号连续登录失败 {} 次，锁定 {} 分钟 userId={}",
+                    LOGIN_FAIL_LOCK_THRESHOLD, LOCK_MINUTES, user.getId());
+        } else {
+            userMapper.update(null, Wrappers.<User>lambdaUpdate()
+                    .eq(User::getId, user.getId())
+                    .set(User::getLoginFailCount, fails));
+        }
     }
 
     /**

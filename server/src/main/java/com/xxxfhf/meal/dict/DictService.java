@@ -12,6 +12,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 字典服务。
@@ -20,13 +21,26 @@ import java.util.Map;
  *
  * 1. **展示名与存值分离**：`item_value` 写进业务表，`item_label` 只用于展示。
  *    改文案不动数据，这是字典存在的唯一理由。
- * 2. **内置类型不许增删项**：往 `order_status` 里加一个库里不存在的值，
+ * 2. **内置类型默认不许增删项**：往 `order_status` 里加一个库里不存在的值，
  *    订单状态机会出现无法处理的数据。内置类型只允许改显示名 / 颜色 / 排序 / 启停。
+ *    例外见 {@link #EXTENSIBLE_TYPES}：收款方式不是状态机的一环，允许增删。
  * 3. **进程内缓存，写后清空**：订单列表每行要算两个标签，不缓存等于每单多查两次库。
  *    单实例部署，写操作清空缓存即可保证一致；将来多实例要换成分布式缓存或短 TTL。
  */
 @Service
 public class DictService {
+
+    /**
+     * 允许商家自行增删字典项的**内置**类型。
+     *
+     * <p>只放收款方式：它只是个收款渠道的标签，多一个「银行转账」不会让任何代码
+     * 走到不认识的分支；其余内置类型的值与枚举一一对应（订单状态、收款状态等），
+     * 增一项就等于往状态机里塞一个处理不了的值。
+     *
+     * <p>类型本身仍是内置的：不可删除、编码不可改 —— 否则商家一删，
+     * 下单页的下拉直接空掉，且所有历史订单的显示名一起落空。
+     */
+    private static final Set<String> EXTENSIBLE_TYPES = Set.of(DictCodes.PAY_METHOD);
 
     private static final Logger log = LoggerFactory.getLogger(DictService.class);
 
@@ -63,6 +77,29 @@ public class DictService {
     public String tagType(String typeCode, String value) {
         DictItem item = item(value == null ? null : typeCode, value);
         return item == null ? null : item.getTagType();
+    }
+
+    /**
+     * 校验一个存值是不是「该类型下启用着的字典项」，并返回规范化后的值。
+     *
+     * <p>给需要落库的字段用（当前只有收款方式）：字典可以增删项，代码里就不能再写死
+     * 三个常量做校验，否则商家新增的项一点就 400。
+     *
+     * <p>空值与停用项都当不合法：停用意味着商家明确不想让人再选它，老订单上的值照旧
+     * 显示（{@link #label} 不走这里），但不能拿它提交新操作。
+     *
+     * @param typeName    类型中文名，只用于报错文案
+     * @param actionLabel 动作名，拼成「请选择收款方式后才能标记付款」
+     */
+    public String requireValue(String typeCode, String typeName, String value, String actionLabel) {
+        String code = value == null ? "" : value.trim();
+        if (code.isEmpty()) {
+            throw BizException.param("请选择" + typeName + "后才能" + actionLabel);
+        }
+        if (item(typeCode, code) == null) {
+            throw BizException.param(typeName + "「" + code + "」已停用或不存在，请重新选择");
+        }
+        return code;
     }
 
     private DictItem item(String typeCode, String value) {
@@ -108,8 +145,8 @@ public class DictService {
     /**
      * 一次下发全部启用的字典，前端进小程序时取一次缓存在本地。
      *
-     * 之所以不做「按类型逐个取」：类型只有 7 个、项不到 40 条，
-     * 一次拿全比 7 次请求省事，也省掉前端拼类型参数的出错机会。
+     * 之所以不做「按类型逐个取」：类型只有 8 个、项不到 40 条，
+     * 一次拿全比逐类型请求省事，也省掉前端拼类型参数的出错机会。
      */
     public Map<String, List<ItemView>> clientDict() {
         List<DictItem> items = itemMapper.selectList(Wrappers.<DictItem>lambdaQuery()
@@ -214,7 +251,7 @@ public class DictService {
 
         DictItem exists = cmd.id() == null ? null : itemMapper.selectById(cmd.id());
         if (exists == null) {
-            if (builtinType) {
+            if (builtinType && !EXTENSIBLE_TYPES.contains(typeCode)) {
                 throw BizException.conflict("内置类型不支持新增字典值，只能修改已有项的显示名");
             }
             DictItem duplicate = itemMapper.selectOne(Wrappers.<DictItem>lambdaQuery()
@@ -313,12 +350,20 @@ public class DictService {
         }
     }
 
-    public record TypeView(String typeCode, String typeName, boolean builtin,
+    /**
+     * @param builtin    内置类型的编码被代码引用，不可删除、不可改编码
+     * @param extensible 允许商家自行增删项（内置类型里的例外，目前只有收款方式）。
+     *                   前端据此决定「新增项」按钮是否可点 —— 否则后端放行了、
+     *                   页面上按钮却是灰的，等于没放开。
+     */
+    public record TypeView(String typeCode, String typeName, boolean builtin, boolean extensible,
                            String remark, int itemCount) {
 
         static TypeView of(DictType type, int itemCount) {
             return new TypeView(type.getTypeCode(), type.getTypeName(),
-                    Boolean.TRUE.equals(type.getBuiltin()), type.getRemark(), itemCount);
+                    Boolean.TRUE.equals(type.getBuiltin()),
+                    EXTENSIBLE_TYPES.contains(type.getTypeCode()),
+                    type.getRemark(), itemCount);
         }
     }
 

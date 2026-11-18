@@ -2,6 +2,7 @@ const app = getApp();
 const { request } = require('../../utils/request');
 const { yuan } = require('../../utils/format');
 const dict = require('../../utils/dict');
+const payMethod = require('../../utils/pay-method');
 
 Page({
   data: {
@@ -110,8 +111,33 @@ Page({
     );
   },
 
+  /**
+   * 确认收款。
+   *
+   * 必须再选一次收款方式：现金单用户根本不点【我已完成付款】，确认时不再选一次，
+   * 这类单永远没有方式值。用户申报过就默认带出他那次的值，可改 ——
+   * 两条记录值不同就是「用户说微信、实际收现金」的差异依据。
+   *
+   * 注意与网页后台共用同一个接口：服务端已把 confirm 的 payMethod 设为必填，
+   * 不带值会 400，所以两端弹窗必须同时存在。
+   */
   onConfirmPay() {
-    this.post('/admin/order/payment', { orderId: this.data.orderId, action: 'confirm' }, '已确认收款');
+    const current = (this.data.order || {}).payMethod || '';
+    payMethod
+      .choose(current)
+      .then((method) => {
+        this.post(
+          '/admin/order/payment',
+          { orderId: this.data.orderId, action: 'confirm', payMethod: method },
+          '已确认收款'
+        );
+      })
+      .catch((err) => {
+        // 选择弹窗里点取消不提示错误
+        if (!err || !err.cancelled) {
+          app.toastError(err);
+        }
+      });
   },
 
   onRevertPay() {

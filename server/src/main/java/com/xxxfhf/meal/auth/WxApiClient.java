@@ -147,12 +147,17 @@ public class WxApiClient {
      * 微信侧的失败（用户没授权 / 授权次数用完 / 模板被删）都是**正常业务现象**，
      * 这里只记日志并返回失败，绝不抛异常 —— 通知发不出去不能连累下单、接单这些主流程。
      *
+     * <p>返回 {@link SendResult} 而不是 boolean：调用方要把失败原因写进订单流转记录
+     * （需求 4.20 的 {@code event.notify_fail}），只给 boolean 就只能记「失败了」，
+     * 事后仍然答不出「为什么没发出去」。
+     *
      * @param data 模板关键词 → 值，如 {"thing1": {"value": "红烧肉饭×2"}}
-     * @return 是否成功；失败原因看日志
+     * @return 推送结果；失败时带微信错误码与人话原因
      */
-    public boolean sendSubscribe(String openid, String templateId, String page, Map<String, String> data) {
+    public SendResult sendSubscribe(String openid, String templateId, String page,
+                                    Map<String, String> data) {
         if (openid == null || openid.isBlank() || templateId == null || templateId.isBlank()) {
-            return false;
+            return SendResult.fail(SendResult.LOCAL_PARAM, "接收人或模板 ID 为空");
         }
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("touser", openid);
@@ -170,7 +175,7 @@ public class WxApiClient {
             json = objectMapper.writeValueAsString(body);
         } catch (Exception ex) {
             log.error("订阅消息请求体序列化失败 templateId={}", templateId, ex);
-            return false;
+            return SendResult.fail(SendResult.LOCAL_SERIALIZE, "请求体序列化失败");
         }
 
         try {
@@ -185,27 +190,76 @@ public class WxApiClient {
                     HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             if (response.statusCode() != 200) {
                 log.warn("订阅消息返回 HTTP {}，templateId={}", response.statusCode(), templateId);
-                return false;
+                return SendResult.fail(SendResult.LOCAL_HTTP,
+                        "微信接口返回 HTTP " + response.statusCode());
             }
             JsonNode node = objectMapper.readTree(response.body());
             int errcode = node.path("errcode").asInt(-1);
             if (errcode == 0) {
-                return true;
+                return SendResult.success();
             }
+            String errmsg = node.path("errmsg").asText("");
             // 43101 = 用户未订阅/订阅次数已用完，属预期内，用 INFO 不刷 ERROR
             if (errcode == 43101) {
                 log.info("用户未授权或订阅次数已用完，跳过本次推送 templateId={}", templateId);
             } else {
                 log.warn("订阅消息发送失败 errcode={} errmsg={} templateId={}",
-                        errcode, node.path("errmsg").asText(""), templateId);
+                        errcode, errmsg, templateId);
             }
-            return false;
+            return SendResult.fail(errcode, humanMessage(errcode, errmsg));
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
-            return false;
+            return SendResult.fail(SendResult.LOCAL_EXCEPTION, "推送被中断");
         } catch (Exception ex) {
             log.warn("订阅消息发送异常 templateId={}", templateId, ex);
-            return false;
+            return SendResult.fail(SendResult.LOCAL_EXCEPTION, "推送请求异常");
+        }
+    }
+
+    /**
+     * 微信错误码 → 人话。写进订单时间轴给商家看，不能直接丢 errmsg 原文
+     * （微信的 errmsg 常是英文或「invalid openid」这类开发向文案）。
+     */
+    private static String humanMessage(int errcode, String errmsg) {
+        return switch (errcode) {
+            case 43101 -> "用户未授权或订阅次数已用完";
+            case 40003 -> "用户 openid 无效";
+            case 40037 -> "模板 ID 无效";
+            case 47003 -> "模板参数超限";
+            case 45009 -> "接口调用超过当日限额";
+            default -> errmsg == null || errmsg.isBlank() ? "微信返回错误码 " + errcode : errmsg;
+        };
+    }
+
+    /**
+     * 推送结果。
+     *
+     * @param ok      是否成功
+     * @param errcode 微信错误码；本地失败用负数（{@link #LOCAL_PARAM} 等）
+     * @param message 人话原因，可直接进时间轴
+     */
+    public record SendResult(boolean ok, int errcode, String message) {
+
+        /** 本地：接收人或模板为空 */
+        public static final int LOCAL_PARAM = -1;
+        /** 本地：请求体序列化失败 */
+        public static final int LOCAL_SERIALIZE = -2;
+        /** 本地：微信返回非 200 */
+        public static final int LOCAL_HTTP = -3;
+        /** 本地：网络异常或中断 */
+        public static final int LOCAL_EXCEPTION = -4;
+
+        public static SendResult success() {
+            return new SendResult(true, 0, "已发送");
+        }
+
+        public static SendResult fail(int errcode, String message) {
+            return new SendResult(false, errcode, message);
+        }
+
+        /** 拼进 remark 的简短原因：「用户未授权或订阅次数已用完（43101）」 */
+        public String describe() {
+            return errcode > 0 ? message + "（" + errcode + "）" : message;
         }
     }
 

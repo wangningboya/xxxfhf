@@ -17,4 +17,11 @@ public final class DictCodes {
     public static final String INVITE_STATUS = "invite_status";
     public static final String DELIVERY_TYPE = "delivery_type";
     public static final String NOTIFY_TYPE = "notify_type";
+
+    /**
+     * 收款方式。与其他内置类型不同，**此项允许商家自行增删字典项**（见
+     * {@code DictService.EXTENSIBLE_TYPES}）：收款渠道不是状态机的一环，
+     * 多一个「银行转账」不会让代码走到处理不了的分支。
+     */
+    public static final String PAY_METHOD = "pay_method";
 }

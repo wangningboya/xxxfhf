@@ -143,6 +143,7 @@
           <el-descriptions-item label="手机号">{{ detail.userPhone || '—' }}</el-descriptions-item>
           <el-descriptions-item label="订单状态">{{ detail.order.statusLabel }}</el-descriptions-item>
           <el-descriptions-item label="收款状态">{{ detail.order.payStatusLabel }}</el-descriptions-item>
+          <el-descriptions-item label="收款方式">{{ detail.order.payMethodLabel || '未申报' }}</el-descriptions-item>
           <el-descriptions-item label="取餐码">{{ detail.order.pickupCode || '—' }}</el-descriptions-item>
           <el-descriptions-item label="取餐时段">{{ detail.order.pickupSlot || '—' }}</el-descriptions-item>
           <el-descriptions-item label="取餐方式" :span="2">
@@ -191,6 +192,44 @@
           <div>规格 ¥{{ yuan(detail.order.specAmount) }}</div>
           <div>配送费 ¥{{ yuan(detail.order.deliveryFee) }}</div>
           <div class="total">合计 ¥{{ yuan(detail.order.totalAmount) }}</div>
+        </div>
+
+        <!-- 状态流转：订单状态线 / 收款状态线 / 事件合成一条时间轴，最早在上，最新一条高亮 -->
+        <div class="timeline">
+          <div class="timeline-title">状态流转</div>
+          <div v-if="logError" class="timeline-empty">记录加载失败，刷新后重试</div>
+          <div v-else-if="logs.length === 0" class="timeline-empty">暂无记录</div>
+          <el-timeline v-else>
+            <el-timeline-item
+              v-for="(item, index) in logs"
+              :key="item.id"
+              :type="index === logs.length - 1 ? 'primary' : ''"
+              :hollow="index !== logs.length - 1"
+              :timestamp="formatLogTime(item.createdAt)"
+              placement="top"
+            >
+              <div class="log-item" :class="{ fail: item.action === 'event.notify_fail' }">
+                <div class="log-head">
+                  <span class="log-action">{{ item.actionLabel }}</span>
+                  <template v-if="item.fromStatusLabel || item.toStatusLabel">
+                    <el-tag v-if="item.fromStatusLabel" size="small" effect="plain" :type="item.fromStatusTag || 'info'">
+                      {{ item.fromStatusLabel }}
+                    </el-tag>
+                    <span class="log-arrow">→</span>
+                    <el-tag v-if="item.toStatusLabel" size="small" :type="item.toStatusTag || 'info'">
+                      {{ item.toStatusLabel }}
+                    </el-tag>
+                  </template>
+                  <!-- 用户申报与商家确认各一条，两个标签并排就是「说的是微信、收的是现金」 -->
+                  <el-tag v-if="item.payMethodLabel" size="small" effect="plain" type="warning">
+                    {{ item.payMethodLabel }}
+                  </el-tag>
+                </div>
+                <div v-if="item.remark" class="log-remark">{{ item.remark }}</div>
+                <div class="log-meta">{{ item.operatorName || item.operatorId }} · {{ item.sourceLabel }}</div>
+              </div>
+            </el-timeline-item>
+          </el-timeline>
         </div>
 
         <div class="actions">
@@ -250,6 +289,33 @@
       </div>
     </el-drawer>
 
+    <!--
+      确认收款前选一次收款方式（需求 4.10 / N-33）。
+      默认带出用户申报的值、可改；用户没申报（现金单没点按钮）则必须自己选。
+      这里与小程序商家端共用一个接口，服务端已把 confirm 的 payMethod 设为必填。
+
+      「用户申报过」的判据是 payStatus = claimed，不能只看 payMethod 有没有值 ——
+      老单 / 脏值（如早期版本预置的 offline_transfer）也会带着一个值，
+      那不是用户选的，问「也是吗」没有意义。
+    -->
+    <el-dialog v-model="payDialog" title="确认收款" width="380px">
+      <div class="pay-tip">
+        <template v-if="userClaimedMethod">
+          用户申报的付款方式是「{{ dict.label('pay_method', userClaimedMethod, userClaimedMethod) }}」，实际收到的也是吗？
+        </template>
+        <template v-else>用户没有申报付款方式，请选择实际收到的。</template>
+      </div>
+      <el-radio-group v-model="payMethodValue">
+        <el-radio v-for="item in payMethodOptions" :key="item.value" :label="item.value">
+          {{ item.label }}
+        </el-radio>
+      </el-radio-group>
+      <template #footer>
+        <el-button @click="payDialog = false">取消</el-button>
+        <el-button type="primary" :loading="paySubmitting" @click="submitPay">确定</el-button>
+      </template>
+    </el-dialog>
+
     <ProxyOrderDialog v-model="proxyVisible" @created="reload" />
   </div>
 </template>
@@ -302,6 +368,26 @@ const selected = ref([]);
 const drawer = ref(false);
 const detail = ref(null);
 const proxyVisible = ref(false);
+
+/** 确认收款的收款方式弹窗：默认带 user 申报值，用户没申报就留空、必须自己选 */
+const payDialog = ref(false);
+const payMethodValue = ref('');
+const paySubmitting = ref(false);
+/** 用户申报过的方式；空串表示没申报（现金单用户不点按钮就是这种） */
+const userClaimedMethod = ref('');
+
+/** 字典没加载出来时的兜底：初始三项，与服务端 PayMethod 常量一致 */
+const PAY_METHOD_FALLBACK = [
+  { value: 'wechat', label: '微信' },
+  { value: 'alipay', label: '支付宝' },
+  { value: 'cash', label: '现金' },
+];
+
+/** 收款方式选项：商家可在「数据字典」里增删改，前端不写死，停用的项不会再出现 */
+const payMethodOptions = computed(() => dict.options('pay_method', PAY_METHOD_FALLBACK));
+/** 状态流转记录：与详情分开加载，记录挂了不影响详情与操作按钮 */
+const logs = ref([]);
+const logError = ref(false);
 
 function yuan(cents) {
   const value = Number(cents || 0);
@@ -366,13 +452,40 @@ function onSelectionChange(selection) {
 }
 
 function openDetail(row) {
+  const orderId = row.order.orderId;
   http
-    .get('/admin/order/detail', { params: { orderId: row.order.orderId } })
+    .get('/admin/order/detail', { params: { orderId } })
     .then((result) => {
       detail.value = result;
       drawer.value = true;
+      loadLogs(orderId);
     })
     .catch(() => {});
+}
+
+function loadLogs(orderId) {
+  logError.value = false;
+  http
+    .get('/admin/order/status-log', { params: { orderId } })
+    .then((rows) => {
+      logs.value = Array.isArray(rows) ? rows : [];
+    })
+    .catch(() => {
+      logs.value = [];
+      logError.value = true;
+    });
+}
+
+/**
+ * 时间轴时间到秒。后端按毫秒排序，显示只到秒：接单后立刻出餐的两条，
+ * 秒能看出先后就够了，多三位毫秒纯属噪音
+ */
+function formatLogTime(value) {
+  if (!value) {
+    return '';
+  }
+  const text = String(value).replace('T', ' ');
+  return text.length >= 19 ? text.slice(5, 19) : text;
 }
 
 function refreshDetail() {
@@ -424,7 +537,9 @@ function onAccept(row) {
     .post('/admin/order/accept', { orderIds: [row.order.orderId] })
     .then((result) => {
       if (result.warnings && result.warnings.length) {
-        ElMessageBox.alert(result.warnings.join('\n'), '已接单但需注意', { type: 'warning' });
+        ElMessageBox.alert(result.warnings.join('\n'), '已接单但需注意', { type: 'warning' })
+          // 点 × 关闭提示框会 reject，需接住避免全局兜底误报"未知错误"
+          .catch(() => {});
       } else {
         ElMessage.success('已接单');
       }
@@ -450,7 +565,9 @@ function onBatchAccept() {
       const skipped = (result.skipped || []).length;
       ElMessage.success('已接单 ' + accepted + ' 单' + (skipped ? '，跳过 ' + skipped + ' 单' : ''));
       if (result.warnings && result.warnings.length) {
-        ElMessageBox.alert(result.warnings.join('\n'), '需要注意', { type: 'warning' });
+        ElMessageBox.alert(result.warnings.join('\n'), '需要注意', { type: 'warning' })
+          // 同上：点 × 关闭会 reject，需接住避免全局兜底误报
+          .catch(() => {});
       }
       load();
     })
@@ -478,10 +595,25 @@ function onReject(row) {
 }
 
 function onPayment(row, action) {
-  const labelMap = { confirm: '确认收款', revert: '回退收款', refund: '标记已退款' };
+  // 确认收款必须先选一次方式：现金单用户不点按钮，不补选就永远没有方式值
+  if (action === 'confirm') {
+    const order = row.order;
+    // 只有「用户声称已付款」才有申报值可带出；未收款单上残留的旧值不算
+    userClaimedMethod.value =
+      order.payStatus === 'claimed' && order.payMethod ? order.payMethod : '';
+    // 申报的方式若已被停用 / 删除，不预选（提交会被服务端拒掉），让商家自己重选
+    payMethodValue.value = payMethodOptions.value.some(
+      (item) => item.value === userClaimedMethod.value
+    )
+      ? userClaimedMethod.value
+      : '';
+    payDialog.value = true;
+    return;
+  }
+  const labelMap = { revert: '回退收款', refund: '标记已退款' };
   ElMessageBox.confirm('确定' + labelMap[action] + '？', labelMap[action])
     .then(() => {
-      // 确认 / 回退走同一个接口靠 action 区分；退款是独立接口
+      // 回退走 payment 接口靠 action 区分；退款是独立接口
       const request =
         action === 'refund'
           ? http.post('/admin/order/refund', { orderId: row.order.orderId })
@@ -494,6 +626,30 @@ function onPayment(row, action) {
         .catch(() => {});
     })
     .catch(() => {});
+}
+
+/** 确认收款：带方式提交，缺值前端先拦一道（服务端同样校验，绕不过去） */
+function submitPay() {
+  if (!payMethodValue.value) {
+    ElMessage.warning('请选择收款方式');
+    return;
+  }
+  paySubmitting.value = true;
+  http
+    .post('/admin/order/payment', {
+      orderId: detail.value.order.orderId,
+      action: 'confirm',
+      payMethod: payMethodValue.value,
+    })
+    .then(() => {
+      ElMessage.success('已确认收款');
+      payDialog.value = false;
+      refreshDetail();
+    })
+    .catch(() => {})
+    .finally(() => {
+      paySubmitting.value = false;
+    });
 }
 
 function onCancelRequest(approve) {
@@ -565,5 +721,68 @@ onMounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.pay-tip {
+  margin-bottom: 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #606266;
+}
+
+.timeline {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #eef0f3;
+}
+
+.timeline-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 10px;
+}
+
+.timeline-empty {
+  font-size: 13px;
+  color: #9ca3af;
+  padding: 2px 0 6px;
+}
+
+.log-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.log-action {
+  font-weight: 600;
+  color: #111827;
+}
+
+/* 推送失败整条标红：时间轴一屏里要一眼看出「这条没发出去」，不是流水账 */
+.log-item.fail .log-action,
+.log-item.fail .log-remark,
+.log-item.fail .log-meta {
+  color: #f56c6c;
+}
+
+.log-arrow {
+  color: #9ca3af;
+}
+
+.log-remark {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #6b7280;
+  word-break: break-all;
+}
+
+.log-meta {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #9ca3af;
 }
 </style>

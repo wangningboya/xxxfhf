@@ -34,6 +34,7 @@ public class GlobalExceptionHandler {
             case NOT_FOUND -> HttpStatus.NOT_FOUND;
             case CONFLICT -> HttpStatus.CONFLICT;
             case PARAM_INVALID -> HttpStatus.BAD_REQUEST;
+            case TOO_MANY_ATTEMPTS -> HttpStatus.TOO_MANY_REQUESTS;
             default -> HttpStatus.OK;
         };
         log.warn("业务异常 {} {} -> [{}] {}", request.getMethod(), request.getRequestURI(),

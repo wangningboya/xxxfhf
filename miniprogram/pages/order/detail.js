@@ -2,6 +2,7 @@ const app = getApp();
 const { request } = require('../../utils/request');
 const { yuan } = require('../../utils/format');
 const dict = require('../../utils/dict');
+const payMethod = require('../../utils/pay-method');
 
 Page({
   data: {
@@ -56,18 +57,36 @@ Page({
       });
   },
 
+  /**
+   * 我已完成付款。
+   *
+   * 先让用户选收款方式（微信 / 支付宝 / 现金），**漏选不许提交** ——
+   * 服务端已把方式设为必填，没带值的请求会直接 400。
+   * 这里主动拦下来，是为了在弹窗取消时安静返回，而不是让用户看到一个报错。
+   */
   onClaimPaid() {
     if (this.data.busy) {
       return;
     }
-    this.setData({ busy: true });
-    request({ url: '/order/claim-paid', method: 'POST', data: { orderId: this.data.orderId } })
+    payMethod
+      .choose()
+      .then((method) => {
+        this.setData({ busy: true });
+        return request({
+          url: '/order/claim-paid',
+          method: 'POST',
+          data: { orderId: this.data.orderId, payMethod: method },
+        });
+      })
       .then(() => {
         wx.showToast({ title: '已告诉商家', icon: 'success' });
         this.load();
       })
       .catch((err) => {
-        app.toastError(err);
+        // 用户在三选一里点了取消，不是错误
+        if (!err || !err.cancelled) {
+          app.toastError(err);
+        }
       })
       .then(() => {
         this.setData({ busy: false });

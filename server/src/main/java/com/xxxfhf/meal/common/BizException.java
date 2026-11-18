@@ -43,4 +43,8 @@ public class BizException extends RuntimeException {
     public static BizException conflict(String message) {
         return new BizException(ErrorCode.CONFLICT, message);
     }
+
+    public static BizException tooMany(String message) {
+        return new BizException(ErrorCode.TOO_MANY_ATTEMPTS, message);
+    }
 }

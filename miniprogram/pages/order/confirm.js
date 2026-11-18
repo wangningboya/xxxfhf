@@ -196,6 +196,8 @@ Page({
     }
 
     this.setData({ submitting: true });
+    // loading 遮罩：挡住页面上的其他点击，配合按钮禁用双保险防重复提交
+    wx.showLoading({ title: '提交中', mask: true });
     const data = {
       serveDate: this.data.serveDate,
       deliveryType: this.data.deliveryType,
@@ -212,10 +214,12 @@ Page({
 
     request({ url: '/order', method: 'POST', data })
       .then((order) => {
+        wx.hideLoading();
         cartUtil.clear();
         wx.redirectTo({ url: '/pages/order/result?orderId=' + order.orderId });
       })
       .catch((err) => {
+        wx.hideLoading();
         app.toastError(err);
         // 份数被抢完这类错误，退回去让用户重新选
         this.setData({ submitting: false });

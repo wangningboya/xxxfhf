@@ -15,6 +15,7 @@ public enum ErrorCode {
     FORBIDDEN(40301, "没有操作权限"),
     NOT_FOUND(40401, "数据不存在"),
     CONFLICT(40901, "数据状态已变化，请刷新后重试"),
+    TOO_MANY_ATTEMPTS(42901, "尝试过于频繁，请稍后再试"),
 
     SERVER_ERROR(50000, "服务器内部错误"),
     WX_API_ERROR(50001, "微信接口调用失败"),

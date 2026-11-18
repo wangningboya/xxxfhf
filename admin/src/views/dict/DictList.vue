@@ -30,7 +30,10 @@
           <span class="pane-title">
             {{ currentTypeName || '字典项' }}
             <el-tag v-if="currentTypeBuiltin" size="small" type="warning" effect="plain">
-              内置：只能改显示名 / 颜色 / 排序 / 启停，不能增删
+              <template v-if="currentTypeExtensible">
+                内置：类型不可删，项可自行增删
+              </template>
+              <template v-else>内置：只能改显示名 / 颜色 / 排序 / 启停，不能增删</template>
             </el-tag>
           </span>
           <div class="pane-actions" v-if="currentType">
@@ -46,7 +49,12 @@
             >
               删除类型
             </el-button>
-            <el-button size="small" type="primary" :disabled="currentTypeBuiltin" @click="openItem()">
+            <el-button
+              size="small"
+              type="primary"
+              :disabled="currentTypeBuiltin && !currentTypeExtensible"
+              @click="openItem()"
+            >
               新增项
             </el-button>
           </div>
@@ -185,6 +193,10 @@ const itemForm = ref({});
 const currentTypeRow = computed(() => types.value.find((t) => t.typeCode === currentType.value) || null);
 const currentTypeName = computed(() => (currentTypeRow.value ? currentTypeRow.value.typeName : ''));
 const currentTypeBuiltin = computed(() => !!(currentTypeRow.value && currentTypeRow.value.builtin));
+/** 内置类型里允许增删项的那几个（目前只有 pay_method），服务端 TypeView 里算好下发 */
+const currentTypeExtensible = computed(
+  () => !!(currentTypeRow.value && currentTypeRow.value.extensible)
+);
 const currentTypeType = computed(() => currentTypeRow.value);
 
 /**

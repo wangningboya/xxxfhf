@@ -180,8 +180,11 @@ function onLogout() {
      一屏放不下只能滚 —— 菜单「太多」的观感有一半来自这里 */
   --el-menu-item-height: 38px;
   --el-menu-sub-item-height: 38px;
+  /* 菜单底色统一压到 #2a3644：el-menu 自带 --el-menu-bg-color（白），
+     光写 background: transparent 盖不住子菜单和菜单项的白底 */
+  --el-menu-bg-color: #2a3644;
   border-right: none;
-  background: transparent;
+  background: #2a3644;
 }
 
 .menu :deep(.el-menu-item) {

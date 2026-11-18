@@ -28,10 +28,13 @@ public class OrderAdminController {
 
     private final OrderAdminService orderAdminService;
     private final OrderService orderService;
+    private final OrderStatusLogService statusLogService;
 
-    public OrderAdminController(OrderAdminService orderAdminService, OrderService orderService) {
+    public OrderAdminController(OrderAdminService orderAdminService, OrderService orderService,
+                                OrderStatusLogService statusLogService) {
         this.orderAdminService = orderAdminService;
         this.orderService = orderService;
+        this.statusLogService = statusLogService;
     }
 
     /**
@@ -57,6 +60,18 @@ public class OrderAdminController {
     @RequirePerm({Perms.ORDER_VIEW, Perms.ORDER_ACCEPT})
     public ApiResponse<OrderAdminService.AdminOrderRow> detail(@RequestParam String orderId) {
         return ApiResponse.ok(orderAdminService.detail(orderId));
+    }
+
+    /**
+     * 订单状态流转记录（时间轴），按时间正序，中文名与配色随行下发。
+     *
+     * <p><b>不并入 /detail</b>：详情接口被小程序商家端共用，塞一个只有网页后台用的数组会让它无谓变重；
+     * 记录条数随订单生命周期增长，将来加筛选或分页也不必动详情协议。
+     */
+    @GetMapping("/status-log")
+    @RequirePerm({Perms.ORDER_VIEW, Perms.ORDER_ACCEPT})
+    public ApiResponse<List<OrderStatusLogService.Row>> statusLog(@RequestParam String orderId) {
+        return ApiResponse.ok(statusLogService.list(orderId));
     }
 
     /** 接单，支持批量。取消申请中的单会被跳过并给出原因。 */
@@ -97,7 +112,8 @@ public class OrderAdminController {
     public ApiResponse<OrderService.OrderView> payment(@Valid @RequestBody PaymentRequest request) {
         String operatorId = UserContext.userId();
         return switch (request.action()) {
-            case "confirm" -> ApiResponse.ok(orderAdminService.confirmPayment(operatorId, request.orderId()));
+            case "confirm" -> ApiResponse.ok(orderAdminService.confirmPayment(
+                    operatorId, request.orderId(), request.payMethod()));
             case "revert" -> ApiResponse.ok(orderAdminService.revertPayment(operatorId, request.orderId()));
             default -> throw com.xxxfhf.meal.common.BizException.param("action 只能是 confirm 或 revert");
         };
@@ -165,9 +181,17 @@ public class OrderAdminController {
     public record PickupRequest(String serveDate, @NotBlank(message = "请输入取餐码") String code) {
     }
 
+    /**
+     * 收款推进。
+     *
+     * <p>{@code payMethod} 只在 {@code action = confirm} 时必填（校验在
+     * {@code DictService.requireValue} 里按字典 {@code pay_method} 做，不在这里加
+     * {@code @NotBlank} —— {@code revert} 不需要方式，加了会让回退也跟着失败）。
+     */
     public record PaymentRequest(
             @NotBlank(message = "缺少订单 ID") String orderId,
-            @NotBlank(message = "缺少操作类型") String action) {
+            @NotBlank(message = "缺少操作类型") String action,
+            String payMethod) {
     }
 
     public record IdRequest(@NotBlank(message = "缺少订单 ID") String orderId) {

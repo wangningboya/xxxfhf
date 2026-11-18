@@ -4,7 +4,6 @@
       <el-select v-model="tableName" clearable placeholder="全部对象" style="width: 120px" @change="onTableChange">
         <el-option label="地址" value="address" />
         <el-option label="用户" value="user" />
-        <el-option label="订单" value="order" />
       </el-select>
       <el-select v-model="action" clearable placeholder="全部动作" style="width: 160px" @change="reload">
         <el-option v-for="item in actionOptions" :key="item.code" :label="item.label" :value="item.code" />
@@ -39,7 +38,7 @@
     </div>
 
     <div class="hint">
-      只记高危动作：地址审核与修改、用户审核与手机号、订单接单与收款退款。按时间倒序，默认每页 20 条。
+      只记高危动作：地址审核与修改、用户审核与手机号。订单的状态流转在订单详情的「状态流转」里看。按时间倒序，默认每页 20 条。
     </div>
 
     <el-table v-loading="loading" :data="rows" border size="small" style="width: 100%">

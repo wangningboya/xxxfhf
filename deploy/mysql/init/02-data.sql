@@ -61,6 +61,10 @@ ON DUPLICATE KEY UPDATE `config_key` = `config_key`;
 --
 -- 内置类型的 item 与代码里的枚举一一对应：**只能改显示名 / 颜色 / 排序 / 启停，
 -- 不能增删项**，否则库里会出现状态机无法处理的值。
+--
+-- 唯一例外是 pay_method（收款方式）：它只是收款渠道的标签，不参与状态机，
+-- 商家可以自行增删（见 DictService.EXTENSIBLE_TYPES）。类型本身仍是内置的，
+-- 不可删除 —— 一删下单页的下拉就空了，历史订单的显示名也一起落空。
 -- -----------------------------------------------------------------------------
 INSERT INTO `dict_type` (`type_code`, `type_name`, `builtin`, `remark`)
 VALUES ('order_status', '订单状态', 1, '与 OrderStatus 常量一一对应'),
@@ -69,7 +73,8 @@ VALUES ('order_status', '订单状态', 1, '与 OrderStatus 常量一一对应')
        ('audit_status', '用户审核状态', 1, '与 AuditStatus 常量一一对应'),
        ('invite_status', '邀请码状态', 1, 'unused 未使用 / used 已使用 / expired 已过期 / revoked 已作废'),
        ('delivery_type', '取送方式', 1, 'pickup 自取 / delivery 配送'),
-       ('notify_type', '通知类型', 1, '与 NotifyType 一一对应，模板未申请时不发送')
+       ('notify_type', '通知类型', 1, '与 NotifyType 一一对应，模板未申请时不发送'),
+       ('pay_method', '收款方式', 1, '初始三项对应 PayMethod 常量；可增删项，仅显示名/排序/启停可改')
 ON DUPLICATE KEY UPDATE `type_code` = `type_code`;
 
 INSERT INTO `dict_item` (`id`, `type_code`, `item_value`, `item_label`, `tag_type`, `sort`, `status`, `builtin`)
@@ -102,5 +107,9 @@ VALUES ('di-ord-01', 'order_status', 'pending_accept', '待接单', 'warning', 1
        ('di-notify-03', 'notify_type', 'rejected', '订单被拒', 'danger', 30, 'active', 1),
        ('di-notify-04', 'notify_type', 'ready', '可以取餐了', 'success', 40, 'active', 1),
        ('di-notify-05', 'notify_type', 'cancelled', '订单已取消', 'info', 50, 'active', 1),
-       ('di-notify-06', 'notify_type', 'cancelRequest', '用户申请取消', 'danger', 15, 'active', 1)
+       ('di-notify-06', 'notify_type', 'cancelRequest', '用户申请取消', 'danger', 15, 'active', 1),
+       -- 收款方式：初始三项内置（删不掉，只能停用），商家自建项的 builtin 为 0，可删
+       ('di-pm-01', 'pay_method', 'wechat', '微信', 'success', 10, 'active', 1),
+       ('di-pm-02', 'pay_method', 'alipay', '支付宝', 'primary', 20, 'active', 1),
+       ('di-pm-03', 'pay_method', 'cash', '现金', 'warning', 30, 'active', 1)
 ON DUPLICATE KEY UPDATE `id` = `id`;

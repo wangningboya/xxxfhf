@@ -68,6 +68,12 @@ public class RoleController {
                 UserContext.userId(), request.userId(), request.roleIds()));
     }
 
+    /** 解除商家账号的登录锁定（密码连续失败 3 次会锁 30 分钟，这里可提前解除）。 */
+    @PostMapping("/unlock")
+    public ApiResponse<RoleService.AccountRow> unlock(@Valid @RequestBody UnlockRequest request) {
+        return ApiResponse.ok(roleService.unlock(UserContext.userId(), request.userId()));
+    }
+
     public record SaveRequest(
             String id,
             @NotBlank(message = "请填写角色名称")
@@ -81,5 +87,8 @@ public class RoleController {
     public record AssignRequest(
             @NotBlank(message = "缺少账号 ID") String userId,
             List<String> roleIds) {
+    }
+
+    public record UnlockRequest(@NotBlank(message = "缺少账号 ID") String userId) {
     }
 }

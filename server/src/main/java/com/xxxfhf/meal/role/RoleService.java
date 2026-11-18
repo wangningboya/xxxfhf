@@ -20,6 +20,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.time.LocalDateTime;
 
 /**
  * 角色与权限分配（网页后台独有模块，需 role.manage）。
@@ -185,6 +186,7 @@ public class RoleService {
                 .eq(User::getUserType, UserType.MERCHANT)
                 .orderByAsc(User::getCreatedAt));
 
+        LocalDateTime now = LocalDateTime.now();
         List<AccountRow> rows = new ArrayList<>(merchants.size());
         for (User user : merchants) {
             List<String> ids = user.getRoleIds() == null ? List.of() : user.getRoleIds();
@@ -194,8 +196,12 @@ public class RoleService {
             }
             String display = user.getNickName() == null || user.getNickName().isBlank()
                     ? user.getUsername() : user.getNickName();
+            // 锁定中的才算 locked：过期了的锁不算，避免前端出现「已解锁还能点」的死按钮
+            boolean locked = user.getLockUntil() != null && user.getLockUntil().isAfter(now);
             rows.add(new AccountRow(user.getId(), user.getUsername(), display,
-                    ids, names, user.getAuditStatus(), user.getCreatedAt()));
+                    ids, names, user.getAuditStatus(), user.getCreatedAt(),
+                    locked ? user.getLockUntil() : null,
+                    locked ? 0 : (user.getLoginFailCount() == null ? 0 : user.getLoginFailCount())));
         }
         return rows;
     }
@@ -239,6 +245,34 @@ public class RoleService {
                 .orElseThrow(() -> BizException.notFound("账号不存在"));
     }
 
+    /**
+     * 解除商家账号的登录锁定。
+     *
+     * 场景：某个商家账号被暴力试密码锁了 30 分钟，等不起，由持有 role.manage 的
+     * 其他账号在这里手动解锁。清失败计数与锁定时间，一步到位。
+     */
+    @Transactional
+    public AccountRow unlock(String operatorId, String userId) {
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw BizException.notFound("账号不存在");
+        }
+        if (!UserType.MERCHANT.equals(user.getUserType())) {
+            throw BizException.param("只有商家账号存在登录锁定");
+        }
+
+        userMapper.update(null, Wrappers.<User>lambdaUpdate()
+                .eq(User::getId, userId)
+                .set(User::getLoginFailCount, 0)
+                .set(User::getLockUntil, null));
+        log.info("解除登录锁定 operator={} userId={} username={}", operatorId, userId, user.getUsername());
+
+        return accounts().stream()
+                .filter(row -> row.userId().equals(userId))
+                .findFirst()
+                .orElseThrow(() -> BizException.notFound("账号不存在"));
+    }
+
     /* ---------------- 内部 ---------------- */
 
     /** 与 Perms 白名单对齐：未知权限项直接报错，不静默丢弃。 */
@@ -275,6 +309,10 @@ public class RoleService {
 
     public record AccountRow(String userId, String username, String displayName,
                              List<String> roleIds, List<String> roleNames,
-                             String auditStatus, java.time.LocalDateTime createdAt) {
+                             String auditStatus, java.time.LocalDateTime createdAt,
+                             /** 锁定截止时间；未锁定为 null（过期的锁不出现在响应里） */
+                             java.time.LocalDateTime lockedUntil,
+                             /** 当前连续失败次数（未锁定时有意义，下次失败即累计） */
+                             int loginFailCount) {
     }
 }

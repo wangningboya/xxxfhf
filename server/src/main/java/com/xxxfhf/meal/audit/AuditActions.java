@@ -6,7 +6,12 @@ import java.util.List;
  * 操作记录的动作码清单。
  *
  * <p>一句话区分「动作」和「对象」：{@code table_name} 说动的是哪类东西，
- * {@code action} 说具体做了什么。两者拼起来才是完整含义（{@code order} + {@code order.pay.confirm}）。
+ * {@code action} 说具体做了什么。两者拼起来才是完整含义（{@code address} + {@code address.revoke}）。
+ *
+ * <p><b>不含订单域</b>：订单的状态流转改记 {@code order_status_log}（需求 4.20），
+ * 那张表要的是结构化的 {@code from_status → to_status}，能上色、能算耗时；
+ * 通用流水只能从中文句子里抠状态值。库里 {@code table_name = 'order'} 的历史行不删，
+ * 但不会有新增，动作名也不再这里维护。
  *
  * <p><b>本清单同时是筛选下拉的数据源</b>（{@code GET /admin/audit-log/actions}）。
  * 新增一个埋点必须在这里加一项，否则页面上筛不到 —— 与权限码要同步加进角色页正则同类，
@@ -18,7 +23,6 @@ public final class AuditActions {
 
     public static final String TABLE_ADDRESS = "address";
     public static final String TABLE_USER = "user";
-    public static final String TABLE_ORDER = "order";
 
     /* ---------------- 地址 ---------------- */
 
@@ -38,19 +42,6 @@ public final class AuditActions {
     public static final String USER_DELETE = "user.delete";
     public static final String USER_PHONE = "user.phone";
 
-    /* ---------------- 订单 ---------------- */
-
-    public static final String ORDER_ACCEPT = "order.accept";
-    public static final String ORDER_REJECT = "order.reject";
-    public static final String ORDER_ADVANCE = "order.advance";
-    public static final String ORDER_PICKUP = "order.pickup";
-    public static final String ORDER_PAY_CONFIRM = "order.pay.confirm";
-    public static final String ORDER_PAY_REVERT = "order.pay.revert";
-    public static final String ORDER_REFUND = "order.refund";
-    public static final String ORDER_CANCEL_APPROVE = "order.cancel.approve";
-    public static final String ORDER_CANCEL_DENY = "order.cancel.deny";
-    public static final String ORDER_CANCEL_AUTO = "order.cancel.auto";
-
     /** 筛选下拉用；顺序即页面展示顺序，按业务域成组 */
     private static final List<Action> ALL = List.of(
             new Action(ADDRESS_CREATE, "新增地址", TABLE_ADDRESS),
@@ -64,17 +55,7 @@ public final class AuditActions {
             new Action(USER_DISABLE, "停用用户", TABLE_USER),
             new Action(USER_ENABLE, "恢复用户", TABLE_USER),
             new Action(USER_DELETE, "删除用户", TABLE_USER),
-            new Action(USER_PHONE, "修改手机号", TABLE_USER),
-            new Action(ORDER_ACCEPT, "接单", TABLE_ORDER),
-            new Action(ORDER_REJECT, "拒单", TABLE_ORDER),
-            new Action(ORDER_ADVANCE, "推进状态", TABLE_ORDER),
-            new Action(ORDER_PICKUP, "取餐核销", TABLE_ORDER),
-            new Action(ORDER_PAY_CONFIRM, "确认收款", TABLE_ORDER),
-            new Action(ORDER_PAY_REVERT, "收款回退", TABLE_ORDER),
-            new Action(ORDER_REFUND, "标记退款", TABLE_ORDER),
-            new Action(ORDER_CANCEL_APPROVE, "同意取消", TABLE_ORDER),
-            new Action(ORDER_CANCEL_DENY, "驳回取消", TABLE_ORDER),
-            new Action(ORDER_CANCEL_AUTO, "超时自动同意取消", TABLE_ORDER)
+            new Action(USER_PHONE, "修改手机号", TABLE_USER)
     );
 
     private AuditActions() {
