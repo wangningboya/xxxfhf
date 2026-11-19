@@ -1,7 +1,10 @@
 package com.xxxfhf.meal.auth;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.xxxfhf.meal.audit.AuditActions;
+import com.xxxfhf.meal.audit.AuditService;
 import com.xxxfhf.meal.common.BizException;
+import com.xxxfhf.meal.common.MaskUtil;
 import com.xxxfhf.meal.role.Role;
 import com.xxxfhf.meal.role.RoleMapper;
 import com.xxxfhf.meal.user.AuditStatus;
@@ -46,11 +49,12 @@ public class AuthService {
     private final JwtService jwtService;
     private final PasswordService passwordService;
     private final GroupAccessService groupAccessService;
+    private final AuditService auditService;
 
     public AuthService(WxApiClient wxApiClient, SessionKeyStore sessionKeyStore,
                        UserMapper userMapper, RoleMapper roleMapper,
                        JwtService jwtService, PasswordService passwordService,
-                       GroupAccessService groupAccessService) {
+                       GroupAccessService groupAccessService, AuditService auditService) {
         this.wxApiClient = wxApiClient;
         this.sessionKeyStore = sessionKeyStore;
         this.userMapper = userMapper;
@@ -58,6 +62,7 @@ public class AuthService {
         this.jwtService = jwtService;
         this.passwordService = passwordService;
         this.groupAccessService = groupAccessService;
+        this.auditService = auditService;
     }
 
     @Transactional
@@ -113,13 +118,21 @@ public class AuthService {
      * <p>存在的原因只有一个：改号弹窗和新增地址的预填需要把人自己的号填回输入框。
      * {@code /auth/me} 里故意只给掩码，否则「登录态响应」就是整包明文，抓一次包全都有了。
      * 这里只返回当前令牌对应的那一条，不接收 userId 参数，也就没有越权取号的可能。
+     *
+     * <p>「本人查自己」PIPL 不强制留痕，但明文出口统一记 {@code user.phone.view}，
+     * 与管理端 {@code fullPhone} 保持同一条审计口径，合规闭环。审计摘要里只放掩码，
+     * 明文号码不进任何日志。
+     *
+     * <p>注意事务不能是 {@code readOnly}：审计要插行，只读事务会让记录静默失败。
      */
-    @Transactional(readOnly = true)
+    @Transactional
     public String myPhone(String userId) {
         User user = userMapper.selectById(userId);
         if (user == null) {
             throw BizException.unauthorized("登录已失效，请重新进入小程序");
         }
+        auditService.record(AuditActions.TABLE_USER, userId, AuditActions.USER_PHONE_VIEW,
+                "本人查看完整手机号：" + MaskUtil.phone(user.getPhone()));
         return user.getPhone();
     }
 

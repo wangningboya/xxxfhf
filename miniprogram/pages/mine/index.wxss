@@ -143,6 +143,29 @@ page {
   box-sizing: border-box;
 }
 
+/* 当前手机号只读行：掩码回显，仅展示不可改 */
+.panel-current {
+  margin-top: 28rpx;
+  height: 88rpx;
+  padding: 0 24rpx;
+  background: #f5f6f8;
+  border-radius: 12rpx;
+  display: flex;
+  align-items: center;
+}
+
+.panel-current-label {
+  font-size: 26rpx;
+  color: #8a8a8a;
+  margin-right: 20rpx;
+  flex-shrink: 0;
+}
+
+.panel-current-value {
+  font-size: 30rpx;
+  color: #4a4a4a;
+}
+
 .ph {
   color: #b0b0b0;
   font-size: 28rpx;

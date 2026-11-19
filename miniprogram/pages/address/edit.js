@@ -1,5 +1,6 @@
 const app = getApp();
 const { request } = require('../../utils/request');
+const privacy = require('../../utils/privacy');
 
 Page({
   data: {
@@ -124,26 +125,34 @@ Page({
       return;
     }
 
-    this.setData({ saving: true });
-    request({
-      url: '/address',
-      method: 'POST',
-      data: {
-        id: id || null,
-        regionId: region.id,
-        contactName: contactName.trim(),
-        phone: phone.trim(),
-        detail: detail.trim(),
-        tag: this.data.tag || null,
-      },
-    })
-      .then(() => {
-        wx.showToast({ title: '已提交，等商家确认', icon: 'none', duration: 2000 });
-        setTimeout(() => wx.navigateBack(), 900);
+    // 地址里含收货人姓名与电话，保存即收集：首次保存前告知用途，同意后继续提交。
+    // 只拦「保存」，不拦 onLoad 的预填——那只是把用户自己的号码回填到表单里。
+    privacy.ensureAgreed().then((ok) => {
+      if (!ok) {
+        wx.showToast({ title: '同意后才能保存地址，你可以先逛逛', icon: 'none' });
+        return;
+      }
+      this.setData({ saving: true });
+      request({
+        url: '/address',
+        method: 'POST',
+        data: {
+          id: id || null,
+          regionId: region.id,
+          contactName: contactName.trim(),
+          phone: phone.trim(),
+          detail: detail.trim(),
+          tag: this.data.tag || null,
+        },
       })
-      .catch((err) => {
-        app.toastError(err);
-        this.setData({ saving: false });
-      });
+        .then(() => {
+          wx.showToast({ title: '已提交，等商家确认', icon: 'none', duration: 2000 });
+          setTimeout(() => wx.navigateBack(), 900);
+        })
+        .catch((err) => {
+          app.toastError(err);
+          this.setData({ saving: false });
+        });
+    });
   },
 });

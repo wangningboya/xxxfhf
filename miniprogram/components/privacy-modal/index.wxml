@@ -1,0 +1,23 @@
+<view class="pm-mask" wx:if="{{visible}}" catchtouchmove="noop">
+  <view class="pm-panel">
+    <view class="pm-title">隐私保护提示</view>
+
+    <view class="pm-body">
+      为了完成订单，我们会收集：
+      <text class="pm-strong">手机号</text>（配送或取餐时联系你）、
+      <text class="pm-strong">昵称</text>（商家审核时认出你）、
+      <text class="pm-strong">收货地址</text>（配送用）。
+    </view>
+    <view class="pm-body">
+      这些信息只用于订单履约与售后，不用于营销。
+      你可以在「我的」页随时修改，也可以注销账号删除。
+    </view>
+
+    <view class="pm-link" bindtap="onOpenPolicy">查看《隐私政策》</view>
+
+    <view class="pm-actions">
+      <view class="pm-btn pm-ghost" bindtap="onDisagree">暂不</view>
+      <view class="pm-btn" bindtap="onAgree">同意并继续</view>
+    </view>
+  </view>
+</view>

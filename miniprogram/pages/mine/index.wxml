@@ -55,15 +55,19 @@
     </view>
   </view>
 
-  <!-- 手机号编辑浮层 -->
+  <!-- 手机号修改浮层：当前号只回显掩码、不可编辑，新号填在下面 -->
   <view class="mask" wx:if="{{phoneEditing}}">
     <view class="panel">
-      <view class="panel-title">填写手机号</view>
+      <view class="panel-title">修改手机号</view>
+      <view class="panel-current">
+        <text class="panel-current-label">当前手机号</text>
+        <text class="panel-current-value">{{me.phone || '未填写手机号'}}</text>
+      </view>
       <input
         class="panel-input"
         type="number"
         value="{{phoneInput}}"
-        placeholder="11 位手机号"
+        placeholder="输入新手机号（11 位）"
         placeholder-class="ph"
         maxlength="11"
         bindinput="onPhoneInput"
@@ -82,4 +86,7 @@
       注销账号
     </view>
   </view>
+
+  <!-- 收集手机号/昵称前的隐私提示，由 utils/privacy.js 唤起 -->
+  <privacy-modal id="privacyModal" />
 </view>

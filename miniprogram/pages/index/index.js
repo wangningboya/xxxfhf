@@ -1,5 +1,6 @@
 const app = getApp();
 const { request } = require('../../utils/request');
+const privacy = require('../../utils/privacy');
 const { yuan, dateStr, addDays, dayLabel, assetUrl } = require('../../utils/format');
 const cartUtil = require('../../utils/cart');
 
@@ -371,18 +372,25 @@ Page({
       return;
     }
 
-    this.setData({ savingNickName: true });
-    request({ url: '/auth/nickname', method: 'POST', data: { nickName } })
-      .then(() => app.refreshMe())
-      .then((me) => {
-        this.applyMe(me);
-        wx.showToast({ title: '已保存', icon: 'success' });
-      })
-      .catch((err) => {
-        app.toastError(err);
-      })
-      .then(() => {
-        this.setData({ savingNickName: false });
-      });
+    // 昵称是个人信息，首次保存前先告知用途；同意后接着走原来的保存流程
+    privacy.ensureAgreed().then((ok) => {
+      if (!ok) {
+        wx.showToast({ title: '同意后才能保存昵称', icon: 'none' });
+        return;
+      }
+      this.setData({ savingNickName: true });
+      request({ url: '/auth/nickname', method: 'POST', data: { nickName } })
+        .then(() => app.refreshMe())
+        .then((me) => {
+          this.applyMe(me);
+          wx.showToast({ title: '已保存', icon: 'success' });
+        })
+        .catch((err) => {
+          app.toastError(err);
+        })
+        .then(() => {
+          this.setData({ savingNickName: false });
+        });
+    });
   },
 });

@@ -1,0 +1,69 @@
+.pm-mask {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.pm-panel {
+  width: 600rpx;
+  padding: 40rpx 36rpx 32rpx;
+  border-radius: 20rpx;
+  background: #ffffff;
+  box-sizing: border-box;
+}
+
+.pm-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #1a1a1a;
+  text-align: center;
+  margin-bottom: 24rpx;
+}
+
+.pm-body {
+  font-size: 26rpx;
+  line-height: 1.7;
+  color: #3a3a3a;
+  margin-bottom: 12rpx;
+}
+
+.pm-strong {
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.pm-link {
+  margin: 20rpx 0 8rpx;
+  font-size: 26rpx;
+  color: #ff9f1c;
+  text-align: center;
+}
+
+.pm-actions {
+  display: flex;
+  margin-top: 24rpx;
+}
+
+.pm-btn {
+  flex: 1;
+  height: 84rpx;
+  line-height: 84rpx;
+  text-align: center;
+  font-size: 30rpx;
+  border-radius: 42rpx;
+  background: #ff9f1c;
+  color: #ffffff;
+}
+
+.pm-ghost {
+  margin-right: 20rpx;
+  background: #f0f1f3;
+  color: #6b6b6b;
+}

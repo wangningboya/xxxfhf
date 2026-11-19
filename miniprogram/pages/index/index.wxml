@@ -135,4 +135,7 @@
       <button class="nick-btn" loading="{{savingNickName}}" bindtap="onSaveNickName">保存</button>
     </view>
   </view>
+
+  <!-- 保存昵称前的隐私提示，由 utils/privacy.js 唤起 -->
+  <privacy-modal id="privacyModal" />
 </view>

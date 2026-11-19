@@ -1,5 +1,6 @@
 const app = getApp();
 const { request, setToken } = require('../../utils/request');
+const privacy = require('../../utils/privacy');
 
 /** 商家登录态键名，与 pages/merchant/login.js 保持一致 */
 const MERCHANT_KEY = 'meal_merchant';
@@ -84,7 +85,14 @@ Page({
   /* ---------------- 昵称 ---------------- */
 
   onEditNick() {
-    this.setData({ nickEditing: true, nickInput: (this.data.me && this.data.me.nickName) || '' });
+    // 昵称属于个人信息，第一次填写前要先让用户看明白收集用途
+    privacy.ensureAgreed().then((ok) => {
+      if (!ok) {
+        wx.showToast({ title: '同意后才能填写昵称，你可以先逛逛', icon: 'none' });
+        return;
+      }
+      this.setData({ nickEditing: true, nickInput: (this.data.me && this.data.me.nickName) || '' });
+    });
   },
 
   onNickInput(e) {
@@ -119,18 +127,17 @@ Page({
   /* ---------------- 手机号 ---------------- */
 
   onEditPhone() {
-    // me.phone 是掩码（138****1234），直接回填会把掩码当成号码再存一遍。
-    // 回填明文走 /auth/my-phone：只返回本人的那一条，不接收 userId
-    this.setData({ phoneEditing: true, phoneInput: '' });
-    request({ url: '/auth/my-phone' })
-      .then((phone) => {
-        if (this.data.phoneEditing) {
-          this.setData({ phoneInput: phone || '' });
-        }
-      })
-      .catch(() => {
-        // 取不到就留空让用户重填，不要因此挡住改号
-      });
+    // 手机号是敏感个人信息：先弹隐私提示，同意后才打开输入框
+    privacy.ensureAgreed().then((ok) => {
+      if (!ok) {
+        wx.showToast({ title: '同意后才能修改手机号，你可以先逛逛', icon: 'none' });
+        return;
+      }
+      // 当前号只回显掩码（me.phone 来自 /auth/me，服务端已用 MaskUtil.phone 打码），
+      // 仅作展示不可编辑；修改走「填新号」路径，掩码值不可能被当成号码存回去。
+      // 不再调 /auth/my-phone 取明文回填。
+      this.setData({ phoneEditing: true, phoneInput: '' });
+    });
   },
 
   onPhoneInput(e) {

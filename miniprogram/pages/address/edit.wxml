@@ -78,4 +78,7 @@
   <view class="save {{saving ? 'save-disabled' : ''}}" bindtap="onSave">
     {{saving ? '提交中…' : '保存'}}
   </view>
+
+  <!-- 保存地址前的隐私提示，由 utils/privacy.js 唤起 -->
+  <privacy-modal id="privacyModal" />
 </view>

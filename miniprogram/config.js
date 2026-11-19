@@ -7,7 +7,7 @@
 module.exports = {
   // 本机联调：真机预览必须用电脑的局域网 IP（127.0.0.1 在手机上指手机自己）；
   // 手机需与电脑连同一个 WiFi，且真机上要打开调试模式才能访问 http 地址。
-  apiBase: 'http://192.168.1.185:8080',
+  apiBase: 'http://10.180.3.217:8080',
   // 上线前改成正式域名，例如：https://order.example.com
   // apiBase: 'https://order.example.com',
 };
