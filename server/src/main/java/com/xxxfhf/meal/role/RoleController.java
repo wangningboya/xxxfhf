@@ -16,7 +16,11 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * 角色与权限分配。仅网页后台使用，全部需要 role.manage。
+ * 角色与权限分配。仅网页后台使用。
+ *
+ * 类级默认 role.manage；例外见方法注解——分配角色与解除锁定放宽为
+ * role.manage / user.audit 任一命中（需求 4.17 商家用户页签，决策 D-28），
+ * 「用户管理 → 商家用户」与这里的「账号授权」共用同一套接口。
  */
 @RestController
 @RequestMapping("/admin/role")
@@ -61,15 +65,23 @@ public class RoleController {
         return ApiResponse.ok(roleService.accounts());
     }
 
-    /** 给商家账号分配角色，至少保留一个。 */
+    /**
+     * 给商家账号分配角色，至少保留一个。
+     *
+     * <p>权限放宽为 role.manage / user.audit 任一命中（D-28）：能审用户的人
+     * 在「用户管理 → 商家用户」页签也要能用，否则按钮看得见点不动。
+     * 方法级注解覆盖类级注解（拦截器先取方法注解）。
+     */
     @PostMapping("/assign")
+    @RequirePerm({Perms.ROLE_MANAGE, Perms.USER_AUDIT})
     public ApiResponse<RoleService.AccountRow> assign(@Valid @RequestBody AssignRequest request) {
         return ApiResponse.ok(roleService.assign(
                 UserContext.userId(), request.userId(), request.roleIds()));
     }
 
-    /** 解除商家账号的登录锁定（密码连续失败 3 次会锁 30 分钟，这里可提前解除）。 */
+    /** 解除商家账号的登录锁定（密码连续失败 3 次会锁 30 分钟，这里可提前解除）。权限同 assign，见 D-28。 */
     @PostMapping("/unlock")
+    @RequirePerm({Perms.ROLE_MANAGE, Perms.USER_AUDIT})
     public ApiResponse<RoleService.AccountRow> unlock(@Valid @RequestBody UnlockRequest request) {
         return ApiResponse.ok(roleService.unlock(UserContext.userId(), request.userId()));
     }

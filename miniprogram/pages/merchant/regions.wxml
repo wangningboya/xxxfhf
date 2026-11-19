@@ -6,9 +6,7 @@
       <view>
         <view class="region-name">
           {{item.name}}
-          <text class="badge {{item.status === 'enabled' ? 'badge-on' : ''}}">
-            {{item.status === 'enabled' ? '启用' : '停用'}}
-          </text>
+          <text class="badge {{item.status === 'enabled' ? 'badge-on' : ''}}">{{item.status === 'enabled' ? '启用' : '停用'}}</text>
         </view>
         <view class="muted" wx:if="{{item.remark}}">{{item.remark}}</view>
       </view>

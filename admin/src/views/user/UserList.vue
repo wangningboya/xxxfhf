@@ -1,5 +1,8 @@
 <template>
   <div class="page-card">
+    <!-- 用户管理双页签：微信用户（原审核列表）/ 商家用户（账号管理），与「账号授权」共用接口 -->
+    <el-tabs v-model="tab" @tab-change="onTabChange">
+      <el-tab-pane label="微信用户" name="customer">
     <div class="toolbar">
       <el-select v-model="auditStatus" placeholder="全部状态" clearable style="width: 140px" @change="reload">
         <el-option
@@ -89,7 +92,7 @@
       <el-table-column label="申请时间" width="160">
         <template #default="{ row }">{{ (row.createdAt || '').replace('T', ' ').slice(0, 16) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="230" fixed="right">
+      <el-table-column label="操作" width="280" fixed="right">
         <template #default="{ row }">
           <template v-if="auth.has('user.audit')">
             <!-- 没填昵称的人列表照常出现，但不给通过/驳回：商家认不出是谁，点了也只能靠猜 -->
@@ -117,6 +120,10 @@
               启用
             </el-button>
           </template>
+          <!-- 指定为商家：就地升级 customer → merchant（需求 4.17），与日常审核同权限域 -->
+          <el-button v-if="auth.has('user.audit')" link type="warning" @click="openPromote(row)">
+            指定为商家
+          </el-button>
           <!-- 删除是物理删除、不可恢复，单独挂 user.delete，不跟审核混一个权限 -->
           <el-button
             v-if="auth.has('user.delete')"
@@ -140,6 +147,64 @@
         @current-change="load"
       />
     </div>
+      </el-tab-pane>
+
+      <el-tab-pane label="商家用户" name="merchant">
+        <div class="muted merchant-hint">
+          与「角色权限 → 账号授权」共用同一套数据与规则；这里与账号授权都支持分配角色、解除锁定。
+        </div>
+        <el-table v-loading="merchantLoading" :data="merchants" border size="small" style="width: 100%">
+          <el-table-column prop="username" label="登录账号" width="150" />
+          <el-table-column prop="displayName" label="显示名" min-width="140" />
+          <el-table-column label="后台角色" min-width="220">
+            <template #default="{ row }">
+              <el-tag
+                v-for="name in row.roleNames"
+                :key="name"
+                size="small"
+                effect="plain"
+                class="role-tag"
+              >
+                {{ name }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="状态" width="90">
+            <template #default="{ row }">
+              <el-tag :type="statusType(row.auditStatus)" size="small">{{ statusLabel(row.auditStatus) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="锁定" width="200">
+            <template #default="{ row }">
+              <template v-if="row.lockUntil">
+                <el-tag size="small" type="danger">锁定至 {{ fmtTime(row.lockUntil) }}</el-tag>
+                <el-button
+                  v-if="auth.has('user.audit')"
+                  link
+                  type="primary"
+                  class="unlock-btn"
+                  @click="onUnlock(row)"
+                >
+                  解锁
+                </el-button>
+              </template>
+              <span v-else class="muted">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="创建时间" width="160">
+            <template #default="{ row }">{{ fmtTime(row.createdAt) }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="110" fixed="right">
+            <template #default="{ row }">
+              <el-button v-if="auth.has('user.audit')" link type="primary" @click="openAssign(row)">
+                分配角色
+              </el-button>
+              <span v-else class="muted">只读</span>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-tab-pane>
+    </el-tabs>
 
     <!-- 邀请码管理：发错群时能立刻作废，不用等它过期 -->
     <el-dialog v-model="inviteVisible" title="邀请码管理" width="680px">
@@ -202,6 +267,72 @@
       <template #footer>
         <el-button @click="phoneVisible = false">取消</el-button>
         <el-button type="primary" :loading="phoneSaving" @click="onSavePhone">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 指定为商家：就地升级，openid / 昵称 / 订单 / 地址全保留；升级后他从列表消失（不再是顾客） -->
+    <el-dialog v-model="promoteVisible" title="指定为商家" width="460px">
+      <el-form label-width="90px">
+        <el-form-item label="用户">
+          <span>{{ promoteRow ? promoteRow.nickName || promoteRow.userId : '' }}</span>
+        </el-form-item>
+        <el-form-item label="登录账号" required>
+          <el-input
+            v-model="promoteForm.username"
+            maxlength="64"
+            placeholder="2 ~ 64 字符，全库唯一"
+            clearable
+          />
+        </el-form-item>
+        <el-form-item label="登录密码" required>
+          <el-input
+            v-model="promoteForm.password"
+            type="password"
+            show-password
+            maxlength="64"
+            placeholder="6 ~ 64 位"
+            clearable
+          />
+        </el-form-item>
+        <el-form-item label="后台角色" required>
+          <el-select
+            v-model="promoteForm.roleIds"
+            multiple
+            placeholder="至少选一个"
+            style="width: 100%"
+          >
+            <el-option v-for="item in roleOptions" :key="item.id" :label="item.name" :value="item.id" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <div class="muted">
+        该用户会被就地升级为商家账号：微信身份、昵称、订单、地址全部保留；审核状态一律置为「已通过」。
+        升级后他将从本列表消失，用微信打开小程序时「我的」页会出现商家工作台入口。本期不提供「取消商家」。
+      </div>
+      <template #footer>
+        <el-button @click="promoteVisible = false">取消</el-button>
+        <el-button type="primary" :loading="promoteSaving" @click="onSubmitPromote">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 分配角色：与「账号授权」同一接口同一规则（POST /admin/role/assign） -->
+    <el-dialog v-model="assignVisible" title="分配角色" width="460px">
+      <el-form label-width="90px">
+        <el-form-item label="账号">
+          <span>{{ assignRow ? assignRow.username + (assignRow.displayName ? '（' + assignRow.displayName + '）' : '') : '' }}</span>
+        </el-form-item>
+        <el-form-item label="后台角色" required>
+          <el-select v-model="assignRoleIds" multiple placeholder="至少选一个" style="width: 100%">
+            <el-option v-for="item in roleOptions" :key="item.id" :label="item.name" :value="item.id" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <div class="muted">
+        至少保留一个角色，否则该账号登录后没有任何功能可用；不能修改自己的角色（防自锁）。角色改完即时生效，权限在服务端按库里数据判定。
+      </div>
+      <template #footer>
+        <el-button @click="assignVisible = false">取消</el-button>
+        <el-button type="primary" :loading="assignSaving" @click="onSubmitAssign">保存</el-button>
       </template>
     </el-dialog>
   </div>
@@ -506,6 +637,162 @@ function onRevoke(row) {
     .catch(() => {});
 }
 
+/* ==================== 指定为商家 ==================== */
+
+/**
+ * 就地升级 customer → merchant（需求 4.17）。
+ * 角色选项来自 /admin/user/role-options（挂 user.audit，不要求 role.manage）。
+ * 列表只查 customer，升级成功后该行自动消失，刷新即可看到结果。
+ */
+const promoteVisible = ref(false);
+const promoteRow = ref(null);
+const promoteForm = ref({ username: '', password: '', roleIds: [] });
+const promoteSaving = ref(false);
+const roleOptions = ref([]);
+let roleOptionsLoaded = false;
+
+/** 角色选项：第一次用到时拉一次，指定为商家与分配角色两个弹窗共用 */
+function loadRoleOptions() {
+  if (roleOptionsLoaded) {
+    return;
+  }
+  http
+    .get('/admin/user/role-options')
+    .then((list) => {
+      roleOptions.value = list || [];
+      roleOptionsLoaded = true;
+    })
+    .catch(() => {});
+}
+
+function openPromote(row) {
+  promoteRow.value = row;
+  promoteForm.value = { username: '', password: '', roleIds: [] };
+  promoteVisible.value = true;
+  loadRoleOptions();
+}
+
+function onSubmitPromote() {
+  const form = promoteForm.value;
+  // 与服务端同一套规则，先给一句人话
+  const username = (form.username || '').trim();
+  if (username.length < 2 || username.length > 64) {
+    ElMessage.warning('登录账号长度须在 2 ~ 64 字符之间');
+    return;
+  }
+  const password = form.password || '';
+  if (password.length < 6 || password.length > 64) {
+    ElMessage.warning('登录密码长度须在 6 ~ 64 位之间');
+    return;
+  }
+  if (!form.roleIds || form.roleIds.length === 0) {
+    ElMessage.warning('请至少选择一个后台角色');
+    return;
+  }
+  const name = promoteRow.value.nickName || promoteRow.value.userId;
+  promoteSaving.value = true;
+  http
+    .post('/admin/user/promote', {
+      userId: promoteRow.value.userId,
+      username,
+      password,
+      roleIds: form.roleIds,
+    })
+    .then(() => {
+      ElMessage.success('已将「' + name + '」指定为商家');
+      promoteVisible.value = false;
+      load();
+    })
+    .catch(() => {})
+    .finally(() => {
+      promoteSaving.value = false;
+    });
+}
+
+/* ==================== 商家用户页签 ==================== */
+
+/**
+ * 商家账号列表：数据来自 /admin/user/merchants（复用角色域账号聚合）。
+ * 懒加载——第一次切到本页签才请求；分配角色与解锁走 /admin/role/*，
+ * 权限已放宽为 role.manage / user.audit 任一（D-28）。
+ */
+const tab = ref('customer');
+const merchants = ref([]);
+const merchantLoading = ref(false);
+let merchantsLoaded = false;
+
+function loadMerchants() {
+  merchantLoading.value = true;
+  http
+    .get('/admin/user/merchants')
+    .then((list) => {
+      merchants.value = list || [];
+      merchantsLoaded = true;
+    })
+    .catch(() => {})
+    .finally(() => {
+      merchantLoading.value = false;
+    });
+}
+
+function onTabChange(name) {
+  if (name === 'merchant' && !merchantsLoaded) {
+    loadMerchants();
+  }
+}
+
+function fmtTime(value) {
+  return (value || '').replace('T', ' ').slice(0, 16);
+}
+
+/* ---------------- 分配角色 ---------------- */
+
+const assignVisible = ref(false);
+const assignRow = ref(null);
+const assignRoleIds = ref([]);
+const assignSaving = ref(false);
+
+function openAssign(row) {
+  assignRow.value = row;
+  assignRoleIds.value = [...(row.roleIds || [])];
+  assignVisible.value = true;
+  loadRoleOptions();
+}
+
+function onSubmitAssign() {
+  if (!assignRoleIds.value || assignRoleIds.value.length === 0) {
+    ElMessage.warning('请至少选择一个后台角色');
+    return;
+  }
+  assignSaving.value = true;
+  http
+    .post('/admin/role/assign', { userId: assignRow.value.userId, roleIds: assignRoleIds.value })
+    .then(() => {
+      ElMessage.success('已更新「' + (assignRow.value.displayName || assignRow.value.username) + '」的角色');
+      assignVisible.value = false;
+      loadMerchants();
+    })
+    .catch(() => {})
+    .finally(() => {
+      assignSaving.value = false;
+    });
+}
+
+/* ---------------- 解除锁定 ---------------- */
+
+function onUnlock(row) {
+  ElMessageBox.confirm(
+    '解除「' + (row.displayName || row.username) + '」的登录锁定？',
+    '解除锁定'
+  )
+    .then(() => http.post('/admin/role/unlock', { userId: row.userId }))
+    .then(() => {
+      ElMessage.success('已解除锁定');
+      loadMerchants();
+    })
+    .catch(() => {});
+}
+
 onMounted(load);
 </script>
 
@@ -518,6 +805,19 @@ onMounted(load);
 
 /* 手机号旁的「改」：贴得太近会看不清是按钮，留一点间距 */
 .phone-edit {
+  margin-left: 6px;
+}
+
+/* 商家页签的说明行与角色标签的间距 */
+.merchant-hint {
+  margin-bottom: 10px;
+}
+
+.role-tag {
+  margin-right: 6px;
+}
+
+.unlock-btn {
   margin-left: 6px;
 }
 </style>

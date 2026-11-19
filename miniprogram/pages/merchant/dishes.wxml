@@ -19,9 +19,7 @@
       <view class="dish-main">
         <view class="dish-name">
           {{item.name}}
-          <text class="badge {{item.status === 'enabled' ? 'badge-on' : ''}}">
-            {{item.status === 'enabled' ? '启用' : '停用'}}
-          </text>
+          <text class="badge {{item.status === 'enabled' ? 'badge-on' : ''}}">{{item.status === 'enabled' ? '启用' : '停用'}}</text>
         </view>
         <view class="muted">排序 {{item.sort || 0}}</view>
       </view>

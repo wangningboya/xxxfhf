@@ -28,7 +28,7 @@ const routes = [
       {
         path: 'user',
         component: () => import('../views/user/UserList.vue'),
-        meta: { title: '用户审核', perms: ['user.audit', 'user.view'] },
+        meta: { title: '用户管理', perms: ['user.audit', 'user.view'] },
       },
       {
         path: 'address',

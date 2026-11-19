@@ -53,22 +53,25 @@
   color: #8a8a8a;
 }
 
+/*
+ * 入口卡固定一行两个。
+ * 原写法是 width: calc(50% - 10rpx) + :nth-child(odd) 补右外边距，两列合计刚好 100%，
+ * rpx 转 px 后只要多出零点几像素，flex-wrap 就把这一对拆成上下两行（接单、代客下单
+ * 会各自占一行靠左）；而且 :nth-child 按渲染结果取奇偶，wx:if 裁掉入口后也会错位。
+ * 改用 grid：列宽由布局引擎分配，两列等宽、间距统一，不再依赖顺序和百分比精度。
+ */
 .grid {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20rpx;
+  margin-bottom: 20rpx;
 }
 
 .grid-item {
-  width: calc(50% - 10rpx);
   background: #ffffff;
   border-radius: 20rpx;
   padding: 28rpx;
-  margin-bottom: 20rpx;
   box-sizing: border-box;
-}
-
-.grid-item:nth-child(odd) {
-  margin-right: 20rpx;
 }
 
 .grid-title {

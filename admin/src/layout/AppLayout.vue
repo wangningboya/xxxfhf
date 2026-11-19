@@ -86,7 +86,7 @@ const MENU_GROUPS = [
     icon: Tickets,
     items: [
       { path: '/order', title: '订单管理', perms: ['order.view', 'order.accept'] },
-      { path: '/user', title: '用户审核', perms: ['user.audit', 'user.view'] },
+      { path: '/user', title: '用户管理', perms: ['user.audit', 'user.view'] },
       { path: '/address', title: '地址维护', perm: 'user.address' },
       { path: '/region', title: '区域管理', perm: 'region.manage' },
     ],

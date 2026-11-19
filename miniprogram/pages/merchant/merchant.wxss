@@ -100,7 +100,8 @@ page {
   border: 1rpx solid #f5c6c2;
 }
 
-.tags {
+/* 筛选标签容器：combos / dishes / users / combo-edit 共用 */
+.chips {
   display: flex;
   flex-wrap: wrap;
 }

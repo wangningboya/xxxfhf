@@ -7,6 +7,7 @@ import com.xxxfhf.meal.address.Address;
 import com.xxxfhf.meal.address.AddressMapper;
 import com.xxxfhf.meal.audit.AuditActions;
 import com.xxxfhf.meal.audit.AuditService;
+import com.xxxfhf.meal.auth.PasswordService;
 import com.xxxfhf.meal.common.BizException;
 import com.xxxfhf.meal.common.MaskUtil;
 import com.xxxfhf.meal.common.PhoneValidator;
@@ -14,14 +15,18 @@ import com.xxxfhf.meal.invite.InviteCode;
 import com.xxxfhf.meal.invite.InviteCodeMapper;
 import com.xxxfhf.meal.order.Order;
 import com.xxxfhf.meal.order.OrderMapper;
+import com.xxxfhf.meal.role.Role;
+import com.xxxfhf.meal.role.RoleMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -40,15 +45,20 @@ public class UserAuditService {
     private final AddressMapper addressMapper;
     private final OrderMapper orderMapper;
     private final AuditService auditService;
+    private final PasswordService passwordService;
+    private final RoleMapper roleMapper;
 
     public UserAuditService(UserMapper userMapper, InviteCodeMapper inviteCodeMapper,
                             AddressMapper addressMapper, OrderMapper orderMapper,
-                            AuditService auditService) {
+                            AuditService auditService, PasswordService passwordService,
+                            RoleMapper roleMapper) {
         this.userMapper = userMapper;
         this.inviteCodeMapper = inviteCodeMapper;
         this.addressMapper = addressMapper;
         this.orderMapper = orderMapper;
         this.auditService = auditService;
+        this.passwordService = passwordService;
+        this.roleMapper = roleMapper;
     }
 
     /**
@@ -281,6 +291,86 @@ public class UserAuditService {
                         + "（" + label(user.getAuditStatus()) + "）｜账号 …" + idTail(userId)
                         + "｜连带删地址 " + addresses + " 条");
         return addresses;
+    }
+
+    /**
+     * 指定为商家（需求 4.17）：把列表里已有的微信顾客就地升级为商家账号。
+     *
+     * <p>「就地」是关键决策（决策记录 D-26）：同一条 user 记录只改类型，<br>
+     * openid / 昵称 / 订单 / 地址全部保留，不需要任何数据迁移 ——<br>
+     * 升级后他再用微信打开小程序，{@code /auth/login} 按 openid 命中的就是 merchant 行，<br>
+     * 小程序「我的」页宫格自然出现商家工作台入口。
+     *
+     * <p>审核状态一律置为 approved：商家账号不走群成员审核流程，
+     * 之前停在 pending / rejected / disabled 都不构成障碍。本期不提供「取消商家」。
+     *
+     * @param username    后台登录账号，2 ~ 64 字符，全库唯一（uk_user_username）
+     * @param rawPassword 明文密码，6 ~ 64 位，入库前 BCrypt 加密
+     * @param roleIds     后台角色 ID 列表，至少一个；决定他能进后台做什么
+     */
+    @Transactional
+    public void promote(String operatorId, String userId, String username,
+                        String rawPassword, List<String> roleIds) {
+        User user = requireCustomer(userId);
+
+        String account = username == null ? "" : username.trim();
+        if (account.length() < 2 || account.length() > 64) {
+            throw BizException.param("登录账号长度须在 2 ~ 64 字符之间");
+        }
+        if (rawPassword == null || rawPassword.length() < 6 || rawPassword.length() > 64) {
+            throw BizException.param("登录密码长度须在 6 ~ 64 位之间");
+        }
+
+        // 全库查重：不只查 merchant。customer 行的 username 恒为 null，
+        // 但万一将来出现占位，提前 409 也好过撞唯一索引
+        Long exists = userMapper.selectCount(Wrappers.<User>lambdaQuery()
+                .eq(User::getUsername, account));
+        if (exists != null && exists > 0) {
+            throw BizException.conflict("登录账号「" + account + "」已被占用，请换一个");
+        }
+        List<String> roles = requireRoles(roleIds);
+
+        String from = user.getAuditStatus();
+        user.setUserType(UserType.MERCHANT);
+        user.setUsername(account);
+        user.setPasswordHash(passwordService.hash(rawPassword));
+        user.setAuditStatus(AuditStatus.APPROVED);
+        user.setRejectReason(null);
+        user.setApprovedAt(LocalDateTime.now());
+        user.setRoleIds(roles);
+        try {
+            userMapper.updateById(user);
+        } catch (DuplicateKeyException ex) {
+            // 并发窗口里的撞名：查重之后、提交之前又有人抢注了同一个账号
+            throw BizException.conflict("登录账号「" + account + "」已被占用，请换一个");
+        }
+        log.info("指定为商家 userId={} username={} 角色={} 原状态={} 操作人={}",
+                userId, account, roles, from, operatorId);
+
+        auditService.record(AuditActions.TABLE_USER, userId, AuditActions.USER_PROMOTE,
+                "指定为商家：" + display(user) + "｜后台账号：" + account
+                        + "｜角色 " + roles.size() + " 个（" + label(from) + " → 商家）");
+    }
+
+    /** 角色入参清洗：去重保序、逐个确认存在。至少一个，否则升级完进后台白屏。 */
+    private List<String> requireRoles(List<String> roleIds) {
+        if (roleIds == null || roleIds.isEmpty()) {
+            throw BizException.param("请至少选择一个后台角色");
+        }
+        Set<String> distinct = new LinkedHashSet<>();
+        for (String roleId : roleIds) {
+            if (roleId != null && !roleId.isBlank()) {
+                distinct.add(roleId.trim());
+            }
+        }
+        if (distinct.isEmpty()) {
+            throw BizException.param("请至少选择一个后台角色");
+        }
+        List<Role> found = roleMapper.selectBatchIds(List.copyOf(distinct));
+        if (found.size() != distinct.size()) {
+            throw BizException.param("所选角色不存在或已被删除，请刷新后重试");
+        }
+        return List.copyOf(distinct);
     }
 
     private User requireCustomer(String userId) {

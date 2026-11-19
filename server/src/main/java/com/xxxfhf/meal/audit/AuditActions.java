@@ -40,6 +40,8 @@ public final class AuditActions {
     public static final String USER_DISABLE = "user.disable";
     public static final String USER_ENABLE = "user.enable";
     public static final String USER_DELETE = "user.delete";
+    /** 指定为商家：把已有微信顾客就地升级为商家账号（需求 4.17），一次记录写明新账号 */
+    public static final String USER_PROMOTE = "user.promote";
     public static final String USER_PHONE = "user.phone";
     /** 查看完整手机号：只读动作，记下来是为了「谁看过谁的号」可追溯 */
     public static final String USER_PHONE_VIEW = "user.phone.view";
@@ -59,6 +61,7 @@ public final class AuditActions {
             new Action(USER_DISABLE, "停用用户", TABLE_USER),
             new Action(USER_ENABLE, "恢复用户", TABLE_USER),
             new Action(USER_DELETE, "删除用户", TABLE_USER),
+            new Action(USER_PROMOTE, "指定为商家", TABLE_USER),
             new Action(USER_PHONE, "修改手机号", TABLE_USER),
             new Action(USER_PHONE_VIEW, "查看完整手机号", TABLE_USER),
             new Action(USER_SELF_DELETE, "用户自助注销", TABLE_USER)

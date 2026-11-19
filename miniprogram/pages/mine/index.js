@@ -193,7 +193,11 @@ Page({
   /**
    * 进商家工作台。
    *
-   * 本机存着同一个商家账号的登录态就直接进；换了手机（本地没登录态）先进登录页。
+   * 本机存着同一个商家账号的登录态就直接进；没有缓存时不再逼他重输账密 ——
+   * 商家令牌本来就是按 user_type 签发的，/admin/* 拦截器只看库里的类型与角色，
+   * 不区分令牌从哪条登录路径来（决策记录 D-27）。静默调 /auth/admin/me
+   * 把 username / permissions 补进本地缓存后直达；接口失败（掉线、权限被收回）
+   * 才退回账密登录页。
    */
   openMerchant() {
     const me = this.data.me || {};
@@ -202,7 +206,20 @@ Page({
       wx.navigateTo({ url: '/pages/merchant/home' });
       return;
     }
-    wx.navigateTo({ url: '/pages/merchant/login' });
+    request({ url: '/auth/admin/me', method: 'GET' })
+      .then((result) => {
+        wx.setStorageSync(MERCHANT_KEY, {
+          userId: result.userId,
+          username: result.username,
+          displayName: result.displayName,
+          permissions: result.permissions || [],
+        });
+        wx.navigateTo({ url: '/pages/merchant/home' });
+      })
+      .catch(() => {
+        // 拿不到商家登录态：令牌过期 / 类型不是 merchant / 没权限，回登录页兜底
+        wx.navigateTo({ url: '/pages/merchant/login' });
+      });
   },
 
   /* ---------------- 隐私与注销 ---------------- */

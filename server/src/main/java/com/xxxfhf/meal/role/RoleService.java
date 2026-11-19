@@ -75,6 +75,25 @@ public class RoleService {
 
     /* ---------------- 角色 ---------------- */
 
+    /**
+     * 角色下拉选项（仅 id + 名称），给「指定为商家」弹窗用。
+     *
+     * <p>为什么不复用 {@link #list()}：那个接口挂 role.manage 权限且带权限项清单，
+     * 而能指定商家的人（user.audit）不一定能管角色 —— 指定商家只该挑角色，
+     * 不该顺带看到每个角色里有哪些权限项。
+     */
+    @Transactional(readOnly = true)
+    public List<RoleOption> options() {
+        List<Role> roles = roleMapper.selectList(Wrappers.<Role>lambdaQuery()
+                .orderByDesc(Role::isBuiltin)
+                .orderByAsc(Role::getCreatedAt));
+        List<RoleOption> options = new ArrayList<>(roles.size());
+        for (Role role : roles) {
+            options.add(new RoleOption(role.getId(), role.getName()));
+        }
+        return options;
+    }
+
     @Transactional(readOnly = true)
     public List<RoleView> list() {
         List<Role> roles = roleMapper.selectList(Wrappers.<Role>lambdaQuery()
@@ -306,6 +325,10 @@ public class RoleService {
     }
 
     public record PermissionItem(String code, String name, String desc, boolean readOnly) {
+    }
+
+    /** 角色下拉选项：只有 id 与名称，不含权限项清单（见 {@link #options()}）。 */
+    public record RoleOption(String id, String name) {
     }
 
     public record AccountRow(String userId, String username, String displayName,
