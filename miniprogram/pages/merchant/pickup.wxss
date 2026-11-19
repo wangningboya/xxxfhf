@@ -22,6 +22,8 @@
   display: flex;
   justify-content: center;
   margin-top: 32rpx;
+  /* 隐藏输入框铺在这个容器里，点格子就能聚焦 */
+  position: relative;
 }
 
 .box {
@@ -44,13 +46,19 @@
   background: #fff8ef;
 }
 
-/* 真正的输入框藏在格子后面，视觉上用格子 */
-.hidden-input {
+/* 当前待输入的格子：光标就在这一格 */
+.box-active {
+  border-color: #ff9f1c;
+  background: #fff8ef;
+}
+
+/* 真正的输入框铺在四个格子上：点格子即聚焦，光标不会落到格子外面 */
+.code-input {
   position: absolute;
   left: 0;
-  right: 0;
-  bottom: 0;
-  height: 140rpx;
+  top: 0;
+  width: 100%;
+  height: 100%;
   opacity: 0;
 }
 

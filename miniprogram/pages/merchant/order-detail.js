@@ -1,6 +1,6 @@
 const app = getApp();
 const { request } = require('../../utils/request');
-const { yuan } = require('../../utils/format');
+const { yuan, dateStr } = require('../../utils/format');
 const dict = require('../../utils/dict');
 const payMethod = require('../../utils/pay-method');
 
@@ -124,11 +124,32 @@ Page({
     if (!this.data.nextStatus) {
       return;
     }
-    this.post(
-      '/admin/order/advance',
-      { orderId: this.data.orderId, status: this.data.nextStatus },
-      '已推进'
-    );
+    const go = () => {
+      this.post(
+        '/admin/order/advance',
+        { orderId: this.data.orderId, status: this.data.nextStatus },
+        '已推进'
+      );
+    };
+    const order = this.data.order || {};
+    // 未到供餐日只提醒、不拦截：商家要能提前把流程点一遍验证；弹一次只为防手滑
+    if (order.serveDate && order.serveDate > dateStr()) {
+      wx.showModal({
+        title: '还没到供餐日',
+        content:
+          '这单的供餐日是 ' + order.serveDate + '，今天 ' + dateStr() +
+          '。仍要「' + this.data.nextLabel + '」吗？',
+        confirmText: '仍要操作',
+        cancelText: '先等等',
+        success: (res) => {
+          if (res.confirm) {
+            go();
+          }
+        },
+      });
+      return;
+    }
+    go();
   },
 
   /**

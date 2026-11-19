@@ -56,15 +56,11 @@
       </view>
 
       <view class="region-items">
-        <text class="region-item" wx:for="{{item.items}}" wx:for-item="it" wx:key="name">
-          {{it.name}}×{{it.qty}}
-        </text>
+        <text class="region-item" wx:for="{{item.items}}" wx:for-item="it" wx:key="name">{{it.name}}×{{it.qty}}</text>
       </view>
 
       <view class="slots" wx:if="{{item.slots && item.slots.length}}">
-        <text class="slot" wx:for="{{item.slots}}" wx:for-item="s" wx:key="slot">
-          {{s.slot}} · {{s.qty}} 份
-        </text>
+        <text class="slot" wx:for="{{item.slots}}" wx:for-item="s" wx:key="slot">{{s.slot}} · {{s.qty}} 份</text>
       </view>
 
       <view class="contacts" wx:if="{{item.contacts && item.contacts.length}}">

@@ -355,6 +355,14 @@ function tomorrow() {
   return d.getFullYear() + '-' + m + '-' + day;
 }
 
+/** 今天，格式同 serveDate；用来判断「还没到供餐日」 */
+function today() {
+  const d = new Date();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return d.getFullYear() + '-' + m + '-' + day;
+}
+
 const serveDate = ref(tomorrow());
 const status = ref('');
 const keyword = ref('');
@@ -544,11 +552,31 @@ function nextLabel(current, deliveryType) {
   return '';
 }
 
+/**
+ * 未到供餐日只提示、不拦截：商家要能提前把流程点一遍验证。
+ * 确认弹窗只为防手滑，把明天的单当成今天的推成已完成。
+ */
 function onAdvance(row) {
   const target = nextStatus(row.order.status);
   if (!target) {
     return;
   }
+  const serveDateValue = row.order.serveDate;
+  if (serveDateValue && serveDateValue > today()) {
+    const label = nextLabel(row.order.status, row.order.deliveryType);
+    ElMessageBox.confirm(
+      `这单的供餐日是 ${serveDateValue}，今天 ${today()} 还没到供餐日。仍要标记为「${label}」吗？`,
+      '还没到供餐日',
+      { type: 'warning', confirmButtonText: '仍要操作', cancelButtonText: '先等等' }
+    )
+      .then(() => postAdvance(row, target))
+      .catch(() => {});
+    return;
+  }
+  postAdvance(row, target);
+}
+
+function postAdvance(row, target) {
   http
     .post('/admin/order/advance', { orderId: row.order.orderId, status: target })
     .then(() => {

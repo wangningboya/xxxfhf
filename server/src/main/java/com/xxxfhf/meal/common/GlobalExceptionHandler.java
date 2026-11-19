@@ -19,7 +19,9 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
  * 全局异常处理。
  *
  * 对外只暴露规范化错误结构，绝不返回堆栈、SQL 或内部类名。
- * HTTP 状态码与业务码同时给出：401/403 用真实状态码，便于小程序端统一处理登录过期。
+ * HTTP 状态码由 {@link ErrorCode#httpStatus()} 统一定义：
+ * 业务异常一律 4xx（小程序端据此判断「这是业务提示，直接展示 message」），
+ * 未预期异常才给 500（小程序端只提示「服务暂时不可用」）。
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -28,18 +30,11 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BizException.class)
     public ResponseEntity<ApiResponse<Void>> handleBiz(BizException ex, HttpServletRequest request) {
-        HttpStatus status = switch (ex.errorCode()) {
-            case UNAUTHORIZED -> HttpStatus.UNAUTHORIZED;
-            case FORBIDDEN -> HttpStatus.FORBIDDEN;
-            case NOT_FOUND -> HttpStatus.NOT_FOUND;
-            case CONFLICT -> HttpStatus.CONFLICT;
-            case PARAM_INVALID -> HttpStatus.BAD_REQUEST;
-            case TOO_MANY_ATTEMPTS -> HttpStatus.TOO_MANY_REQUESTS;
-            default -> HttpStatus.OK;
-        };
+        ErrorCode errorCode = ex.errorCode();
         log.warn("业务异常 {} {} -> [{}] {}", request.getMethod(), request.getRequestURI(),
-                ex.errorCode().code(), ex.getMessage());
-        return ResponseEntity.status(status).body(ApiResponse.fail(ex.errorCode(), ex.getMessage()));
+                errorCode.code(), ex.getMessage());
+        return ResponseEntity.status(errorCode.httpStatus())
+                .body(ApiResponse.fail(errorCode, ex.getMessage()));
     }
 
     /** @Valid 校验失败（请求体） */
@@ -79,7 +74,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<ApiResponse<Void>> handleNoResource(NoResourceFoundException ex) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+        return ResponseEntity.status(ErrorCode.NOT_FOUND.httpStatus())
                 .body(ApiResponse.fail(ErrorCode.NOT_FOUND, "接口不存在"));
     }
 
@@ -87,12 +82,14 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleUnexpected(Exception ex, HttpServletRequest request) {
         // 这里才记录完整堆栈，且只写日志不返回给客户端
         log.error("未预期异常 {} {}", request.getMethod(), request.getRequestURI(), ex);
+        // 不能写成 ErrorCode.SERVER_ERROR.httpStatus()：那个码由 BizException 抛出时走 200（文案可展示），
+        // 未预期异常必须给 500，小程序端才会用「服务暂时不可用」兜底
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.fail(ErrorCode.SERVER_ERROR, ErrorCode.SERVER_ERROR.message()));
     }
 
     private ResponseEntity<ApiResponse<Void>> badRequest(String message) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+        return ResponseEntity.status(ErrorCode.PARAM_INVALID.httpStatus())
                 .body(ApiResponse.fail(ErrorCode.PARAM_INVALID, message));
     }
 }

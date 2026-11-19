@@ -8,10 +8,7 @@
     </view>
     <view class="row">
       <text class="row-label">当天状态</text>
-      <text class="row-value">
-        {{closed ? '暂停供应' : '正常供应'}}
-        <text class="muted"> · 已选 {{pickedCount}} 个</text>
-      </text>
+      <text class="row-value">{{closed ? '暂停供应' : '正常供应'}}<text class="muted"> · 已选 {{pickedCount}} 个</text></text>
     </view>
     <view class="row" bindtap="onToggleClosed">
       <text class="row-label">{{closed ? '恢复供应' : '暂停供应'}}</text>

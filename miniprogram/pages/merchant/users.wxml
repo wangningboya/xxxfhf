@@ -40,9 +40,7 @@
       <view wx:for="{{addresses}}" wx:key="id" wx:for-item="addr" wx:for-index="addrIndex" class="addr">
         <view class="addr-top">
           <text class="addr-region">{{addr.regionName}}</text>
-          <text class="addr-status {{addr.status === 'active' ? 'addr-on' : (addr.status === 'rejected' ? 'addr-off' : '')}}">
-            {{addr.statusText}}
-          </text>
+          <text class="addr-status {{addr.status === 'active' ? 'addr-on' : (addr.status === 'rejected' ? 'addr-off' : '')}}">{{addr.statusText}}</text>
         </view>
         <view class="addr-detail">{{addr.contactName}} {{addr.phone}}</view>
         <view class="muted">{{addr.detail}}</view>

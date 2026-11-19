@@ -214,6 +214,13 @@ public class OrderAdminService {
                     + (next == null ? "" : "，下一步只能是「"
                     + OrderStatus.label(next, order.getDeliveryType()) + "」"));
         }
+        // 未到供餐日也放行：商家常要提前把「出餐 → 完成」点一遍串流程。
+        // 不拦，只留一条警告 —— 事后翻日志能看出这单是提前操作的。
+        if (order.getServeDate() != null && order.getServeDate().isAfter(clock.today())) {
+            log.warn("提前推进订单 orderNo={} 供餐日={} 今天={} {} -> {} 操作人={}",
+                    order.getOrderNo(), order.getServeDate(), clock.today(),
+                    order.getStatus(), target, operatorId);
+        }
         int affected = orderMapper.update(null, Wrappers.<Order>lambdaUpdate()
                 .set(Order::getStatus, target)
                 .eq(Order::getId, orderId)
@@ -265,6 +272,11 @@ public class OrderAdminService {
         if (!OrderStatus.canPickup(order.getStatus())) {
             throw BizException.conflict("订单当前状态是「"
                     + OrderStatus.label(order.getStatus(), order.getDeliveryType()) + "」，不能核销");
+        }
+        // 与 advance 一致：未到供餐日不拦，只留痕（提前核销常出现在串流程时）
+        if (serveDate.isAfter(clock.today())) {
+            log.warn("提前核销 orderNo={} 供餐日={} 今天={} 操作人={}",
+                    order.getOrderNo(), serveDate, clock.today(), operatorId);
         }
 
         int affected = orderMapper.update(null, Wrappers.<Order>lambdaUpdate()

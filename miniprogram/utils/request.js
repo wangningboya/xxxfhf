@@ -19,7 +19,10 @@ function setToken(token) {
  * 统一请求。
  *
  * 服务端约定：HTTP 200 + body.code === 0 为成功，其余 code 按业务错误处理。
- * 不把原始 HTTP 细节暴露给页面，页面只关心 message，便于直接展示。
+ *
+ * 业务异常与系统异常按状态码区分（状态码由后端 ErrorCode 枚举逐条定义）：
+ * - 4xx：业务异常，body.message 是后端给用户的原话，照原样抛给页面展示；
+ * - 5xx：系统异常（空指针、网关错误等），只提示兜底文案，不暴露内部细节。
  */
 function request(options) {
   const { url, method = 'GET', data, auth = true } = options;
@@ -51,6 +54,12 @@ function request(options) {
           return;
         }
         if (res.statusCode !== 200) {
+          // 4xx 是业务异常（后端 GlobalExceptionHandler 按 ErrorCode 映射），message 直接展示；
+          // 5xx、网关错误页、body 不是统一响应体都属于系统故障，统一兜底
+          if (res.statusCode >= 400 && res.statusCode < 500 && body.message) {
+            reject({ code: body.code || res.statusCode, message: body.message });
+            return;
+          }
           reject({ code: res.statusCode, message: '服务暂时不可用，请稍后重试' });
           return;
         }

@@ -26,9 +26,7 @@
     </view>
     <view class="ops">
       <text class="op" data-index="{{index}}" bindtap="onEdit">编辑</text>
-      <text class="op" data-index="{{index}}" bindtap="onToggle">
-        {{item.status === 'enabled' ? '停用' : '启用'}}
-      </text>
+      <text class="op" data-index="{{index}}" bindtap="onToggle">{{item.status === 'enabled' ? '停用' : '启用'}}</text>
       <text class="op op-danger" data-index="{{index}}" bindtap="onDelete">删除</text>
     </view>
   </view>
