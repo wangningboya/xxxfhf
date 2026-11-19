@@ -38,15 +38,24 @@ VALUES ('spec_staple', '主食', 1, 1,
 -- -----------------------------------------------------------------------------
 -- 菜品（原料层，不定价；不含米饭——米饭走规格组）
 -- -----------------------------------------------------------------------------
-INSERT IGNORE INTO `dish` (`id`, `name`, `image`, `category_id`, `status`, `sort`) VALUES
-    ('dish_001', '红烧肉',     NULL, NULL, 'enabled', 1),
-    ('dish_002', '清炒时蔬',   NULL, NULL, 'enabled', 2),
-    ('dish_003', '宫保鸡丁',   NULL, NULL, 'enabled', 3),
-    ('dish_004', '土豆炖牛腩', NULL, NULL, 'enabled', 4),
-    ('dish_005', '番茄炒蛋',   NULL, NULL, 'enabled', 5),
-    ('dish_006', '麻婆豆腐',   NULL, NULL, 'enabled', 6),
-    ('dish_007', '蒜蓉西兰花', NULL, NULL, 'enabled', 7),
-    ('dish_008', '紫菜蛋花汤', NULL, NULL, 'enabled', 8);
+INSERT IGNORE INTO `dish` (`id`, `name`, `category_id`, `status`, `sort`) VALUES
+    ('dish_001', '油豆腐烤肉',     NULL, 'enabled', 1),
+    ('dish_002', '萝卜干炒酱肉',   NULL, 'enabled', 2),
+    ('dish_003', '红烧小鲳鱼2条',   NULL, 'enabled', 3),
+    ('dish_004', '土豆炖牛腩', NULL, 'enabled', 4),
+    ('dish_005', '番茄炒蛋',   NULL, 'enabled', 5),
+    ('dish_006', '麻婆豆腐',   NULL, 'enabled', 6),
+    ('dish_007', '蒜蓉西兰花', NULL, 'enabled', 7),
+    ('dish_008', '热卤鸡腿', NULL, 'enabled', 8),
+    ('dish_009', '土豆胡萝卜烧牛肉', NULL, 'enabled', 9),
+    ('dish_010', '咸肉蒸蛋', NULL, 'enabled', 10),
+    ('dish_011', '毛豆子炒肉丝', NULL, 'enabled', 11),
+    ('dish_012', '四季豆肉末', NULL, 'enabled', 12),
+    ('dish_013', '红烧虾', NULL, 'enabled', 13),
+    ('dish_014', '肉末茄子', NULL, 'enabled', 14),
+    ('dish_015', '红烧鸡块', NULL, 'enabled', 15),
+    ('dish_016', '肉末豆腐', NULL, 'enabled', 16),
+    ('dish_017', '绿色蔬菜', NULL, 'enabled', 17);
 
 -- -----------------------------------------------------------------------------
 -- 盒饭（售卖层；全部启用「主食」规格组；金额单位分）

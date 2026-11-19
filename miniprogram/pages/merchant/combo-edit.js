@@ -74,7 +74,6 @@ Page({
         const dishOptions = (list || []).map((dish) => ({
           dishId: dish.id,
           name: dish.name,
-          image: dish.image || '',
         }));
         this.setData({ dishOptions }, () => this.syncDishChecked());
       })

@@ -65,7 +65,6 @@ public class DishService {
             }
         }
         dish.setName(name);
-        dish.setImage(trimToNull(cmd.image()));
         dish.setCategoryId(trimToNull(cmd.categoryId()));
 
         if (creating) {
@@ -173,6 +172,6 @@ public class DishService {
      * @param id         为空 = 新增
      * @param sort       编辑时传 null 表示不修改排序
      */
-    public record DishCommand(String id, String name, String image, String categoryId, Integer sort) {
+    public record DishCommand(String id, String name, String categoryId, Integer sort) {
     }
 }

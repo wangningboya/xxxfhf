@@ -9,6 +9,8 @@ import com.baomidou.mybatisplus.annotation.TableName;
  *
  * **没有价格字段**：一个盒饭一个价，与含几个菜无关，价格挂在 {@link Combo#getPrice()} 上。
  * 菜品只回答「这盒饭里有什么」，不单独售卖。
+ *
+ * **没有图片字段**：菜品不配图，照片只属于盒饭封面（{@link Combo#getCover()}）。
  */
 @TableName("dish")
 public class Dish {
@@ -18,9 +20,6 @@ public class Dish {
 
     /** 菜名，如「红烧肉」 */
     private String name;
-
-    /** 图片地址，可选 */
-    private String image;
 
     /** 预留分类字段。本版不提供维护入口，也不参与前端分组展示（需求 4.3） */
     private String categoryId;
@@ -46,14 +45,6 @@ public class Dish {
 
     public void setName(String name) {
         this.name = name;
-    }
-
-    public String getImage() {
-        return image;
-    }
-
-    public void setImage(String image) {
-        this.image = image;
     }
 
     public String getCategoryId() {

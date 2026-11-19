@@ -92,12 +92,11 @@ CREATE TABLE IF NOT EXISTS `address` (
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT ='收货地址';
 
 -- -----------------------------------------------------------------------------
--- 4. 菜品 dish（原料层，无价格）
+-- 4. 菜品 dish（原料层，无价格、不配图——照片只属于盒饭封面）
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `dish` (
     `id`          VARCHAR(32)  NOT NULL COMMENT '主键',
     `name`        VARCHAR(64)  NOT NULL COMMENT '菜名',
-    `image`       VARCHAR(512)          DEFAULT NULL COMMENT '图片',
     `category_id` VARCHAR(32)           DEFAULT NULL COMMENT '菜品分类',
     `status`      VARCHAR(16)  NOT NULL DEFAULT 'enabled' COMMENT 'enabled/disabled',
     `sort`        INT          NOT NULL DEFAULT 0 COMMENT '排序',

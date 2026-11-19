@@ -15,7 +15,6 @@
 
   <view wx:for="{{dishes}}" wx:key="id" class="card">
     <view class="dish-row">
-      <image wx:if="{{item.imageUrl}}" class="dish-img" src="{{item.imageUrl}}" mode="aspectFill" />
       <view class="dish-main">
         <view class="dish-name">
           {{item.name}}
@@ -36,34 +35,33 @@
     <view class="empty-desc">菜品是原料层（如红烧肉、米饭），盒饭由若干菜品组成</view>
   </view>
 
-  <!-- 表单 -->
-  <view wx:if="{{form}}" class="card">
-    <view class="card-title">{{form.id ? '编辑菜品' : '新增菜品'}}</view>
+  <view class="bottom-gap"></view>
+  <view class="bottom-bar">
+    <view class="btn" bindtap="onNew">新增菜品</view>
+  </view>
+
+  <!-- 编辑 / 新增：底部抽屉，点编辑直接弹出，不用再滑到页面底部 -->
+  <view wx:if="{{form}}" class="mask" bindtap="onCancel" catchtouchmove="noop"></view>
+  <view wx:if="{{form}}" class="sheet" style="bottom: {{keyboardHeight}}px">
+    <view class="sheet-head">
+      <view class="sheet-title">{{form.id ? '编辑菜品' : '新增菜品'}}</view>
+      <view class="sheet-close" bindtap="onCancel">×</view>
+    </view>
     <view class="field">
       <text class="field-label">名称</text>
       <input class="field-input" placeholder="如：红烧肉" placeholder-class="ph"
-             value="{{form.name}}" data-key="name" bindinput="onInput" />
+             value="{{form.name}}" data-key="name" bindinput="onInput"
+             adjust-position="{{false}}" cursor-spacing="24" />
     </view>
     <view class="field">
       <text class="field-label">排序</text>
       <input class="field-input" type="number" placeholder="数字小的排前面（可不填）" placeholder-class="ph"
-             value="{{form.sort}}" data-key="sort" bindinput="onInput" />
+             value="{{form.sort}}" data-key="sort" bindinput="onInput"
+             adjust-position="{{false}}" cursor-spacing="24" />
     </view>
-    <view class="field">
-      <text class="field-label">图片</text>
-      <view class="img-box">
-        <image wx:if="{{form.imageUrl}}" class="dish-img" src="{{form.imageUrl}}" mode="aspectFill" bindtap="onChooseImage" />
-        <view wx:else class="img-add" bindtap="onChooseImage">{{uploading ? '上传中…' : '＋ 上传'}}</view>
-      </view>
-    </view>
-    <view class="form-ops">
+    <view class="sheet-ops">
       <view class="btn btn-ghost" bindtap="onCancel">取消</view>
       <view class="btn" bindtap="onSave">{{saving ? '保存中…' : '保存'}}</view>
     </view>
-  </view>
-
-  <view class="bottom-gap" wx:if="{{form}}"></view>
-  <view class="bottom-bar" wx:if="{{!form}}">
-    <view class="btn" bindtap="onNew">新增菜品</view>
   </view>
 </view>

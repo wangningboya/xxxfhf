@@ -1,12 +1,11 @@
 const app = getApp();
-const { request, getToken } = require('../../utils/request');
-const { assetUrl } = require('../../utils/format');
-const { apiBase } = require('../../config');
+const { request } = require('../../utils/request');
 
 /**
  * 菜品库（F-H10）：原料菜维护。
  *
- * 菜品没有价格 —— 价格只在盒饭上，散菜不单独售卖。这一点决定了本页只有名称与图片。
+ * 菜品没有价格 —— 价格只在盒饭上，散菜不单独售卖。菜品也不配图：
+ * 照片只属于盒饭封面，本页只有名称与排序。
  */
 Page({
   data: {
@@ -15,8 +14,21 @@ Page({
     dishes: [],
     loading: false,
     form: null,
-    uploading: false,
+    keyboardHeight: 0,
     saving: false,
+  },
+
+  onLoad() {
+    this.keyboardHandler = (res) => {
+      this.setData({ keyboardHeight: res.height || 0 });
+    };
+    wx.onKeyboardHeightChange(this.keyboardHandler);
+  },
+
+  onUnload() {
+    if (this.keyboardHandler && wx.offKeyboardHeightChange) {
+      wx.offKeyboardHeightChange(this.keyboardHandler);
+    }
   },
 
   onShow() {
@@ -43,13 +55,7 @@ Page({
     const kw = encodeURIComponent(this.data.keyword || '');
     const status = this.data.status ? '&status=' + this.data.status : '';
     request({ url: '/admin/dish/list?keyword=' + kw + status })
-      .then((list) => this.setData({
-        // image 是相对路径（要原样回传保存），imageUrl 才是给 <image src> 用的完整地址
-        dishes: (list || []).map((dish) => Object.assign({}, dish, {
-          imageUrl: assetUrl(dish.image),
-        })),
-        loading: false,
-      }))
+      .then((list) => this.setData({ dishes: list || [], loading: false }))
       .catch((err) => {
         this.setData({ loading: false });
         app.toastError(err);
@@ -62,7 +68,10 @@ Page({
   },
 
   onNew() {
-    this.setData({ form: { id: '', name: '', image: '', imageUrl: '', sort: this.data.dishes.length + 1 } });
+    this.setData({
+      form: { id: '', name: '', sort: this.data.dishes.length + 1 },
+      keyboardHeight: 0,
+    });
   },
 
   onEdit(e) {
@@ -74,15 +83,14 @@ Page({
       form: {
         id: dish.id,
         name: dish.name,
-        image: dish.image || '',
-        imageUrl: dish.imageUrl || '',
         sort: dish.sort || 0,
       },
+      keyboardHeight: 0,
     });
   },
 
   onCancel() {
-    this.setData({ form: null });
+    this.setData({ form: null, keyboardHeight: 0 });
   },
 
   onInput(e) {
@@ -92,45 +100,8 @@ Page({
     this.setData({ form });
   },
 
-  onChooseImage() {
-    wx.chooseMedia({
-      count: 1,
-      mediaType: ['image'],
-      sizeType: ['compressed'],
-      success: (res) => {
-        this.setData({ uploading: true });
-        wx.uploadFile({
-          // 上传接口挂在 /admin/file 下（与后台网页同一入口），不是根路径的 /upload
-          url: apiBase + '/admin/file/upload',
-          filePath: res.tempFiles[0].tempFilePath,
-          name: 'file',
-          header: { Authorization: 'Bearer ' + getToken() },
-          success: (uploadRes) => {
-            let body = {};
-            try {
-              body = JSON.parse(uploadRes.data || '{}');
-            } catch (e) {
-              body = {};
-            }
-            if (uploadRes.statusCode === 200 && body.code === 0 && body.data) {
-              const form = Object.assign({}, this.data.form, {
-                image: body.data.url,
-                imageUrl: assetUrl(body.data.url),
-              });
-              this.setData({ form, uploading: false });
-            } else {
-              this.setData({ uploading: false });
-              app.toastError({ message: body.message || '上传失败' });
-            }
-          },
-          fail: () => {
-            this.setData({ uploading: false });
-            app.toastError({ message: '上传失败，请检查网络' });
-          },
-        });
-      },
-    });
-  },
+  /** 遮罩上 catchtouchmove 用，防止背景跟着滚动 */
+  noop() {},
 
   onSave() {
     const form = this.data.form;
@@ -148,12 +119,11 @@ Page({
       data: {
         id: form.id || null,
         name: form.name.trim(),
-        image: form.image || null,
         sort: form.sort === '' ? null : Number(form.sort),
       },
     })
       .then(() => {
-        this.setData({ saving: false, form: null });
+        this.setData({ saving: false, form: null, keyboardHeight: 0 });
         wx.showToast({ title: '已保存', icon: 'success' });
         this.load();
       })

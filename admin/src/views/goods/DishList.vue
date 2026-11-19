@@ -20,18 +20,6 @@
     </div>
 
     <el-table v-loading="loading" :data="rows" border size="small" style="width: 100%">
-      <el-table-column label="图片" width="80">
-        <template #default="{ row }">
-          <el-image
-            v-if="row.image"
-            :src="row.image"
-            :preview-src-list="[row.image]"
-            fit="cover"
-            style="width: 44px; height: 44px; border-radius: 4px"
-          />
-          <span v-else class="muted">—</span>
-        </template>
-      </el-table-column>
       <el-table-column prop="name" label="菜品名称" min-width="180" />
       <el-table-column prop="sort" label="排序" width="80" align="center" />
       <el-table-column label="状态" width="100">
@@ -60,17 +48,6 @@
         <el-form-item label="排序">
           <el-input-number v-model="form.sort" :min="0" :max="9999" />
           <div class="muted">数字小的排前面</div>
-        </el-form-item>
-        <el-form-item label="图片">
-          <el-upload
-            :show-file-list="false"
-            :http-request="uploadImage"
-            accept="image/*"
-          >
-            <el-image v-if="form.image" :src="form.image" fit="cover" class="upload-preview" />
-            <el-button v-else>上传图片</el-button>
-          </el-upload>
-          <el-button v-if="form.image" link type="danger" @click="form.image = ''">移除</el-button>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -116,23 +93,9 @@ function reload() {
 
 function openForm(row) {
   form.value = row
-    ? { id: row.id, name: row.name, image: row.image || '', sort: row.sort || 0 }
-    : { id: '', name: '', image: '', sort: 0 };
+    ? { id: row.id, name: row.name, sort: row.sort || 0 }
+    : { id: '', name: '', sort: 0 };
   dialog.value = true;
-}
-
-/** 走 axios 上传是为了带上 Authorization；Element 的默认上传不带令牌 */
-async function uploadImage(options) {
-  const data = new FormData();
-  data.append('file', options.file);
-  const result = await http.post('/admin/file/upload', data, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
-  form.value.image = result.url;
-  ElMessage.success('已上传');
-  if (options.onSuccess) {
-    options.onSuccess(result);
-  }
 }
 
 function onSave() {
@@ -145,7 +108,6 @@ function onSave() {
     .post('/admin/dish/save', {
       id: form.value.id || null,
       name: form.value.name.trim(),
-      image: form.value.image || null,
       sort: form.value.sort,
     })
     .then(() => {
@@ -183,12 +145,3 @@ function onDelete(row) {
 
 onMounted(load);
 </script>
-
-<style scoped>
-.upload-preview {
-  width: 72px;
-  height: 72px;
-  border-radius: 6px;
-  display: block;
-}
-</style>
