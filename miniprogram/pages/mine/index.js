@@ -35,10 +35,21 @@ Page({
   },
 
   onShow() {
+    // 未登记的微信没有令牌，拉 /auth/me 只会 401，先把人送到填邀请码的页面
     app
       .ensureLogin()
-      .then(() => app.refreshMe())
-      .then((me) => this.apply(me))
+      .then((me) => {
+        if (me && !me.registered) {
+          wx.reLaunch({ url: '/pages/no-access/index' });
+          return null;
+        }
+        return app.refreshMe();
+      })
+      .then((me) => {
+        if (me) {
+          this.apply(me);
+        }
+      })
       .catch((err) => {
         app.toastError(err);
         this.buildCells(this.data.me);
@@ -284,9 +295,11 @@ Page({
     this.setData({ deleting: true });
     request({ url: '/auth/delete', method: 'POST' })
       .then(() => {
+        // 令牌当场作废，本地状态一并清掉；然后去「已注销」页而不是回首页——
+        // 首页会把注销后的微信当成一个没登记的新用户，立刻冲到填邀请码的页面
         setToken('');
-        wx.showToast({ title: '已注销', icon: 'success' });
-        setTimeout(() => wx.reLaunch({ url: '/pages/index/index' }), 800);
+        app.globalData.me = null;
+        wx.reLaunch({ url: '/pages/account-deleted/index' });
       })
       .catch((err) => app.toastError(err))
       .then(() => this.setData({ deleting: false }));

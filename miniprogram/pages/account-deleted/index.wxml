@@ -1,0 +1,15 @@
+<view class="page">
+  <view class="badge">
+    <text class="badge-text">已注销</text>
+  </view>
+
+  <view class="title">账号已注销</view>
+  <view class="desc">
+    昵称、头像、手机号已清除，这个账号不能再登录。
+  </view>
+
+  <view class="tips">
+    <view class="tips-line">如果你有历史订单，订单会按法律规定保留 3 年，仅用于对账与售后，其中的联系电话已做掩码处理。</view>
+    <view class="tips-line">如果今后还要下单，请从本店服务群的分享卡片进入，或向商家索要邀请码重新登记。</view>
+  </view>
+</view>

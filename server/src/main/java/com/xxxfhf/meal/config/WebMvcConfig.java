@@ -20,9 +20,10 @@ public class WebMvcConfig implements WebMvcConfigurer {
 
     private static final Logger log = LoggerFactory.getLogger(WebMvcConfig.class);
 
-    /** 免登录路径：两个登录接口、健康检查、错误转发、图片静态资源 */
+    /** 免登录路径：登录与首次登记、健康检查、错误转发、图片静态资源 */
     private static final String[] WHITE_LIST = {
-            "/auth/login", "/auth/admin/login", "/health", "/ready", "/error", "/upload/**"
+            "/auth/login", "/auth/admin/login", "/auth/join",
+            "/health", "/ready", "/error", "/upload/**"
     };
 
     private final AuthInterceptor authInterceptor;

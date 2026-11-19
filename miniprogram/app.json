@@ -3,6 +3,7 @@
     "pages/index/index",
     "pages/home/index",
     "pages/no-access/index",
+    "pages/account-deleted/index",
     "pages/combo/detail",
     "pages/cart/index",
     "pages/order/confirm",

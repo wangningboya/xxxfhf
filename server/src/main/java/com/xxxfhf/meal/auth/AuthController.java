@@ -41,6 +41,18 @@ public class AuthController {
     }
 
     /**
+     * 首次进入：凭邀请码或群卡片登记并登录。
+     *
+     * 免登录。login 只认已登记的号，没登记就返回 registered=false，前端再带凭证来这里建号。
+     * 邀请码与群卡片二选一，两条都给或都不给都会被拒绝。
+     */
+    @PostMapping("/join")
+    public ApiResponse<AuthService.LoginResult> join(@Valid @RequestBody JoinRequest request) {
+        return ApiResponse.ok(authService.join(
+                request.code(), request.inviteCode(), request.encryptedData(), request.iv()));
+    }
+
+    /**
      * 商家账密登录。账号不存在与密码错误返回同一句提示。
      * 密码不做长度下限校验之外的限制，避免把「密码规则」暴露成可探测信息。
      */
@@ -171,6 +183,19 @@ public class AuthController {
     public record InviteRequest(
             @NotBlank(message = "请输入邀请码")
             @Size(max = 32, message = "邀请码过长") String code) {
+    }
+
+    /**
+     * 首次进入的请求体：邀请码与群卡片二选一。
+     *
+     * <p>两个字段都不加 @NotBlank —— 这里没有「必填的那一个」，
+     * 到底缺哪个由服务端判断后给出一句能看懂的话。
+     */
+    public record JoinRequest(
+            @NotBlank(message = "缺少登录 code") String code,
+            @Size(max = 32, message = "邀请码过长") String inviteCode,
+            @Size(max = 4096, message = "加密数据过长") String encryptedData,
+            @Size(max = 128, message = "加密向量过长") String iv) {
     }
 
     public record NickNameRequest(

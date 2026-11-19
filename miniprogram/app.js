@@ -2,6 +2,20 @@ const { request, setToken, getToken, toastError } = require('./utils/request');
 const { getGroupEncrypted } = require('./utils/group-entry');
 const dict = require('./utils/dict');
 
+/** 微信登录拿不到 code 时的统一文案：两种情况对用户是同一件事 */
+const LOGIN_FAILED = '微信登录失败，请重新进入小程序';
+
+/**
+ * 尚未登记的微信用户。
+ *
+ * 服务端 /auth/login 不再「查不到就建号」，这个微信第一次进来时拿到的就是这份状态：
+ * 没有令牌、没有 userId、也没有审核状态。前端据此去要准入凭证（邀请码或群卡片），
+ * 凭证核验通过才调 /auth/join 建号。
+ */
+function unregistered() {
+  return { registered: false, accessGranted: false, accessVia: null };
+}
+
 App({
   globalData: {
     /** 当前用户的准入与审核状态，结构同服务端 /auth/me */
@@ -65,6 +79,8 @@ App({
    *
    * 只有 wx.login 拿到的 code 能换 openid，没有本地兜底方案，所以失败就是失败。
    * 不能假装已登录——那会让后续所有接口都 401，现象更难定位。
+   *
+   * @return {Promise<object>} 用户状态；registered=false 表示这个微信还没登记过
    */
   ensureLogin() {
     if (getToken()) {
@@ -78,27 +94,22 @@ App({
       wx.login({
         success: (res) => {
           if (!res.code) {
-            reject({ message: '微信登录失败，请重新进入小程序' });
+            reject({ message: LOGIN_FAILED });
             return;
           }
           request({ url: '/auth/login', method: 'POST', data: { code: res.code }, auth: false })
             .then((data) => {
-              setToken(data.token);
-              this.globalData.me = {
-                userId: data.userId,
-                nickName: data.nickName,
-                avatarUrl: data.avatarUrl,
-                accessGranted: data.accessGranted,
-                accessVia: data.accessVia,
-                auditStatus: data.auditStatus,
-                rejectReason: data.rejectReason,
-                phone: data.phone,
-              };
-              resolve(this.globalData.me);
+              if (!data.registered) {
+                // 没登记过不发令牌：建号只能发生在 joinByInvite / 群卡片登记里
+                this.globalData.me = unregistered();
+                resolve(this.globalData.me);
+                return;
+              }
+              resolve(this.applyLogin(data));
             })
             .catch(reject);
         },
-        fail: () => reject({ message: '微信登录失败，请重新进入小程序' }),
+        fail: () => reject({ message: LOGIN_FAILED }),
       });
     });
 
@@ -113,11 +124,68 @@ App({
     return promise;
   },
 
+  /**
+   * 把登录 / 登记的响应落到本地：写令牌、拼用户状态。
+   *
+   * 单独拆出来是因为 /auth/login 与 /auth/join 的响应结构一致，
+   * 且 registered 这个字段必须保留——页面靠它区分「该去填邀请码」和「已登记但没准入」。
+   */
+  applyLogin(data) {
+    setToken(data.token);
+    this.globalData.me = {
+      registered: true,
+      userId: data.userId,
+      nickName: data.nickName,
+      avatarUrl: data.avatarUrl,
+      accessGranted: data.accessGranted,
+      accessVia: data.accessVia,
+      auditStatus: data.auditStatus,
+      rejectReason: data.rejectReason,
+      phone: data.phone,
+    };
+    return this.globalData.me;
+  },
+
+  /**
+   * 凭准入凭证登记并登录（POST /auth/join）。
+   *
+   * 每次都新取一个 wx.login code：code 只能用一次，用户填邀请码的这段时间足够它过期。
+   *
+   * @param {object} credential {inviteCode} 或 {encryptedData, iv}，二选一
+   */
+  joinRequest(credential) {
+    return new Promise((resolve, reject) => {
+      wx.login({
+        success: (res) => {
+          if (!res.code) {
+            reject({ message: LOGIN_FAILED });
+            return;
+          }
+          request({
+            url: '/auth/join',
+            method: 'POST',
+            auth: false,
+            data: Object.assign({ code: res.code }, credential),
+          })
+            .then((data) => resolve(this.applyLogin(data)))
+            .catch(reject);
+        },
+        fail: () => reject({ message: LOGIN_FAILED }),
+      });
+    });
+  },
+
+  /** 用邀请码登记并进入：未登记用户走这里，登记失败的文案由服务端给（码过期 / 已用过等）。 */
+  joinByInvite(rawCode) {
+    return this.joinRequest({ inviteCode: rawCode });
+  },
+
   /** 刷新当前用户状态（商家审核后用户无需重登即可看到变化）。 */
   refreshMe() {
     return request({ url: '/auth/me' }).then((data) => {
-      this.globalData.me = data;
-      return data;
+      // /auth/me 只发给已登记的号，所以这里补上 registered
+      this.globalData.me = Object.assign({ registered: true }, data);
+      return this.globalData.me;
     });
   },
 
@@ -150,21 +218,49 @@ App({
    * 令牌 7 天到期是必然发生的事，所以这里遇到 401 会清掉本地令牌重新 wx.login 一次，
    * 而不是把「登录已过期」甩给用户让他自己猜怎么办。
    *
+   * 未登记的号没有令牌，刷新状态只会 401，所以直接去试群卡片登记：
+   * 从群卡片进来的人不必手输邀请码，与商家的群白名单对上就自动建号。
+   *
    * @param {object} options 页面 onLoad 的 options（含 shareTicket）
    * @return {Promise<object>} 最新的用户状态
    */
   bootstrap(options) {
     return this.ensureLogin()
-      .then(() =>
-        this.refreshMe().catch((err) => {
+      .then((me) => {
+        if (me && !me.registered) {
+          // 明确知道没登记（没有令牌）：试试这次是不是从群卡片进来的
+          return this.tryJoinByGroup(options, me);
+        }
+        // me 为空说明有令牌但内存里还没状态，照旧拉一次
+        return this.refreshMe().catch((err) => {
           if (err && err.code === 40101) {
             setToken('');
-            return this.ensureLogin().then(() => this.refreshMe());
+            return this.ensureLogin().then((fresh) =>
+              fresh && fresh.registered ? this.refreshMe() : this.tryJoinByGroup(options, fresh)
+            );
           }
           throw err;
-        })
-      )
+        });
+      })
       .then((me) => (me && me.accessGranted ? me : this.tryBindGroup(options, me)));
+  },
+
+  /**
+   * 尚未登记时，用群卡片带的加密数据直接登记（POST /auth/join）。
+   *
+   * 失败不弹错：群卡片可能被转发到别的群，也可能本来就拿不到密文，
+   * 这两种情况都该安静地落到引导页走邀请码。
+   */
+  tryJoinByGroup(options, currentMe) {
+    return getGroupEncrypted(options).then((encrypted) => {
+      if (!encrypted) {
+        return currentMe;
+      }
+      return this.joinRequest({
+        encryptedData: encrypted.encryptedData,
+        iv: encrypted.iv,
+      }).catch(() => currentMe);
+    });
   },
 
   /**
@@ -174,6 +270,10 @@ App({
    * 在这条路径上弹红字只会让用户困惑。
    */
   tryBindGroup(options, currentMe) {
+    if (!currentMe || !currentMe.registered) {
+      // 未登记的号没有令牌，调不到 /auth/bind-group，该走的是 join
+      return Promise.resolve(currentMe);
+    }
     return getGroupEncrypted(options).then((encrypted) => {
       if (!encrypted) {
         return currentMe;

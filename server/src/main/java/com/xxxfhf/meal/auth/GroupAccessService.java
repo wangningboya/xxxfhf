@@ -31,6 +31,9 @@ import java.util.List;
  * - 准入 = 是不是本店群里的人（决定能不能进小程序、能不能看到菜单）
  * - 审核 = 商家认不认这个人（决定能不能下单）
  * 已准入但待审核的用户按要求可以浏览菜单，只是下单按钮不可用。
+ *
+ * <p>建号的唯一入口是 {@link AuthService#join}：那里先插入 pending 行再调本类校验凭证，
+ * 校验不过就抛异常让整个事务回滚。所以「打开过小程序」本身不会在库里留下任何记录。
  */
 @Service
 public class GroupAccessService {
@@ -88,8 +91,18 @@ public class GroupAccessService {
      */
     @Transactional
     public AccessState bindByShare(Long userId, String encryptedData, String iv) {
-        User user = requireUser(userId);
+        return bindByShare(requireUser(userId), encryptedData, iv);
+    }
 
+    /**
+     * 同 {@link #bindByShare(Long, String, String)}，直接作用于一个用户行。
+     *
+     * <p>给 {@link AuthService#join} 用：首次进入时用户行刚在同一个事务里插入，还没有提交，
+     * 只能把实体传进来而不是再按 id 查一次。建号与绑定必须同生共死——
+     * 群卡片不是本店的群时，刚插入的行要跟着回滚，否则又回到「打开过小程序就多一条待审核记录」。
+     */
+    @Transactional
+    public AccessState bindByShare(User user, String encryptedData, String iv) {
         if (user.getGroupOpenId() != null && !user.getGroupOpenId().isBlank()) {
             // 已绑定就是已准入，重复进来不必再解一次密
             return resolve(user);
@@ -111,13 +124,13 @@ public class GroupAccessService {
         }
         if (!allowed.contains(openGId)) {
             // 群卡片被转发到别的群时的正常拦截
-            log.warn("群准入被拒：openGId 不在白名单，openGId={} 用户={}", openGId, userId);
+            log.warn("群准入被拒：openGId 不在白名单，openGId={} 用户={}", openGId, user.getId());
             throw BizException.forbidden("该群不是本店的服务群，请联系商家获取邀请码");
         }
 
         user.setGroupOpenId(openGId);
         userMapper.updateById(user);
-        log.info("群绑定成功 userId={} openGId={}", userId, openGId);
+        log.info("群绑定成功 userId={} openGId={}", user.getId(), openGId);
         return resolve(user);
     }
 
@@ -131,8 +144,18 @@ public class GroupAccessService {
      */
     @Transactional
     public AccessState bindByInvite(Long userId, String rawCode) {
-        User user = requireUser(userId);
+        return bindByInvite(requireUser(userId), rawCode);
+    }
 
+    /**
+     * 同 {@link #bindByInvite(Long, String)}，直接作用于一个用户行。
+     *
+     * <p>给 {@link AuthService#join} 用：邀请码核销要写 {@code used_by}，必须先有 userId，
+     * 所以首次进入的顺序是「先插入 pending 行拿 id → 再核销 → 核销失败整个事务回滚」。
+     * 反过来的话，一张无效的码就会在库里留下一条谁也用不上的待审核记录。
+     */
+    @Transactional
+    public AccessState bindByInvite(User user, String rawCode) {
         if (AuditStatus.DISABLED.equals(user.getAuditStatus())) {
             throw BizException.forbidden("账号已被禁用，请联系群管理员");
         }
@@ -141,13 +164,13 @@ public class GroupAccessService {
             return resolve(user);
         }
 
-        inviteCodeService.consume(rawCode, userId);
+        inviteCodeService.consume(rawCode, user.getId());
 
         if (AuditStatus.REJECTED.equals(user.getAuditStatus())) {
             user.setAuditStatus(AuditStatus.PENDING);
             user.setRejectReason(null);
             userMapper.updateById(user);
-            log.info("被驳回用户用邀请码重新进入，状态回到待审核 userId={}", userId);
+            log.info("被驳回用户用邀请码重新进入，状态回到待审核 userId={}", user.getId());
         }
         return resolve(user);
     }

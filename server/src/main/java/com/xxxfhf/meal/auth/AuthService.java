@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.xxxfhf.meal.audit.AuditActions;
 import com.xxxfhf.meal.audit.AuditService;
 import com.xxxfhf.meal.common.BizException;
+import com.xxxfhf.meal.common.ErrorCode;
 import com.xxxfhf.meal.common.MaskUtil;
 import com.xxxfhf.meal.role.Role;
 import com.xxxfhf.meal.role.RoleMapper;
@@ -13,6 +14,7 @@ import com.xxxfhf.meal.user.UserMapper;
 import com.xxxfhf.meal.user.UserType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,7 +30,8 @@ import java.util.Set;
  * 账号类型由 user.user_type 决定（customer / merchant），角色只决定「能做什么」。
  *
  * 边界说明：
- * - 微信侧只做「code2Session → 落/取用户 → 发 token」，首次进入即为 pending（待审核）。
+ * - 微信侧分两步：{@link #login} 只做「code2Session → 取用户 → 发 token」，查到就登录、查不到就说没登记；
+ *   {@link #join} 才是建号的唯一入口，且必须先拿到准入凭证（邀请码或群卡片）。
  * - 准入（群 openGId / 邀请码）由 {@link GroupAccessService} 负责，本类只把结果拼进响应。
  */
 @Service
@@ -72,18 +75,12 @@ public class AuthService {
         // session_key 只留在服务端内存，用于解密 openGId 与手机号
         sessionKeyStore.put(session.openid(), session.sessionKey());
 
-        User user = userMapper.selectOne(Wrappers.<User>lambdaQuery()
-                .eq(User::getOpenid, session.openid()));
-
+        User user = findByOpenid(session.openid());
         if (user == null) {
-            user = new User();
-            user.setUserType(UserType.CUSTOMER);
-            user.setOpenid(session.openid());
-            user.setAuditStatus(AuditStatus.PENDING);
-            user.setRoleIds(List.of());
-            user.setCreatedAt(LocalDateTime.now());
-            userMapper.insert(user);
-            log.info("新用户登记待审核 userId={}", user.getId());
+            // 没登记过就不登记：建号只发生在 join()，见那里的说明。
+            // 这里返回一个空壳结果，前端据此去拉群卡片或让用户填邀请码。
+            log.info("已识别的微信用户尚未登记，等待准入凭证");
+            return LoginResult.unregistered();
         }
 
         if (AuditStatus.DISABLED.equals(user.getAuditStatus())) {
@@ -95,7 +92,77 @@ public class AuthService {
         GroupAccessService.AccessState access = groupAccessService.resolve(user);
         return new LoginResult(token, user.getId(), user.getNickName(), user.getAvatarUrl(),
                 access.accessGranted(), access.accessVia(),
-                access.auditStatus(), access.rejectReason(), access.phone());
+                access.auditStatus(), access.rejectReason(), access.phone(), true);
+    }
+
+    /**
+     * 首次进入：凭邀请码或群卡片登记账号并登录。
+     *
+     * <p>为什么建号不在 {@link #login} 里做：登录只凭 code 换 openid，任何人打开小程序都会调一次。
+     * 顺手建号的后果是「打开过小程序」的人全部堆进商家的待审核列表，注销之后重新打开又冒出一条新的
+     * （小程序注销成功会重进首页，首页 onShow 必然触发一次登录）。所以建号必须挂在一个
+     * 「确实取得了准入资格」的动作上：邀请码被成功核销，或群 openGId 通过白名单校验。
+     *
+     * <p>顺序是「先插入 → 再核销」而不是反过来：邀请码要写 {@code used_by}，必须先有 userId。
+     * 两步在同一个事务里，凭证无效时刚插入的行跟着回滚，库里不会留下谁也用不上的空账号。
+     *
+     * @param code          微信登录 code
+     * @param rawInviteCode 邀请码，与群卡片二选一
+     * @param encryptedData 群卡片密文，与邀请码二选一
+     * @param iv            群卡片向量，随 encryptedData 一起给
+     */
+    @Transactional
+    public LoginResult join(String code, String rawInviteCode, String encryptedData, String iv) {
+        boolean byInvite = rawInviteCode != null && !rawInviteCode.isBlank();
+        boolean byGroup = encryptedData != null && !encryptedData.isBlank()
+                && iv != null && !iv.isBlank();
+        if (byInvite == byGroup) {
+            // 两条都给或都不给：分不清该用哪条路，宁可报错也不猜
+            throw BizException.param("请提供邀请码或群卡片信息");
+        }
+
+        WxApiClient.WxSession session = wxApiClient.code2Session(code);
+        sessionKeyStore.put(session.openid(), session.sessionKey());
+
+        User user = findByOpenid(session.openid());
+        if (user == null) {
+            user = new User();
+            user.setUserType(UserType.CUSTOMER);
+            user.setOpenid(session.openid());
+            user.setAuditStatus(AuditStatus.PENDING);
+            user.setRoleIds(List.of());
+            user.setCreatedAt(LocalDateTime.now());
+            try {
+                userMapper.insert(user);
+            } catch (DuplicateKeyException ex) {
+                // 同一 openid 并发提交了两次：唯一索引挡住后一条，用先落库的那条继续
+                user = findByOpenid(session.openid());
+            }
+            if (user == null || user.getId() == null) {
+                throw new BizException(ErrorCode.SERVER_ERROR, "登记失败，请重试");
+            }
+            log.info("新用户凭准入凭证登记 userId={}", user.getId());
+        }
+
+        if (AuditStatus.DISABLED.equals(user.getAuditStatus())) {
+            throw BizException.forbidden("账号已被禁用，请联系群管理员");
+        }
+
+        // 凭证校验失败会抛异常，上面插入的行跟着回滚——这是「脏数据不再产生」的关键
+        GroupAccessService.AccessState access = byInvite
+                ? groupAccessService.bindByInvite(user, rawInviteCode)
+                : groupAccessService.bindByShare(user, encryptedData, iv);
+
+        String token = jwtService.issue(user.getId(), user.getUserType(), tokenVersion(user));
+        return new LoginResult(token, user.getId(), user.getNickName(), user.getAvatarUrl(),
+                access.accessGranted(), access.accessVia(),
+                access.auditStatus(), access.rejectReason(), access.phone(), true);
+    }
+
+    /** 按 openid 查用户；未登记返回 null。 */
+    private User findByOpenid(String openid) {
+        return userMapper.selectOne(Wrappers.<User>lambdaQuery()
+                .eq(User::getOpenid, openid));
     }
 
     /** 当前登录用户的准入与审核状态。前端每次进「我的」页或从后台切回来时刷新。 */
@@ -255,10 +322,18 @@ public class AuthService {
      * @param auditStatus   pending / approved / rejected，前端据此决定下单按钮是否可点
      * @param rejectReason  驳回原因，仅 rejected 时有值
      * @param phone         已采集的手机号，可能为空
+     * @param registered    false 表示这个微信还没登记过，token 与其余字段全为空，
+     *                      前端应引导用户凭邀请码或群卡片进入（POST /auth/join）
      */
     public record LoginResult(String token, Long userId, String nickName, String avatarUrl,
                               boolean accessGranted, String accessVia,
-                              String auditStatus, String rejectReason, String phone) {
+                              String auditStatus, String rejectReason, String phone,
+                              boolean registered) {
+
+        /** 未登记：除 registered=false 外全为空。 */
+        public static LoginResult unregistered() {
+            return new LoginResult(null, null, null, null, false, null, null, null, null, false);
+        }
     }
 
     /**

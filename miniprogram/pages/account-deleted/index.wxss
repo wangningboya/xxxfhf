@@ -1,0 +1,56 @@
+page {
+  background: #f5f6f8;
+}
+
+.page {
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: 96rpx 40rpx 40rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.badge {
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: 50%;
+  background: #eceef1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.badge-text {
+  font-size: 26rpx;
+  color: #8a8a8a;
+  font-weight: 600;
+}
+
+.title {
+  margin-top: 40rpx;
+  font-size: 36rpx;
+  font-weight: 600;
+  color: #1a1a1a;
+  text-align: center;
+}
+
+.desc {
+  margin-top: 24rpx;
+  font-size: 27rpx;
+  color: #8a8a8a;
+  line-height: 1.75;
+  text-align: center;
+}
+
+.tips {
+  margin-top: 48rpx;
+}
+
+.tips-line {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  color: #a8a8a8;
+  line-height: 1.8;
+  text-align: center;
+}
