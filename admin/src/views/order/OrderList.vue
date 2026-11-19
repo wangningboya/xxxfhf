@@ -140,9 +140,9 @@
           <el-descriptions-item label="订单号">{{ detail.order.orderNo }}</el-descriptions-item>
           <el-descriptions-item label="供餐日">{{ detail.order.serveDate }}</el-descriptions-item>
           <el-descriptions-item label="顾客">{{ detail.userNickName || '未填昵称' }}</el-descriptions-item>
-          <el-descriptions-item label="手机号">
-            {{ detail.userPhone || '—' }}
-            <el-button link type="primary" size="small" @click="callCustomer">联系顾客</el-button>
+          <el-descriptions-item label="本单联系电话">
+            {{ detail.contactPhone || '未留电话' }}
+            <el-button v-if="detail.contactPhone" link type="primary" size="small" @click="callCustomer">联系顾客</el-button>
           </el-descriptions-item>
           <el-descriptions-item label="订单状态">{{ detail.order.statusLabel }}</el-descriptions-item>
           <el-descriptions-item label="收款状态">{{ detail.order.payStatusLabel }}</el-descriptions-item>

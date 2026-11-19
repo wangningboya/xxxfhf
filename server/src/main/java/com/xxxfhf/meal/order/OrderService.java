@@ -410,7 +410,8 @@ public class OrderService {
         IPage<Order> result = orderMapper.selectPage(pager, Wrappers.<Order>lambdaQuery()
                 .eq(Order::getUserId, userId)
                 .eq(status != null && !status.isBlank(), Order::getStatus, status)
-                .orderByDesc(Order::getCreatedAt));
+                .orderByDesc(Order::getCreatedAt)
+                .orderByDesc(Order::getId));
 
         Page<OrderView> mapped = new Page<>(result.getCurrent(), result.getSize(), result.getTotal());
         mapped.setRecords(result.getRecords().stream().map(this::toView).toList());

@@ -4,7 +4,6 @@ import com.xxxfhf.meal.common.BizException;
 import com.xxxfhf.meal.dict.DictService;
 import com.xxxfhf.meal.menu.ServeDateClock;
 import com.xxxfhf.meal.notify.NotifyService;
-import com.xxxfhf.meal.user.User;
 import com.xxxfhf.meal.user.UserMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -91,15 +90,11 @@ class OrderAdminServiceContactPhoneTest {
     }
 
     @Test
-    @DisplayName("快照和账号都没留号：404 而不是返回空字符串")
+    @DisplayName("订单没有快照（无收货信息）：404 而不是返回空字符串")
     void rejectsWhenNoPhone() {
         order.setAddressSnapshot(null);
         when(orderService.require("order-1")).thenReturn(order);
         when(statusLogMapper.selectCount(any())).thenReturn(0L);
-
-        User user = new User();
-        user.setId("user-1");
-        when(userMapper.selectById("user-1")).thenReturn(user);
 
         assertThatThrownBy(() -> service.contactPhone("merchant-1", "order-1"))
                 .isInstanceOf(BizException.class)
@@ -120,17 +115,16 @@ class OrderAdminServiceContactPhoneTest {
     }
 
     @Test
-    @DisplayName("快照没号时回退到账号手机号")
-    void fallsBackToAccountPhone() {
+    @DisplayName("快照没留号：404，且不再回退账号手机号")
+    void rejectsWhenSnapshotHasNoPhone() {
         order.setAddressSnapshot(new AddressSnapshot("张三", null, null, null, null));
         when(orderService.require("order-1")).thenReturn(order);
         when(statusLogMapper.selectCount(any())).thenReturn(0L);
 
-        User user = new User();
-        user.setId("user-1");
-        user.setPhone(" 13912345678 ");
-        when(userMapper.selectById("user-1")).thenReturn(user);
-
-        assertThat(service.contactPhone("merchant-1", "order-1")).isEqualTo("13912345678");
+        assertThatThrownBy(() -> service.contactPhone("merchant-1", "order-1"))
+                .isInstanceOf(BizException.class)
+                .hasMessageContaining("没有留联系电话");
+        // 账号里就算有号也不能拿来拨：详情页显示的是「未留电话」，拨号必须同源
+        verify(userMapper, never()).selectById(anyString());
     }
 }

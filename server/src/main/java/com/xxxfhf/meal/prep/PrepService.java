@@ -7,6 +7,8 @@ import com.alibaba.excel.annotation.write.style.ColumnWidth;
 import com.alibaba.excel.write.metadata.WriteSheet;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.xxxfhf.meal.goods.ComboDish;
+import com.xxxfhf.meal.goods.Dish;
+import com.xxxfhf.meal.goods.DishMapper;
 import com.xxxfhf.meal.menu.ServeDateClock;
 import com.xxxfhf.meal.order.AddressSnapshot;
 import com.xxxfhf.meal.order.Order;
@@ -18,6 +20,8 @@ import org.springframework.stereotype.Service;
 import java.io.ByteArrayOutputStream;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -38,10 +42,12 @@ import java.util.Set;
 public class PrepService {
 
     private final OrderMapper orderMapper;
+    private final DishMapper dishMapper;
     private final ServeDateClock clock;
 
-    public PrepService(OrderMapper orderMapper, ServeDateClock clock) {
+    public PrepService(OrderMapper orderMapper, DishMapper dishMapper, ServeDateClock clock) {
         this.orderMapper = orderMapper;
+        this.dishMapper = dishMapper;
         this.clock = clock;
     }
 
@@ -83,6 +89,7 @@ public class PrepService {
         for (DishAgg agg : dishMap.values()) {
             dishes.add(agg.toRow());
         }
+        sortDishes(dishes);
 
         List<RegionRow> regions = new ArrayList<>(regionMap.size());
         for (RegionAgg agg : regionMap.values()) {
@@ -167,6 +174,43 @@ public class PrepService {
                 agg.combos.add(item.name());
             }
         }
+    }
+
+    /**
+     * 菜品行按菜品库的 sort 排（同 sort 按名称），规格行统一排在菜品之后。
+     *
+     * <p>备菜表是照着配菜用的，顺序跟着菜品库走：商家在菜品管理里把顺序调成
+     * 「先配的菜在前」，备菜页看到的就是同一套顺序。规格（白米饭 / 杂粮饭）
+     * 不在菜品库里，没有 sort 可比，统一放最后。
+     */
+    private void sortDishes(List<DishRow> rows) {
+        List<String> dishIds = new ArrayList<>();
+        for (DishRow row : rows) {
+            if ("dish".equals(row.kind())) {
+                dishIds.add(row.dishId());
+            }
+        }
+        Map<String, Integer> sortById = new HashMap<>();
+        if (!dishIds.isEmpty()) {
+            // 菜品可能已经被删除，快照里的行照样要出：查不到的按 sort=0 处理
+            for (Dish dish : dishMapper.selectList(Wrappers.<Dish>lambdaQuery()
+                    .select(Dish::getId, Dish::getSort)
+                    .in(Dish::getId, dishIds))) {
+                sortById.put(dish.getId(), dish.getSort() == null ? 0 : dish.getSort());
+            }
+        }
+        rows.sort(Comparator
+                .comparingInt((DishRow row) -> "dish".equals(row.kind()) ? 0 : 1)
+                .thenComparingInt(row -> "dish".equals(row.kind())
+                        ? sortById.getOrDefault(row.dishId(), 0) : 0)
+                .thenComparing(row -> "dish".equals(row.kind())
+                        ? nullToEmpty(row.name()) : nullToEmpty(row.groupName()))
+                .thenComparing(row -> nullToEmpty(row.name()))
+                .thenComparing(DishRow::dishId));
+    }
+
+    private static String nullToEmpty(String value) {
+        return value == null ? "" : value;
     }
 
     private static RegionExcelRow toRegionExcel(RegionRow row) {

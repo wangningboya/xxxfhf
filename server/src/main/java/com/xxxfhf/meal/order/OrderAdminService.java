@@ -68,7 +68,8 @@ public class OrderAdminService {
      * 订单列表。
      *
      * 排序刻意做成「份数已释放的置顶 + 待接单优先」：早上打开列表，
-     * 最需要先处理的就是那几笔超时未付款、份数已经被别人买走的单。
+     * 最需要先处理的就是那几笔超时未付款、份数已经被别人买走的单；
+     * 同一状态内按创建时间倒序，最新下的单排在最上面。
      */
     public IPage<AdminOrderRow> list(String serveDateRaw, String status, String keyword,
                                      Boolean cancelRequested, int page, int pageSize) {
@@ -97,7 +98,7 @@ public class OrderAdminService {
                 .in(!matchedUserIds.isEmpty(), Order::getUserId, matchedUserIds)
                 .last("ORDER BY stock_released DESC, "
                         + "FIELD(status, 'pending_accept', 'accepted', 'ready', "
-                        + "'completed', 'cancelled', 'rejected'), created_at ASC"));
+                        + "'completed', 'cancelled', 'rejected'), created_at DESC"));
 
         Page<AdminOrderRow> mapped = new Page<>(result.getCurrent(), result.getSize(), result.getTotal());
         mapped.setRecords(toRows(result.getRecords()));
@@ -368,17 +369,19 @@ public class OrderAdminService {
         return last == null ? null : last.getCreatedAt();
     }
 
-    /** 快照里的号优先（下单时确认过的），没有就回退到账号手机号 */
+    /**
+     * 只认下单时确认的收货电话（订单快照）。
+     *
+     * <p>详情页展示的号码和「联系顾客」拨出去的号码必须同源，否则商家看到 A 拨到 B，
+     * 只会以为系统串单。所以这里刻意<b>不回退</b>账号手机号：自取单没留号就是没留号，
+     * 让商家看到「未留电话」，而不是悄悄拨一个用户没在这单里确认过的号码。
+     */
     private String contactNumberOf(Order order) {
         AddressSnapshot snapshot = order.getAddressSnapshot();
-        if (snapshot != null && snapshot.phone() != null && !snapshot.phone().isBlank()) {
-            return snapshot.phone().trim();
-        }
-        User user = userMapper.selectById(order.getUserId());
-        if (user == null || user.getPhone() == null || user.getPhone().isBlank()) {
+        if (snapshot == null || snapshot.phone() == null || snapshot.phone().isBlank()) {
             return null;
         }
-        return user.getPhone().trim();
+        return snapshot.phone().trim();
     }
 
     /* ==================== 收款与退款 ==================== */
@@ -580,10 +583,13 @@ public class OrderAdminService {
         List<AdminOrderRow> rows = new ArrayList<>(orders.size());
         for (Order order : orders) {
             User user = users.get(order.getUserId());
+            AddressSnapshot snapshot = order.getAddressSnapshot();
             rows.add(new AdminOrderRow(orderService.toView(order),
                     user == null ? null : user.getNickName(),
                     // 账号手机号只是「这单是谁订的」的辅助信息，订单列表按对外口径给前 3 后 2
-                    user == null ? null : MaskUtil.phoneShort(user.getPhone())));
+                    user == null ? null : MaskUtil.phoneShort(user.getPhone()),
+                    // 本单联系电话：取原始快照再掩码，不能用 toView 里已掩过的 address（会二次打码）
+                    snapshot == null ? null : MaskUtil.phoneShort(snapshot.phone())));
         }
         return rows;
     }
@@ -600,12 +606,16 @@ public class OrderAdminService {
     }
 
     /**
-     * 商家端订单行：订单本体 + 下单人信息。
+     * 商家端订单行：订单本体 + 下单人信息 + 本单联系电话。
      *
      * 昵称在这张表里没有冗余，列表必须能看出「这是谁订的」，
      * 否则中午接单只能靠订单号猜人。
+     *
+     * <p>`contactPhone` 是这单下单时确认的收货电话（掩码），与「联系顾客」拨出的号码同源；
+     * `userPhone` 是账号手机号，只用来认人，不用于拨号。
      */
-    public record AdminOrderRow(OrderService.OrderView order, String userNickName, String userPhone) {
+    public record AdminOrderRow(OrderService.OrderView order, String userNickName, String userPhone,
+                                String contactPhone) {
     }
 
     /**
