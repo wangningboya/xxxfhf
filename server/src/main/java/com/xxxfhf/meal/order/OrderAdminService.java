@@ -247,8 +247,9 @@ public class OrderAdminService {
     /**
      * 取餐核销：输 4 位码把订单推到已完成。
      *
-     * 只认「已接单 / 出餐」：待接单还没做，直接核销等于凭空出餐；已完成的不再重复核销。
-     * 配送单也走这里 —— 码是餐盒上的核对凭据，用户看不到不代表商家不能用。
+     * 只认「出餐（ready）」：待接单还没做、已接单还没出餐，都要先推进到 ready 再核销，
+     * 否则等于绕开状态机直接出餐/送达；已完成的不再重复核销。
+     * 自取单与配送单同一口径 —— 码是餐盒上的核对凭据，用户看不到不代表商家不能用。
      */
     @Transactional
     public OrderService.OrderView pickupByCode(String operatorId, String serveDateRaw, String code) {
@@ -270,8 +271,13 @@ public class OrderAdminService {
         }
         Order order = hits.get(0);
         if (!OrderStatus.canPickup(order.getStatus())) {
-            throw BizException.conflict("订单当前状态是「"
-                    + OrderStatus.label(order.getStatus(), order.getDeliveryType()) + "」，不能核销");
+            String label = OrderStatus.label(order.getStatus(), order.getDeliveryType());
+            if (OrderStatus.ACCEPTED.equals(order.getStatus())) {
+                // 已接单还没出餐：连「下一步该点什么」一起给出来，只说不能核销商家会卡在这
+                throw BizException.conflict("订单还没出餐（当前「" + label + "」），请先推进到「"
+                        + OrderStatus.label(OrderStatus.READY, order.getDeliveryType()) + "」再核销");
+            }
+            throw BizException.conflict("订单当前状态是「" + label + "」，不能核销");
         }
         // 与 advance 一致：未到供餐日不拦，只留痕（提前核销常出现在串流程时）
         if (serveDate.isAfter(clock.today())) {
@@ -282,7 +288,7 @@ public class OrderAdminService {
         int affected = orderMapper.update(null, Wrappers.<Order>lambdaUpdate()
                 .set(Order::getStatus, OrderStatus.COMPLETED)
                 .eq(Order::getId, order.getId())
-                .in(Order::getStatus, List.of(OrderStatus.ACCEPTED, OrderStatus.READY)));
+                .eq(Order::getStatus, OrderStatus.READY));
         if (affected == 0) {
             throw BizException.conflict("订单状态已变化，请刷新后重试");
         }

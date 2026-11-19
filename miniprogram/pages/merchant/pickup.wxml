@@ -26,7 +26,7 @@
         bindblur="onBlur"
       />
     </view>
-    <view class="code-hint">输满 4 位自动核销</view>
+    <view class="code-hint">输满 4 位自动核销（仅限已出餐订单）</view>
   </view>
 
   <view class="result" wx:if="{{result}}">

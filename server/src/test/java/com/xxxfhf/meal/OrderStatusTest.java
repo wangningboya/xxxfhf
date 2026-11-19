@@ -57,12 +57,14 @@ class OrderStatusTest {
     }
 
     @Test
-    @DisplayName("取餐码核销认已接单与 ready，配送单同样可用码核对")
+    @DisplayName("取餐码核销只认出餐，自取与配送同一口径")
     void pickupCodeScope() {
-        assertThat(OrderStatus.canPickup(OrderStatus.ACCEPTED)).isTrue();
         assertThat(OrderStatus.canPickup(OrderStatus.READY)).isTrue();
         assertThat(OrderStatus.canPickup(OrderStatus.PENDING_ACCEPT)).isFalse();
+        assertThat(OrderStatus.canPickup(OrderStatus.ACCEPTED)).isFalse();
         assertThat(OrderStatus.canPickup(OrderStatus.COMPLETED)).isFalse();
+        assertThat(OrderStatus.canPickup(OrderStatus.CANCELLED)).isFalse();
+        assertThat(OrderStatus.canPickup(OrderStatus.REJECTED)).isFalse();
     }
 
     @Test

@@ -73,12 +73,13 @@ public final class OrderStatus {
     /**
      * 该状态能否用 4 位取餐码核销。
      *
-     * 只认「已接单 / 出餐」：待接单还没做，直接核销等于凭空出餐；
-     * 已完成的不再重复核销。配送单同样可用码核销 —— 码印在餐盒上，
-     * 是商家核对「这盒是不是这一单」的凭据，不发给用户不代表不能用。
+     * 只认「出餐（ready）」：待接单还没做、已接单还没出餐，直接核销等于跳过了
+     * 「出餐到完工」这条状态机，凭空出餐；已完成的不再重复核销。
+     * 自取单与配送单同一口径 —— 码印在餐盒上，是商家核对「这盒是不是这一单」的
+     * 凭据，不发给用户不代表不能用，但同样得等餐出来了再核。
      */
     public static boolean canPickup(String status) {
-        return ACCEPTED.equals(status) || READY.equals(status);
+        return READY.equals(status);
     }
 
     /**
