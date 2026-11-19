@@ -3,6 +3,7 @@ package com.xxxfhf.meal.task;
 import com.xxxfhf.meal.config.ConfigKey;
 import com.xxxfhf.meal.config.ConfigService;
 import com.xxxfhf.meal.order.OrderAdminService;
+import com.xxxfhf.meal.order.OrderQuery;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -18,7 +19,7 @@ import java.util.List;
  * 解决的问题：用户截单后提交退订申请，商家一直不处理，订单卡在待接单，
  * 份数一直被占 —— 这份盒饭再也卖不出去，用户也不知道到底批不批。
  *
- * 三条边界：
+ * 三条边界（口径见 {@link OrderQuery}，扫描 SQL 与 Service 的判定共用同一组常量）：
  * - 只扫 `pending_accept`：已接单的退订是另一回事（商家已经做了，必须人工判断）
  * - 只扫 `cancel_requested = 1`：没申请的单不能被这个任务碰
  * - 时长读配置，`0` 表示关闭自动同意（有的商家就是要自己逐单看）
@@ -31,19 +32,6 @@ import java.util.List;
 public class CancelRequestTimeoutTask {
 
     private static final Logger log = LoggerFactory.getLogger(CancelRequestTimeoutTask.class);
-
-    /** 单次扫描上限，防止某次积压把内存撑爆。 */
-    private static final int BATCH_LIMIT = 200;
-
-    private static final String SCAN_SQL = """
-            SELECT id FROM `order`
-             WHERE cancel_requested = 1
-               AND status = 'pending_accept'
-               AND cancel_requested_at IS NOT NULL
-               AND cancel_requested_at <= DATE_SUB(NOW(), INTERVAL ? HOUR)
-             ORDER BY cancel_requested_at ASC
-             LIMIT ?
-            """;
 
     private final JdbcTemplate jdbcTemplate;
     private final ConfigService configService;
@@ -65,7 +53,8 @@ public class CancelRequestTimeoutTask {
                 log.debug("取消申请自动同意已关闭（cancelRequestTimeoutHours={}）", hours);
                 return;
             }
-            List<Long> ids = jdbcTemplate.queryForList(SCAN_SQL, Long.class, hours, BATCH_LIMIT);
+            List<Long> ids = jdbcTemplate.queryForList(OrderQuery.CANCEL_REQUEST_SCAN_SQL,
+                    Long.class, hours, OrderQuery.SCAN_BATCH_LIMIT);
             if (ids.isEmpty()) {
                 log.debug("取消申请超时扫描：无命中");
                 return;

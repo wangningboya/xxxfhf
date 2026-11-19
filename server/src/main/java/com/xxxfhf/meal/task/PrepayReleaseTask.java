@@ -2,6 +2,7 @@ package com.xxxfhf.meal.task;
 
 import com.xxxfhf.meal.config.ConfigKey;
 import com.xxxfhf.meal.config.ConfigService;
+import com.xxxfhf.meal.order.OrderQuery;
 import com.xxxfhf.meal.order.OrderService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,7 +21,7 @@ import java.util.List;
  * 为什么不直接取消订单：截单在供餐日前一天，商家多半次日上午统一接单；
  * 把超时的单直接取消，等于把截单前下的单几乎全废掉（技术文档 4.4）。
  *
- * 三条不释放的红线：
+ * 三条不释放的红线（口径见 {@link OrderQuery}，SQL 与 Service 共用同一组常量）：
  * - 已经不是待接单（被接 / 被拒 / 被取消）
  * - 用户点过「我已完成付款」（`claimed` 及以上）—— 宁可少释放，不可误伤已付款用户
  * - 已经释放过（`stock_released = 1`）
@@ -30,19 +31,6 @@ import java.util.List;
 public class PrepayReleaseTask {
 
     private static final Logger log = LoggerFactory.getLogger(PrepayReleaseTask.class);
-
-    /** 单次扫描上限。300 单/天的量级，200 条足够；设上限是防止某次积压把内存撑爆。 */
-    private static final int BATCH_LIMIT = 200;
-
-    private static final String SCAN_SQL = """
-            SELECT id FROM `order`
-             WHERE status = 'pending_accept'
-               AND pay_status = 'unpaid'
-               AND stock_released = 0
-               AND created_at <= DATE_SUB(NOW(), INTERVAL ? MINUTE)
-             ORDER BY created_at ASC
-             LIMIT ?
-            """;
 
     private final JdbcTemplate jdbcTemplate;
     private final ConfigService configService;
@@ -60,7 +48,8 @@ public class PrepayReleaseTask {
         try {
             // 分钟数读配置不写死：商家可能想把 30 分钟改成 20 分钟
             int minutes = Math.max(1, configService.getInt(ConfigKey.PREPAY_RELEASE_MINUTES, 30));
-            List<Long> ids = jdbcTemplate.queryForList(SCAN_SQL, Long.class, minutes, BATCH_LIMIT);
+            List<Long> ids = jdbcTemplate.queryForList(OrderQuery.PREPAY_RELEASE_SCAN_SQL,
+                    Long.class, minutes, OrderQuery.SCAN_BATCH_LIMIT);
             if (ids.isEmpty()) {
                 log.debug("超时未付款扫描：无命中");
                 return;

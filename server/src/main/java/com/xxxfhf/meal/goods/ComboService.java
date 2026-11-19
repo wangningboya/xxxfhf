@@ -2,9 +2,9 @@ package com.xxxfhf.meal.goods;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.xxxfhf.meal.common.BizException;
+import com.xxxfhf.meal.order.OrderUsageQuery;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,20 +33,21 @@ public class ComboService {
     private final DishMapper dishMapper;
     private final SpecGroupMapper specGroupMapper;
     /**
-     * 查「这个盒饭是否出现在历史订单里」用 JdbcTemplate 直接查 JSON 列。
+     * 查「这个盒饭是否出现在历史订单里」要读 {@code order.items}，这件事属于订单域，
+     * 所以查询在 {@link OrderUsageQuery} 里，本类只调一个计数方法。
      *
-     * 为什么不注入 OrderMapper：goods 包反向依赖 order 包会让两个域互相咬住，
-     * 后续拆模块时第一个卡住的就是这里。这条 SQL 只服务于删除前的存在性判断，
-     * 没有任何业务逻辑，用 JdbcTemplate 更轻。
+     * <p>不注入 OrderMapper：goods 包反向依赖订单实体或 Mapper 会让两个域互相咬住，
+     * 后续拆模块时第一个卡住的就是这里；而 OrderUsageQuery 只依赖 JdbcTemplate，
+     * 谁注入它都不会成环。
      */
-    private final JdbcTemplate jdbcTemplate;
+    private final OrderUsageQuery orderUsageQuery;
 
     public ComboService(ComboMapper comboMapper, DishMapper dishMapper,
-                        SpecGroupMapper specGroupMapper, JdbcTemplate jdbcTemplate) {
+                        SpecGroupMapper specGroupMapper, OrderUsageQuery orderUsageQuery) {
         this.comboMapper = comboMapper;
         this.dishMapper = dishMapper;
         this.specGroupMapper = specGroupMapper;
-        this.jdbcTemplate = jdbcTemplate;
+        this.orderUsageQuery = orderUsageQuery;
     }
 
     /** 盒饭列表（商家端）：上下架的都要看得到，否则没法重新上架。 */
@@ -135,12 +136,9 @@ public class ComboService {
     @Transactional
     public void delete(Long id) {
         Combo combo = require(id);
-        // 按 JSON 里的 comboId 精确判断，不能用 LIKE '%id%'：主键是自增 BIGINT，
-        // 数字做子串匹配会把 13、23 也算成引用 3 的订单。
-        Integer used = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM `order` WHERE JSON_CONTAINS(JSON_EXTRACT(items, '$[*].comboId'), CAST(? AS CHAR))",
-                Integer.class, id);
-        if (used != null && used > 0) {
+        // 引用计数由订单域算（读 order.items），本类不再拼 order 表的 SQL
+        long used = orderUsageQuery.countOrdersUsingCombo(id);
+        if (used > 0) {
             throw BizException.conflict("「" + combo.getName() + "」已被 " + used
                     + " 笔历史订单引用，只能下架不能删除");
         }

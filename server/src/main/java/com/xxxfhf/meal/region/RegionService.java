@@ -2,6 +2,7 @@ package com.xxxfhf.meal.region;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.xxxfhf.meal.common.BizException;
+import com.xxxfhf.meal.order.OrderUsageQuery;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DuplicateKeyException;
@@ -24,10 +25,20 @@ public class RegionService {
     private static final Logger log = LoggerFactory.getLogger(RegionService.class);
 
     private final RegionMapper regionMapper;
+    /**
+     * 订单引用计数属于订单域（要读 {@code order.region_id}），由 {@link OrderUsageQuery} 提供。
+     *
+     * <p>区域自己这张表之外，还剩一条 {@code address} 的计数留在本类用 JdbcTemplate 查：
+     * address 包本来就依赖 region 包（新增地址要选区域），把那条也搬过去就成了包级双向依赖，
+     * 比一行 SQL 的耦合更贵。
+     */
+    private final OrderUsageQuery orderUsageQuery;
     private final JdbcTemplate jdbcTemplate;
 
-    public RegionService(RegionMapper regionMapper, JdbcTemplate jdbcTemplate) {
+    public RegionService(RegionMapper regionMapper, OrderUsageQuery orderUsageQuery,
+                         JdbcTemplate jdbcTemplate) {
         this.regionMapper = regionMapper;
+        this.orderUsageQuery = orderUsageQuery;
         this.jdbcTemplate = jdbcTemplate;
     }
 
@@ -109,9 +120,8 @@ public class RegionService {
                     + " 个地址，只能停用不能删除");
         }
 
-        Integer orderCount = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM `order` WHERE region_id = ?", Integer.class, id);
-        if (orderCount != null && orderCount > 0) {
+        long orderCount = orderUsageQuery.countOrdersUsingRegion(id);
+        if (orderCount > 0) {
             throw BizException.conflict("「" + region.getName() + "」已被 " + orderCount
                     + " 笔历史订单引用，只能停用不能删除，否则历史备菜数据对不上");
         }

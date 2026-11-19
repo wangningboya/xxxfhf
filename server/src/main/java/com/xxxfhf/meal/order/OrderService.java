@@ -603,19 +603,19 @@ public class OrderService {
     @Transactional
     public boolean releaseForTimeout(Long orderId) {
         Order order = require(orderId);
-        if (!OrderStatus.PENDING_ACCEPT.equals(order.getStatus())
-                || Boolean.TRUE.equals(order.getStockReleased())
-                || PayStatus.userClaimed(order.getPayStatus())) {
+        // 口径来自 OrderQuery：定时任务的扫描 SQL 与这里引同一组常量，改一处就是改两处
+        if (!OrderQuery.prepayReleasable(order.getStatus(), order.getPayStatus())
+                || Boolean.TRUE.equals(order.getStockReleased())) {
             return false;
         }
-        // 条件更新：pay_status = 'unpaid' 写进 WHERE，避免「查的时候没付款、更新的时候已声称」
+        // 条件更新：pay_status 也写进 WHERE，避免「查的时候没付款、更新的时候已声称」
         LocalDateTime now = LocalDateTime.now();
         int affected = orderMapper.update(null, Wrappers.<Order>lambdaUpdate()
                 .set(Order::getStockReleased, true)
                 .set(Order::getStockReleasedAt, now)
                 .eq(Order::getId, orderId)
-                .eq(Order::getStatus, OrderStatus.PENDING_ACCEPT)
-                .eq(Order::getPayStatus, PayStatus.UNPAID)
+                .in(Order::getStatus, OrderQuery.PREPAY_RELEASABLE_STATUSES)
+                .in(Order::getPayStatus, OrderQuery.PREPAY_RELEASABLE_PAY_STATUSES)
                 .eq(Order::getStockReleased, false));
         if (affected == 0) {
             return false;
