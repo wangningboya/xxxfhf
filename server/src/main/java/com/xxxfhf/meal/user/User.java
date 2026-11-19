@@ -22,8 +22,8 @@ import java.util.List;
 @TableName(value = "`user`", autoResultMap = true)
 public class User {
 
-    @TableId(type = IdType.ASSIGN_UUID)
-    private String id;
+    @TableId(type = IdType.AUTO)
+    private Long id;
 
     /** customer / merchant，见 UserType */
     private String userType;
@@ -53,7 +53,7 @@ public class User {
 
     /** 绑定角色 ID 列表，JSON 列 */
     @TableField(typeHandler = Jackson3TypeHandler.class)
-    private List<String> roleIds;
+    private List<Long> roleIds;
 
     private LocalDateTime createdAt;
 
@@ -70,11 +70,11 @@ public class User {
 
     /* ---------------- getters / setters ---------------- */
 
-    public String getId() {
+    public Long getId() {
         return id;
     }
 
-    public void setId(String id) {
+    public void setId(Long id) {
         this.id = id;
     }
 
@@ -158,11 +158,11 @@ public class User {
         this.phone = phone;
     }
 
-    public List<String> getRoleIds() {
+    public List<Long> getRoleIds() {
         return roleIds;
     }
 
-    public void setRoleIds(List<String> roleIds) {
+    public void setRoleIds(List<Long> roleIds) {
         this.roleIds = roleIds;
     }
 

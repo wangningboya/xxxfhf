@@ -49,7 +49,7 @@ public class RegionService {
     @Transactional
     public Region save(RegionCommand cmd) {
         String name = requireName(cmd.name());
-        boolean creating = cmd.id() == null || cmd.id().isBlank();
+        boolean creating = cmd.id() == null;
 
         Region region;
         if (creating) {
@@ -83,7 +83,7 @@ public class RegionService {
 
     /** 启用 / 停用。停用后不再出现在「新增地址」的选择器里，但已挂其下的地址照常可用。 */
     @Transactional
-    public Region updateStatus(String id, String status) {
+    public Region updateStatus(Long id, String status) {
         if (!"enabled".equals(status) && !"disabled".equals(status)) {
             throw BizException.param("状态只能是 enabled 或 disabled");
         }
@@ -99,7 +99,7 @@ public class RegionService {
      * 两者都只允许停用。
      */
     @Transactional
-    public void delete(String id) {
+    public void delete(Long id) {
         Region region = require(id);
 
         Integer addressCount = jdbcTemplate.queryForObject(
@@ -120,7 +120,7 @@ public class RegionService {
         log.info("删除区域 id={} name={}", id, region.getName());
     }
 
-    public Region require(String id) {
+    public Region require(Long id) {
         Region region = id == null ? null : regionMapper.selectById(id);
         if (region == null) {
             throw BizException.notFound("区域不存在");
@@ -148,6 +148,6 @@ public class RegionService {
     }
 
     /** @param sort 编辑时传 null 表示不修改排序 */
-    public record RegionCommand(String id, String name, String remark, Integer sort) {
+    public record RegionCommand(Long id, String name, String remark, Integer sort) {
     }
 }

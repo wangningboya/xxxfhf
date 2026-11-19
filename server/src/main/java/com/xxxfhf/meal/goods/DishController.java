@@ -5,6 +5,7 @@ import com.xxxfhf.meal.auth.RequirePerm;
 import com.xxxfhf.meal.common.ApiResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -59,10 +60,10 @@ public class DishController {
     }
 
     public record StatusRequest(
-            @NotBlank(message = "缺少菜品 ID") String dishId,
+            @NotNull(message = "缺少菜品 ID") Long dishId,
             @NotBlank(message = "缺少目标状态") String status) {
     }
 
-    public record IdRequest(@NotBlank(message = "缺少菜品 ID") String dishId) {
+    public record IdRequest(@NotNull(message = "缺少菜品 ID") Long dishId) {
     }
 }

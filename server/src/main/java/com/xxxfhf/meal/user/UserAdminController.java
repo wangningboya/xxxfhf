@@ -8,6 +8,7 @@ import com.xxxfhf.meal.common.PageResult;
 import com.xxxfhf.meal.role.RoleService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -122,31 +123,31 @@ public class UserAdminController {
      */
     @GetMapping("/{userId}/phone")
     @RequirePerm(Perms.USER_PHONE_VIEW)
-    public ApiResponse<String> phone(@PathVariable String userId) {
+    public ApiResponse<String> phone(@PathVariable Long userId) {
         return ApiResponse.ok(userAuditService.fullPhone(UserContext.userId(), userId));
     }
 
     public record AuditRequest(
-            @NotBlank(message = "缺少用户 ID") String userId,
+            @NotNull(message = "缺少用户 ID") Long userId,
             @NotBlank(message = "缺少审核动作") String action,
             @Size(max = 200, message = "驳回原因最多 200 字") String reason) {
     }
 
-    public record DeleteRequest(@NotBlank(message = "缺少用户 ID") String userId) {
+    public record DeleteRequest(@NotNull(message = "缺少用户 ID") Long userId) {
     }
 
     public record PhoneRequest(
-            @NotBlank(message = "缺少用户 ID") String userId,
+            @NotNull(message = "缺少用户 ID") Long userId,
             @NotBlank(message = "请输入手机号")
             @Size(max = 20, message = "手机号过长") String phone) {
     }
 
     public record PromoteRequest(
-            @NotBlank(message = "缺少用户 ID") String userId,
+            @NotNull(message = "缺少用户 ID") Long userId,
             @NotBlank(message = "请输入登录账号")
             @Size(min = 2, max = 64, message = "登录账号长度须在 2 ~ 64 字符之间") String username,
             @NotBlank(message = "请输入登录密码")
             @Size(min = 6, max = 64, message = "登录密码长度须在 6 ~ 64 位之间") String password,
-            @NotEmpty(message = "请至少选择一个后台角色") List<String> roleIds) {
+            @NotEmpty(message = "请至少选择一个后台角色") List<Long> roleIds) {
     }
 }

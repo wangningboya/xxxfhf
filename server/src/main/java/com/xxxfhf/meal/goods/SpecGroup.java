@@ -19,8 +19,8 @@ import java.util.List;
 @TableName(value = "spec_group", autoResultMap = true)
 public class SpecGroup {
 
-    @TableId(type = IdType.ASSIGN_UUID)
-    private String id;
+    @TableId(type = IdType.AUTO)
+    private Long id;
 
     /** 组名，如「主食」 */
     private String name;
@@ -48,11 +48,11 @@ public class SpecGroup {
 
     /* ---------------- getters / setters ---------------- */
 
-    public String getId() {
+    public Long getId() {
         return id;
     }
 
-    public void setId(String id) {
+    public void setId(Long id) {
         this.id = id;
     }
 

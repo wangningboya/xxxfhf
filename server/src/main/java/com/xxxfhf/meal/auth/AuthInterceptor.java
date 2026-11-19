@@ -94,12 +94,12 @@ public class AuthInterceptor implements HandlerInterceptor {
     }
 
     private Set<String> resolvePermissions(User user) {
-        List<String> roleIds = user.getRoleIds();
+        List<Long> roleIds = user.getRoleIds();
         if (roleIds == null || roleIds.isEmpty()) {
             return Set.of();
         }
         Set<String> permissions = new HashSet<>();
-        for (String roleId : roleIds) {
+        for (Long roleId : roleIds) {
             Role role = roleMapper.selectById(roleId);
             if (role != null && role.getPermissions() != null) {
                 permissions.addAll(role.getPermissions());

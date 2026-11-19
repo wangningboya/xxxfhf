@@ -58,7 +58,7 @@ public class MerchantBindService {
      * @param code           小程序 wx.login 拿到的 code（一次性，5 分钟内有效）
      */
     @Transactional
-    public BindResult bindOpenid(String merchantUserId, String code) {
+    public BindResult bindOpenid(Long merchantUserId, String code) {
         User merchant = merchantUserId == null ? null : userMapper.selectById(merchantUserId);
         if (merchant == null) {
             throw BizException.unauthorized("登录已失效，请重新登录");
@@ -142,7 +142,7 @@ public class MerchantBindService {
         }
     }
 
-    private void setOpenid(String userId, String openid) {
+    private void setOpenid(Long userId, String openid) {
         userMapper.update(null, Wrappers.<User>lambdaUpdate()
                 .set(User::getOpenid, openid)
                 .eq(User::getId, userId));
@@ -152,7 +152,7 @@ public class MerchantBindService {
         if (!isBlank(user.getNickName())) {
             return user.getNickName();
         }
-        return isBlank(user.getUsername()) ? user.getId() : user.getUsername();
+        return isBlank(user.getUsername()) ? String.valueOf(user.getId()) : user.getUsername();
     }
 
     private static boolean isBlank(String value) {

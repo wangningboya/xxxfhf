@@ -38,7 +38,7 @@ public final class UserContext {
         return HOLDER.get();
     }
 
-    public static String userId() {
+    public static Long userId() {
         return require().userId();
     }
 

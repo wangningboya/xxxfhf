@@ -5,6 +5,7 @@ import com.xxxfhf.meal.auth.RequirePerm;
 import com.xxxfhf.meal.common.ApiResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -47,7 +48,7 @@ public class SpecController {
     /** 停用前的二次确认：列出会被连带解除引用的盒饭。 */
     @GetMapping("/affected")
     @RequirePerm(Perms.COMBO_MANAGE)
-    public ApiResponse<List<SpecService.ComboBrief>> affected(@RequestParam String specGroupId) {
+    public ApiResponse<List<SpecService.ComboBrief>> affected(@RequestParam Long specGroupId) {
         return ApiResponse.ok(specService.affectedCombos(specGroupId));
     }
 
@@ -79,11 +80,11 @@ public class SpecController {
     }
 
     public record StatusRequest(
-            @NotBlank(message = "缺少规格组 ID") String specGroupId,
+            @NotNull(message = "缺少规格组 ID") Long specGroupId,
             @NotBlank(message = "缺少目标状态") String status,
             Boolean confirmUnbind) {
     }
 
-    public record IdRequest(@NotBlank(message = "缺少规格组 ID") String specGroupId) {
+    public record IdRequest(@NotNull(message = "缺少规格组 ID") Long specGroupId) {
     }
 }

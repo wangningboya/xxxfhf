@@ -15,8 +15,8 @@ import java.util.List;
 @TableName(value = "role", autoResultMap = true)
 public class Role {
 
-    @TableId(type = IdType.ASSIGN_UUID)
-    private String id;
+    @TableId(type = IdType.AUTO)
+    private Long id;
 
     private String name;
 
@@ -29,11 +29,11 @@ public class Role {
 
     private LocalDateTime createdAt;
 
-    public String getId() {
+    public Long getId() {
         return id;
     }
 
-    public void setId(String id) {
+    public void setId(Long id) {
         this.id = id;
     }
 

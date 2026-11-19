@@ -17,13 +17,13 @@ import java.time.LocalDate;
 @TableName(value = "daily_menu", autoResultMap = true)
 public class DailyMenu {
 
-    @TableId(type = IdType.ASSIGN_UUID)
-    private String id;
+    @TableId(type = IdType.AUTO)
+    private Long id;
 
     /** 供餐日期，只能是未来日期（今天及过去不可选） */
     private LocalDate serveDate;
 
-    private String comboId;
+    private Long comboId;
 
     /** 盒饭名称 / 封面 / 组成菜品 / 规格组的完整快照 */
     @TableField(typeHandler = Jackson3TypeHandler.class)
@@ -43,11 +43,11 @@ public class DailyMenu {
 
     /* ---------------- getters / setters ---------------- */
 
-    public String getId() {
+    public Long getId() {
         return id;
     }
 
-    public void setId(String id) {
+    public void setId(Long id) {
         this.id = id;
     }
 
@@ -59,11 +59,11 @@ public class DailyMenu {
         this.serveDate = serveDate;
     }
 
-    public String getComboId() {
+    public Long getComboId() {
         return comboId;
     }
 
-    public void setComboId(String comboId) {
+    public void setComboId(Long comboId) {
         this.comboId = comboId;
     }
 

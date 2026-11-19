@@ -4,6 +4,9 @@
 -- 1) 内置「商家」角色：权限不可被剥夺，故写死全部权限项
 -- 2) 系统配置初始值：截单时间等由商家在后台随时修改，这里只是让系统能跑起来
 --
+-- 主键全部由 AUTO_INCREMENT 生成，脚本不再写死 id：
+-- 需要稳定引用的地方改用业务唯一键（role.name / dict_item(type_code,item_value)）。
+--
 -- 注意：商家登录账号（默认 admin）不在这里插入。
 -- 密码哈希由应用启动时的 AdminAccountInitializer 用 BCryptPasswordEncoder 现场生成，
 -- 避免手写哈希前缀（$2a$/$2b$/$2y$）不一致导致「密码对却登不上」。
@@ -12,10 +15,10 @@
 SET NAMES utf8mb4;
 
 -- -----------------------------------------------------------------------------
--- 内置商家角色（id 固定，勿改：user.role_ids 会引用它）
+-- 内置商家角色（按 name 幂等；user.role_ids 存的是自增 id，应用启动时按名称查出来）
 -- -----------------------------------------------------------------------------
-INSERT INTO `role` (`id`, `name`, `permissions`, `builtin`)
-VALUES ('role_merchant', '商家',
+INSERT INTO `role` (`name`, `permissions`, `builtin`)
+VALUES ('商家',
         JSON_ARRAY(
                 'dish.manage', 'combo.manage', 'menu.manage',
                 'user.audit', 'user.view', 'user.delete', 'user.phone.view',
@@ -65,6 +68,8 @@ ON DUPLICATE KEY UPDATE `config_key` = `config_key`;
 -- 唯一例外是 pay_method（收款方式）：它只是收款渠道的标签，不参与状态机，
 -- 商家可以自行增删（见 DictService.EXTENSIBLE_TYPES）。类型本身仍是内置的，
 -- 不可删除 —— 一删下单页的下拉就空了，历史订单的显示名也一起落空。
+--
+-- 幂等键是 uk_dict_item(type_code, item_value)：重复执行只校验存在，不覆盖商家改过的显示名。
 -- -----------------------------------------------------------------------------
 INSERT INTO `dict_type` (`type_code`, `type_name`, `builtin`, `remark`)
 VALUES ('order_status', '订单状态', 1, '与 OrderStatus 常量一一对应'),
@@ -77,39 +82,39 @@ VALUES ('order_status', '订单状态', 1, '与 OrderStatus 常量一一对应')
        ('pay_method', '收款方式', 1, '初始三项对应 PayMethod 常量；可增删项，仅显示名/排序/启停可改')
 ON DUPLICATE KEY UPDATE `type_code` = `type_code`;
 
-INSERT INTO `dict_item` (`id`, `type_code`, `item_value`, `item_label`, `tag_type`, `sort`, `status`, `builtin`)
-VALUES ('di-ord-01', 'order_status', 'pending_accept', '待接单', 'warning', 10, 'active', 1),
-       ('di-ord-02', 'order_status', 'accepted', '已接单', 'primary', 20, 'active', 1),
-       ('di-ord-04', 'order_status', 'ready', '待取餐', 'success', 30, 'active', 1),
-       ('di-ord-05', 'order_status', 'completed', '已完成', 'success', 50, 'active', 1),
-       ('di-ord-06', 'order_status', 'cancelled', '已取消', 'info', 60, 'active', 1),
-       ('di-ord-07', 'order_status', 'rejected', '已拒单', 'danger', 70, 'active', 1),
-       ('di-pay-01', 'pay_status', 'unpaid', '未收款', 'info', 10, 'active', 1),
-       ('di-pay-02', 'pay_status', 'claimed', '用户声称已付款', 'warning', 20, 'active', 1),
-       ('di-pay-03', 'pay_status', 'paid', '已确认收款', 'success', 30, 'active', 1),
-       ('di-pay-04', 'pay_status', 'refunding', '待退款', 'danger', 40, 'active', 1),
-       ('di-pay-05', 'pay_status', 'refunded', '已退款', 'info', 50, 'active', 1),
-       ('di-addr-01', 'address_status', 'active', '可用', 'success', 10, 'active', 1),
-       ('di-addr-02', 'address_status', 'pending', '待商家确认', 'warning', 20, 'active', 1),
-       ('di-addr-03', 'address_status', 'rejected', '已驳回', 'danger', 30, 'active', 1),
-       ('di-audit-01', 'audit_status', 'pending', '待审核', 'warning', 10, 'active', 1),
-       ('di-audit-02', 'audit_status', 'approved', '已通过', 'success', 20, 'active', 1),
-       ('di-audit-03', 'audit_status', 'rejected', '已驳回', 'danger', 30, 'active', 1),
-       ('di-audit-04', 'audit_status', 'disabled', '已停用', 'info', 40, 'active', 1),
-       ('di-inv-01', 'invite_status', 'unused', '未使用', 'success', 10, 'active', 1),
-       ('di-inv-02', 'invite_status', 'used', '已使用', 'info', 20, 'active', 1),
-       ('di-inv-03', 'invite_status', 'expired', '已过期', 'info', 30, 'active', 1),
-       ('di-inv-04', 'invite_status', 'revoked', '已作废', 'danger', 40, 'active', 1),
-       ('di-deliv-01', 'delivery_type', 'pickup', '自取', 'primary', 10, 'active', 1),
-       ('di-deliv-02', 'delivery_type', 'delivery', '配送', 'success', 20, 'active', 1),
-       ('di-notify-01', 'notify_type', 'newOrder', '新订单提醒', 'warning', 10, 'active', 1),
-       ('di-notify-02', 'notify_type', 'accepted', '订单已接单', 'success', 20, 'active', 1),
-       ('di-notify-03', 'notify_type', 'rejected', '订单被拒', 'danger', 30, 'active', 1),
-       ('di-notify-04', 'notify_type', 'ready', '可以取餐了', 'success', 40, 'active', 1),
-       ('di-notify-05', 'notify_type', 'cancelled', '订单已取消', 'info', 50, 'active', 1),
-       ('di-notify-06', 'notify_type', 'cancelRequest', '用户申请取消', 'danger', 15, 'active', 1),
+INSERT INTO `dict_item` (`type_code`, `item_value`, `item_label`, `tag_type`, `sort`, `status`, `builtin`)
+VALUES ('order_status', 'pending_accept', '待接单', 'warning', 10, 'active', 1),
+       ('order_status', 'accepted', '已接单', 'primary', 20, 'active', 1),
+       ('order_status', 'ready', '待取餐', 'success', 30, 'active', 1),
+       ('order_status', 'completed', '已完成', 'success', 50, 'active', 1),
+       ('order_status', 'cancelled', '已取消', 'info', 60, 'active', 1),
+       ('order_status', 'rejected', '已拒单', 'danger', 70, 'active', 1),
+       ('pay_status', 'unpaid', '未收款', 'info', 10, 'active', 1),
+       ('pay_status', 'claimed', '用户声称已付款', 'warning', 20, 'active', 1),
+       ('pay_status', 'paid', '已确认收款', 'success', 30, 'active', 1),
+       ('pay_status', 'refunding', '待退款', 'danger', 40, 'active', 1),
+       ('pay_status', 'refunded', '已退款', 'info', 50, 'active', 1),
+       ('address_status', 'active', '可用', 'success', 10, 'active', 1),
+       ('address_status', 'pending', '待商家确认', 'warning', 20, 'active', 1),
+       ('address_status', 'rejected', '已驳回', 'danger', 30, 'active', 1),
+       ('audit_status', 'pending', '待审核', 'warning', 10, 'active', 1),
+       ('audit_status', 'approved', '已通过', 'success', 20, 'active', 1),
+       ('audit_status', 'rejected', '已驳回', 'danger', 30, 'active', 1),
+       ('audit_status', 'disabled', '已停用', 'info', 40, 'active', 1),
+       ('invite_status', 'unused', '未使用', 'success', 10, 'active', 1),
+       ('invite_status', 'used', '已使用', 'info', 20, 'active', 1),
+       ('invite_status', 'expired', '已过期', 'info', 30, 'active', 1),
+       ('invite_status', 'revoked', '已作废', 'danger', 40, 'active', 1),
+       ('delivery_type', 'pickup', '自取', 'primary', 10, 'active', 1),
+       ('delivery_type', 'delivery', '配送', 'success', 20, 'active', 1),
+       ('notify_type', 'newOrder', '新订单提醒', 'warning', 10, 'active', 1),
+       ('notify_type', 'accepted', '订单已接单', 'success', 20, 'active', 1),
+       ('notify_type', 'rejected', '订单被拒', 'danger', 30, 'active', 1),
+       ('notify_type', 'ready', '可以取餐了', 'success', 40, 'active', 1),
+       ('notify_type', 'cancelled', '订单已取消', 'info', 50, 'active', 1),
+       ('notify_type', 'cancelRequest', '用户申请取消', 'danger', 15, 'active', 1),
        -- 收款方式：初始三项内置（删不掉，只能停用），商家自建项的 builtin 为 0，可删
-       ('di-pm-01', 'pay_method', 'wechat', '微信', 'success', 10, 'active', 1),
-       ('di-pm-02', 'pay_method', 'alipay', '支付宝', 'primary', 20, 'active', 1),
-       ('di-pm-03', 'pay_method', 'cash', '现金', 'warning', 30, 'active', 1)
-ON DUPLICATE KEY UPDATE `id` = `id`;
+       ('pay_method', 'wechat', '微信', 'success', 10, 'active', 1),
+       ('pay_method', 'alipay', '支付宝', 'primary', 20, 'active', 1),
+       ('pay_method', 'cash', '现金', 'warning', 30, 'active', 1)
+ON DUPLICATE KEY UPDATE `item_label` = `item_label`;

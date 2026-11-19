@@ -23,17 +23,17 @@ public class AuditMetaObjectHandler implements MetaObjectHandler {
     @Override
     public void insertFill(MetaObject metaObject) {
         LocalDateTime now = LocalDateTime.now();
-        String actor = AuditHelper.actor();
+        Long actor = AuditHelper.actor();
         strictInsertFill(metaObject, "createdAt", LocalDateTime.class, now);
-        strictInsertFill(metaObject, "createdBy", String.class, actor);
+        strictInsertFill(metaObject, "createdBy", Long.class, actor);
         strictInsertFill(metaObject, "updatedAt", LocalDateTime.class, now);
-        strictInsertFill(metaObject, "updatedBy", String.class, actor);
+        strictInsertFill(metaObject, "updatedBy", Long.class, actor);
     }
 
     @Override
     public void updateFill(MetaObject metaObject) {
         // strictUpdateFill 只对 fill 含 UPDATE 的字段生效，不会误填 created_*
         strictUpdateFill(metaObject, "updatedAt", LocalDateTime.class, LocalDateTime.now());
-        strictUpdateFill(metaObject, "updatedBy", String.class, AuditHelper.actor());
+        strictUpdateFill(metaObject, "updatedBy", Long.class, AuditHelper.actor());
     }
 }

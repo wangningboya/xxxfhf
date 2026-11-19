@@ -22,6 +22,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -34,8 +35,8 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class UserAuditServiceTest {
 
-    private static final String OPERATOR = "u_merchant_1";
-    private static final String TARGET = "u_customer_1";
+    private static final Long OPERATOR = 1L;
+    private static final Long TARGET = 2L;
 
     @Mock
     private UserMapper userMapper;
@@ -225,7 +226,7 @@ class UserAuditServiceTest {
                 .hasMessageContaining("2 笔订单");
 
         // 拒删时不能动任何数据：用户和地址都得原样留着
-        verify(userMapper, never()).deleteById(any(String.class));
+        verify(userMapper, never()).deleteById(anyLong());
         verify(addressMapper, never()).delete(any());
     }
 
@@ -255,7 +256,7 @@ class UserAuditServiceTest {
                 .isInstanceOf(BizException.class)
                 .hasMessageContaining("只能操作群成员");
 
-        verify(userMapper, never()).deleteById(any(String.class));
+        verify(userMapper, never()).deleteById(anyLong());
     }
 
     private static User customer(String auditStatus) {

@@ -3,6 +3,8 @@ package com.xxxfhf.meal.user;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.xxxfhf.meal.auth.PasswordService;
 import com.xxxfhf.meal.config.AppProperties;
+import com.xxxfhf.meal.role.Role;
+import com.xxxfhf.meal.role.RoleMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
@@ -26,17 +28,23 @@ public class AdminAccountInitializer implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(AdminAccountInitializer.class);
 
-    /** 内置商家角色，与 deploy/mysql/init/02-data.sql 中的 role_merchant 对应 */
-    private static final String MERCHANT_ROLE_ID = "role_merchant";
+    /**
+     * 内置商家角色的名称，与 deploy/mysql/init/02-data.sql 的种子数据对应。
+     *
+     * <p>角色主键是数据库自增 BIGINT，脚本里不再写死 id，所以这里只能按名称查。
+     */
+    private static final String MERCHANT_ROLE_NAME = "商家";
 
     private final AppProperties props;
     private final UserMapper userMapper;
+    private final RoleMapper roleMapper;
     private final PasswordService passwordService;
 
     public AdminAccountInitializer(AppProperties props, UserMapper userMapper,
-                                   PasswordService passwordService) {
+                                   RoleMapper roleMapper, PasswordService passwordService) {
         this.props = props;
         this.userMapper = userMapper;
+        this.roleMapper = roleMapper;
         this.passwordService = passwordService;
     }
 
@@ -60,6 +68,14 @@ public class AdminAccountInitializer implements ApplicationRunner {
             return;
         }
 
+        Role merchantRole = roleMapper.selectOne(Wrappers.<Role>lambdaQuery()
+                .eq(Role::getName, MERCHANT_ROLE_NAME)
+                .last("LIMIT 1"));
+        if (merchantRole == null) {
+            log.warn("未找到内置商家角色「{}」，跳过初始商家账号创建（请先执行 02-data.sql）", MERCHANT_ROLE_NAME);
+            return;
+        }
+
         User user = new User();
         user.setUserType(UserType.MERCHANT);
         user.setUsername(username);
@@ -67,7 +83,7 @@ public class AdminAccountInitializer implements ApplicationRunner {
         user.setNickName(username);
         // 商家不参与群成员审核流程，直接给 approved
         user.setAuditStatus(AuditStatus.APPROVED);
-        user.setRoleIds(List.of(MERCHANT_ROLE_ID));
+        user.setRoleIds(List.of(merchantRole.getId()));
         user.setCreatedAt(LocalDateTime.now());
         user.setApprovedAt(LocalDateTime.now());
         userMapper.insert(user);

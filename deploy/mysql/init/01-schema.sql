@@ -3,7 +3,9 @@
 -- MySQL 8.0 / InnoDB / utf8mb4
 --
 -- 约定：
---   1. 主键统一 VARCHAR(32)，由 MyBatis-Plus 的 ASSIGN_UUID 生成（32 位无横线 UUID）
+--   1. 主键统一 BIGINT AUTO_INCREMENT，由数据库自增生成；所有引用主键的业务列
+--      同样用 BIGINT。库里不存字符串主键——对外接口需要字符串时在序列化层转换。
+--      0 是保留值，表示「系统操作」（无登录态的定时任务、初始化流程）。
 --   2. 金额字段一律 INT，单位「分」（1 分 = 0.01 元），禁止 DECIMAL/浮点
 --   3. 快照类字段用 JSON 列，订单不依赖实时表
 --   4. 表名/列名是 MySQL 关键字的一律带反引号：`user`、`order`、`combo`.`desc`、`spec_group`.`required`
@@ -23,7 +25,7 @@ SET FOREIGN_KEY_CHECKS = 0;
 -- 因此两类账号在对方那条索引上互不冲突。
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `user` (
-    `id`            VARCHAR(32)  NOT NULL COMMENT '主键',
+    `id`            BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
     `user_type`     VARCHAR(16)  NOT NULL DEFAULT 'customer' COMMENT 'customer 群成员 / merchant 商家',
     `openid`        VARCHAR(64)           DEFAULT NULL COMMENT '微信 openid；商家为 NULL',
     `username`      VARCHAR(64)           DEFAULT NULL COMMENT '商家登录账号；群成员为 NULL',
@@ -51,7 +53,7 @@ CREATE TABLE IF NOT EXISTS `user` (
 -- 2. 区域 region（商家创建；区域下才是用户详细地址）
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `region` (
-    `id`         VARCHAR(32) NOT NULL COMMENT '主键',
+    `id`         BIGINT      NOT NULL AUTO_INCREMENT COMMENT '主键',
     `name`       VARCHAR(64) NOT NULL COMMENT '区域名称，如「幸福小区」',
     `remark`     VARCHAR(255)         DEFAULT NULL COMMENT '备注，如「东门进，找 3 栋」',
     `sort`       INT         NOT NULL DEFAULT 0 COMMENT '排序',
@@ -66,9 +68,9 @@ CREATE TABLE IF NOT EXISTS `region` (
 -- 3. 地址 address（两级：region -> detail；一个用户可跨区域持有多地址）
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `address` (
-    `id`           VARCHAR(32)  NOT NULL COMMENT '主键',
-    `user_id`      VARCHAR(32)  NOT NULL COMMENT '归属用户',
-    `region_id`    VARCHAR(32)  NOT NULL COMMENT '所属区域，必填',
+    `id`           BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `user_id`      BIGINT       NOT NULL COMMENT '归属用户',
+    `region_id`    BIGINT       NOT NULL COMMENT '所属区域，必填',
     `region_name`  VARCHAR(64)           DEFAULT NULL COMMENT '区域名称冗余，便于列表展示',
     `contact_name` VARCHAR(32)           DEFAULT NULL COMMENT '收货人',
     `phone`        VARCHAR(20)  NOT NULL COMMENT '联系电话，必填（见需求 4.8）',
@@ -78,11 +80,11 @@ CREATE TABLE IF NOT EXISTS `address` (
     `status`       VARCHAR(16)  NOT NULL DEFAULT 'active' COMMENT 'active 可用 / pending 待确认 / rejected 已驳回',
     `reject_reason` VARCHAR(200)          DEFAULT NULL COMMENT '驳回原因，status=rejected 时有值',
     -- 审计四列（N-27）。pending 队列要按提交时间先来先审，所以 created_at 同时是业务字段。
-    -- created_by / updated_by 存操作人 user_id；无登录态的定时任务写 'system'。
+    -- created_by / updated_by 存操作人 user_id；无登录态的定时任务写 0（系统）。
     `created_at`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间（用户提交时刻）',
-    `created_by`   VARCHAR(32)           DEFAULT NULL COMMENT '创建人 user_id，系统写 system',
+    `created_by`   BIGINT       NOT NULL DEFAULT 0 COMMENT '创建人 user_id，系统写 0',
     `updated_at`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后修改时间',
-    `updated_by`   VARCHAR(32)           DEFAULT NULL COMMENT '最后修改人 user_id，系统写 system',
+    `updated_by`   BIGINT       NOT NULL DEFAULT 0 COMMENT '最后修改人 user_id，系统写 0',
     PRIMARY KEY (`id`),
     KEY `idx_address_user_status` (`user_id`, `status`),
     KEY `idx_address_region` (`region_id`),
@@ -95,9 +97,9 @@ CREATE TABLE IF NOT EXISTS `address` (
 -- 4. 菜品 dish（原料层，无价格、不配图——照片只属于盒饭封面）
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `dish` (
-    `id`          VARCHAR(32)  NOT NULL COMMENT '主键',
+    `id`          BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
     `name`        VARCHAR(64)  NOT NULL COMMENT '菜名',
-    `category_id` VARCHAR(32)           DEFAULT NULL COMMENT '菜品分类',
+    `category_id` BIGINT                DEFAULT NULL COMMENT '菜品分类',
     `status`      VARCHAR(16)  NOT NULL DEFAULT 'enabled' COMMENT 'enabled/disabled',
     `sort`        INT          NOT NULL DEFAULT 0 COMMENT '排序',
     PRIMARY KEY (`id`),
@@ -109,7 +111,7 @@ CREATE TABLE IF NOT EXISTS `dish` (
 --    注意：desc 是 MySQL 关键字，必须带反引号
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `combo` (
-    `id`             VARCHAR(32)  NOT NULL COMMENT '主键',
+    `id`             BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
     `name`           VARCHAR(64)  NOT NULL COMMENT '盒饭名称，如「A 餐」',
     `cover`          VARCHAR(512)          DEFAULT NULL COMMENT '封面图',
     `desc`           VARCHAR(512)          DEFAULT NULL COMMENT '简介',
@@ -117,7 +119,7 @@ CREATE TABLE IF NOT EXISTS `combo` (
     `dishes`         JSON                  DEFAULT NULL COMMENT '组成菜品 [{dishId,name,qty}]',
     `spec_group_ids` JSON                  DEFAULT NULL COMMENT '启用的规格组 ID 数组',
     `status`         VARCHAR(16)  NOT NULL DEFAULT 'off' COMMENT 'on/off',
-    `category_id`    VARCHAR(32)           DEFAULT NULL COMMENT '预留分类，本版不参与展示分组',
+    `category_id`    BIGINT                DEFAULT NULL COMMENT '预留分类，本版不参与展示分组',
     `sort`           INT          NOT NULL DEFAULT 0 COMMENT '排序',
     PRIMARY KEY (`id`),
     KEY `idx_combo_status_sort` (`status`, `sort`)
@@ -127,7 +129,7 @@ CREATE TABLE IF NOT EXISTS `combo` (
 -- 6. 规格组 spec_group（当前只有「主食」；price_delta 是差价，不是份数）
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `spec_group` (
-    `id`            VARCHAR(32) NOT NULL COMMENT '主键',
+    `id`            BIGINT      NOT NULL AUTO_INCREMENT COMMENT '主键',
     `name`          VARCHAR(64) NOT NULL COMMENT '组名，如「主食」',
     `required`      TINYINT(1)  NOT NULL DEFAULT 0 COMMENT '是否必选',
     `count_in_prep` TINYINT(1)  NOT NULL DEFAULT 1 COMMENT '是否计入备菜统计',
@@ -143,9 +145,9 @@ CREATE TABLE IF NOT EXISTS `spec_group` (
 -- 7. 每日菜单 daily_menu（供餐日 + 份数快照；sold_qty 为「下单即占」的已占用份数）
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `daily_menu` (
-    `id`             VARCHAR(32) NOT NULL COMMENT '主键',
+    `id`             BIGINT      NOT NULL AUTO_INCREMENT COMMENT '主键',
     `serve_date`     DATE        NOT NULL COMMENT '供餐日期',
-    `combo_id`       VARCHAR(32) NOT NULL COMMENT '盒饭 ID',
+    `combo_id`       BIGINT      NOT NULL COMMENT '盒饭 ID',
     `combo_snapshot` JSON                 DEFAULT NULL COMMENT '名称/封面/菜品/规格的完整快照',
     `price_snapshot` INT         NOT NULL DEFAULT 0 COMMENT '盒饭价格快照（分）',
     `limit_qty`      INT                  DEFAULT NULL COMMENT '限量总份数，NULL 表示不限',
@@ -167,13 +169,13 @@ CREATE TABLE IF NOT EXISTS `daily_menu` (
 --    MySQL 唯一索引允许多个 NULL，不会互相冲突。
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `order` (
-    `id`               VARCHAR(32) NOT NULL COMMENT '主键',
+    `id`               BIGINT      NOT NULL AUTO_INCREMENT COMMENT '主键',
     `order_no`         VARCHAR(32) NOT NULL COMMENT '订单号，yyyyMMdd-000001',
     `request_id`       VARCHAR(64)          DEFAULT NULL COMMENT '下单幂等号，前端每次提交生成',
-    `user_id`          VARCHAR(32) NOT NULL COMMENT '下单用户',
+    `user_id`          BIGINT      NOT NULL COMMENT '下单用户',
     `serve_date`       DATE        NOT NULL COMMENT '供餐日期',
     `delivery_type`    VARCHAR(16) NOT NULL COMMENT 'pickup/delivery',
-    `region_id`        VARCHAR(32)          DEFAULT NULL COMMENT '配送单区域；自取单为空',
+    `region_id`        BIGINT               DEFAULT NULL COMMENT '配送单区域；自取单为空',
     `region_snapshot`  JSON                 DEFAULT NULL COMMENT '{regionId,regionName}',
     `address_snapshot` JSON                 DEFAULT NULL COMMENT '收货人/电话/详细地址快照',
     `items`            JSON                 DEFAULT NULL COMMENT '明细快照（含规格名与差价）',
@@ -198,7 +200,7 @@ CREATE TABLE IF NOT EXISTS `order` (
     `claimed_at`       DATETIME             DEFAULT NULL COMMENT '用户声称已转账时间',
     `paid_at`          DATETIME             DEFAULT NULL COMMENT '商家确认收款时间',
     `refunded_at`      DATETIME             DEFAULT NULL COMMENT '退款完成时间',
-    `refund_operator`  VARCHAR(32)          DEFAULT NULL COMMENT '标记退款的操作人，防重复退',
+    `refund_operator`  BIGINT               DEFAULT NULL COMMENT '标记退款的操作人，防重复退；系统操作写 0',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_order_no` (`order_no`),
     UNIQUE KEY `uk_order_request` (`request_id`),
@@ -217,13 +219,13 @@ CREATE TABLE IF NOT EXISTS `order` (
 -- 9. 邀请码 invite_code（一次性 + 有效期，群卡片走不通时的正式兜底路径）
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `invite_code` (
-    `id`         VARCHAR(32) NOT NULL COMMENT '主键',
+    `id`         BIGINT      NOT NULL AUTO_INCREMENT COMMENT '主键',
     `code`       VARCHAR(32) NOT NULL COMMENT '邀请码',
     `status`     VARCHAR(16) NOT NULL DEFAULT 'unused' COMMENT 'unused/used/expired',
     `expire_at`  DATETIME    NOT NULL COMMENT '过期时间',
-    `used_by`    VARCHAR(32)          DEFAULT NULL COMMENT '使用者 userId',
+    `used_by`    BIGINT               DEFAULT NULL COMMENT '使用者 userId',
     `used_at`    DATETIME             DEFAULT NULL COMMENT '使用时间',
-    `created_by` VARCHAR(32)          DEFAULT NULL COMMENT '生成人 userId',
+    `created_by` BIGINT               DEFAULT NULL COMMENT '生成人 userId；系统生成写 0',
     `created_at` DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_invite_code` (`code`),
@@ -236,7 +238,7 @@ CREATE TABLE IF NOT EXISTS `invite_code` (
 -- 10. 角色 role（内置「商家」角色 builtin = 1，权限不可被改）
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `role` (
-    `id`          VARCHAR(32) NOT NULL COMMENT '主键',
+    `id`          BIGINT      NOT NULL AUTO_INCREMENT COMMENT '主键',
     `name`        VARCHAR(64) NOT NULL COMMENT '角色名称',
     `permissions` JSON                 DEFAULT NULL COMMENT '权限项数组',
     `builtin`     TINYINT(1)  NOT NULL DEFAULT 0 COMMENT '是否内置角色',
@@ -276,7 +278,7 @@ CREATE TABLE IF NOT EXISTS `dict_type` (
 -- 13. 字典项 dict_item
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `dict_item` (
-    `id`         VARCHAR(32)  NOT NULL COMMENT '主键',
+    `id`         BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
     `type_code`  VARCHAR(64)  NOT NULL COMMENT '所属类型',
     `item_value` VARCHAR(64)  NOT NULL COMMENT '存值，写进库的就是它，如 pending_accept',
     `item_label` VARCHAR(64)  NOT NULL COMMENT '显示名，如「待接单」',
@@ -299,14 +301,17 @@ CREATE TABLE IF NOT EXISTS `dict_item` (
 -- 与 address 等表上的审计四列分工：
 --   行内四列回答「这条记录最后是谁动的」；本表回答「谁在什么时候动了它、动了什么」。
 -- 只存 summary 一句话，不存改前改后完整快照：回溯时回业务表看现状，历史值对该项目价值不高。
+--
+-- record_id 存被审计行的主键。只审计有自增主键的表（address / user），
+-- 自然主键表（config / dict_type）不参与，因此这里用 BIGINT 与它们的主键类型一致。
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `audit_log` (
-    `id`          VARCHAR(32)  NOT NULL COMMENT '主键',
+    `id`          BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
     `table_name`  VARCHAR(32)  NOT NULL COMMENT '对象表：address / user（订单域见 order_status_log）',
-    `record_id`   VARCHAR(32)  NOT NULL COMMENT '对象主键',
+    `record_id`   BIGINT       NOT NULL DEFAULT 0 COMMENT '对象主键；无对应记录（如登录类事件）写 0',
     `action`      VARCHAR(32)  NOT NULL COMMENT '动作码，如 address.approve / user.disable',
     `summary`     VARCHAR(500) NOT NULL COMMENT '一句话说明，人读的，含关键字段前后值',
-    `operator_id` VARCHAR(32)  NOT NULL COMMENT '操作人 user_id；定时任务写 system',
+    `operator_id` BIGINT       NOT NULL DEFAULT 0 COMMENT '操作人 user_id；定时任务写 0（系统）',
     `operator_name` VARCHAR(64)         DEFAULT NULL COMMENT '操作人当时的昵称/账号快照，改名后仍可读',
     `source`      VARCHAR(16)  NOT NULL COMMENT 'admin 网页后台 / miniprogram 小程序 / task 定时任务',
     `created_at`  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '记录时间',
@@ -331,8 +336,8 @@ CREATE TABLE IF NOT EXISTS `audit_log` (
 -- 存毫秒只用于排序，界面仍显示到秒。
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `order_status_log` (
-    `id`            VARCHAR(32)  NOT NULL COMMENT '主键',
-    `order_id`      VARCHAR(32)  NOT NULL COMMENT '订单主键',
+    `id`            BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `order_id`      BIGINT       NOT NULL COMMENT '订单主键',
     `log_type`      VARCHAR(16)  NOT NULL COMMENT 'order 订单状态线 / pay 收款状态线 / event 业务事件',
     `action`        VARCHAR(32)  NOT NULL COMMENT '动作码，如 order.accept / pay.confirm / event.cancel_apply',
     `from_status`   VARCHAR(32)           DEFAULT NULL COMMENT '变更前存值；无前值（如下单）为空',
@@ -341,7 +346,7 @@ CREATE TABLE IF NOT EXISTS `order_status_log` (
     -- 方式值只在 pay.claim（用户申报）与 pay.confirm（商家确认）两条上有值，
     -- 两条含义不同靠 action 区分；不单开「方式变更」记录，两行并排即是差异依据。
     `pay_method`    VARCHAR(64)           DEFAULT NULL COMMENT '收款方式快照：字典 pay_method 的 item_value（宽度与 dict_item.item_value 一致）；仅 pay.claim 与 pay.confirm 有值',
-    `operator_id`   VARCHAR(32)  NOT NULL COMMENT '操作人 user_id；系统任务写 system',
+    `operator_id`   BIGINT       NOT NULL DEFAULT 0 COMMENT '操作人 user_id；系统任务写 0',
     `operator_name` VARCHAR(64)           DEFAULT NULL COMMENT '操作人当时的名称快照',
     `source`        VARCHAR(16)  NOT NULL COMMENT 'admin 网页后台 / miniprogram 小程序 / task 定时任务',
     `created_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '发生时间（毫秒仅用于排序）',

@@ -80,7 +80,7 @@ public class UserAuditService {
                 // 这里的 SQL 片段是常量，不含任何用户输入。
                 .last("ORDER BY FIELD(audit_status, 'pending', 'rejected', 'disabled', 'approved'), created_at DESC"));
 
-        Set<String> inviteUsers = inviteUserIds(result.getRecords());
+        Set<Long> inviteUsers = inviteUserIds(result.getRecords());
         List<UserRow> rows = new ArrayList<>(result.getRecords().size());
         for (User user : result.getRecords()) {
             rows.add(toRow(user, inviteUsers.contains(user.getId())));
@@ -97,15 +97,15 @@ public class UserAuditService {
      * 这里用字符串列名而不是 Lambda：本方法在单元测试里也会被触达，
      * Lambda 需要 MyBatis-Plus 的 TableInfo 已初始化，纯单测环境拿不到。
      */
-    private Set<String> inviteUserIds(List<User> users) {
-        List<String> ids = users.stream().map(User::getId).toList();
+    private Set<Long> inviteUserIds(List<User> users) {
+        List<Long> ids = users.stream().map(User::getId).toList();
         if (ids.isEmpty()) {
             return Set.of();
         }
         List<InviteCode> codes = inviteCodeMapper.selectList(Wrappers.<InviteCode>query()
                 .select("used_by")
                 .in("used_by", ids));
-        Set<String> set = new HashSet<>(codes.size());
+        Set<Long> set = new HashSet<>(codes.size());
         for (InviteCode code : codes) {
             if (code.getUsedBy() != null) {
                 set.add(code.getUsedBy());
@@ -121,7 +121,7 @@ public class UserAuditService {
      * @param reason 仅 reject 必填
      */
     @Transactional
-    public UserRow audit(String operatorId, String userId, String action, String reason) {
+    public UserRow audit(Long operatorId, Long userId, String action, String reason) {
         User user = requireCustomer(userId);
 
         String from = user.getAuditStatus();
@@ -165,7 +165,7 @@ public class UserAuditService {
 
         recordAudit(user, from, to, reason);
 
-        Set<String> inviteUsers = inviteUserIds(List.of(user));
+        Set<Long> inviteUsers = inviteUserIds(List.of(user));
         return toRow(user, inviteUsers.contains(user.getId()));
     }
 
@@ -202,15 +202,12 @@ public class UserAuditService {
     /** 只要昵称；没填昵称就退回 userId。删除类记录用这个，号码不落库 */
     static String displayName(User user) {
         return user.getNickName() == null || user.getNickName().isBlank()
-                ? user.getId() : user.getNickName();
+                ? String.valueOf(user.getId()) : user.getNickName();
     }
 
-    /** userId 尾 6 位：人读的日志里够指到某一行，又不至于把整串 UUID 铺满 */
-    static String idTail(String userId) {
-        if (userId == null || userId.length() <= 6) {
-            return userId == null ? "" : userId;
-        }
-        return userId.substring(userId.length() - 6);
+    /** 日志里指到某一行用：主键是自增 BIGINT，直接转字符串即可 */
+    static String idTail(Long userId) {
+        return userId == null ? "" : String.valueOf(userId);
     }
 
     /**
@@ -219,7 +216,7 @@ public class UserAuditService {
      * <p>列表里只给掩码，真要拨号 / 核对才走这里：一次一个用户、一次一条记录。
      * 这是「能看」与「随便能拉全表」的分界线——后者才是真正会出事的那种泄露。
      */
-    public String fullPhone(String operatorId, String userId) {
+    public String fullPhone(Long operatorId, Long userId) {
         User user = requireCustomer(userId);
         auditService.record(AuditActions.TABLE_USER, userId, AuditActions.USER_PHONE_VIEW,
                 "查看完整手机号：" + displayName(user) + "｜操作人：" + operatorId);
@@ -231,7 +228,7 @@ public class UserAuditService {
 
     /** 商家代填 / 修改用户手机号（用户没填或填错时用）。 */
     @Transactional
-    public UserRow updatePhone(String operatorId, String userId, String phone) {
+    public UserRow updatePhone(Long operatorId, Long userId, String phone) {
         User user = requireCustomer(userId);
         String normalized = PhoneValidator.require(phone);
         String before = user.getPhone();
@@ -243,7 +240,7 @@ public class UserAuditService {
                 "商家修改手机号：" + displayName(user) + "｜原号："
                         + (before == null || before.isBlank() ? "空" : MaskUtil.phoneShort(before))
                         + " → " + MaskUtil.phoneShort(normalized));
-        Set<String> inviteUsers = inviteUserIds(List.of(user));
+        Set<Long> inviteUsers = inviteUserIds(List.of(user));
         return toRow(user, inviteUsers.contains(user.getId()));
     }
 
@@ -264,7 +261,7 @@ public class UserAuditService {
      * @return 连带删除的地址条数，仅用于日志与前端提示
      */
     @Transactional
-    public int delete(String operatorId, String userId) {
+    public int delete(Long operatorId, Long userId) {
         User user = requireCustomer(userId);
 
         Long orderCount = orderMapper.selectCount(Wrappers.<Order>lambdaQuery()
@@ -309,8 +306,8 @@ public class UserAuditService {
      * @param roleIds     后台角色 ID 列表，至少一个；决定他能进后台做什么
      */
     @Transactional
-    public void promote(String operatorId, String userId, String username,
-                        String rawPassword, List<String> roleIds) {
+    public void promote(Long operatorId, Long userId, String username,
+                        String rawPassword, List<Long> roleIds) {
         User user = requireCustomer(userId);
 
         String account = username == null ? "" : username.trim();
@@ -328,7 +325,7 @@ public class UserAuditService {
         if (exists != null && exists > 0) {
             throw BizException.conflict("登录账号「" + account + "」已被占用，请换一个");
         }
-        List<String> roles = requireRoles(roleIds);
+        List<Long> roles = requireRoles(roleIds);
 
         String from = user.getAuditStatus();
         user.setUserType(UserType.MERCHANT);
@@ -353,14 +350,14 @@ public class UserAuditService {
     }
 
     /** 角色入参清洗：去重保序、逐个确认存在。至少一个，否则升级完进后台白屏。 */
-    private List<String> requireRoles(List<String> roleIds) {
+    private List<Long> requireRoles(List<Long> roleIds) {
         if (roleIds == null || roleIds.isEmpty()) {
             throw BizException.param("请至少选择一个后台角色");
         }
-        Set<String> distinct = new LinkedHashSet<>();
-        for (String roleId : roleIds) {
-            if (roleId != null && !roleId.isBlank()) {
-                distinct.add(roleId.trim());
+        Set<Long> distinct = new LinkedHashSet<>();
+        for (Long roleId : roleIds) {
+            if (roleId != null) {
+                distinct.add(roleId);
             }
         }
         if (distinct.isEmpty()) {
@@ -373,7 +370,7 @@ public class UserAuditService {
         return List.copyOf(distinct);
     }
 
-    private User requireCustomer(String userId) {
+    private User requireCustomer(Long userId) {
         User user = userMapper.selectById(userId);
         if (user == null) {
             throw BizException.notFound("用户不存在");
@@ -439,7 +436,7 @@ public class UserAuditService {
      * @param accessVia group / invite / null（未准入，正常不会出现在审核列表，除非商家手动建的号）
      * @param canAudit  是否能审核：没填昵称的用户列表照常展示，但不能通过 / 驳回
      */
-    public record UserRow(String userId, String nickName, String avatarUrl, String phone,
+    public record UserRow(Long userId, String nickName, String avatarUrl, String phone,
                           String auditStatus, String rejectReason, String accessVia,
                           LocalDateTime createdAt, LocalDateTime approvedAt, boolean canAudit) {
     }

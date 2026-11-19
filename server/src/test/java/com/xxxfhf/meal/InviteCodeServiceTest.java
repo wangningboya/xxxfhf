@@ -17,6 +17,7 @@ import java.time.LocalDateTime;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -32,7 +33,7 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class InviteCodeServiceTest {
 
-    private static final String USER = "u_customer_1";
+    private static final Long USER = 1L;
 
     @Mock
     private InviteCodeMapper inviteCodeMapper;
@@ -43,7 +44,7 @@ class InviteCodeServiceTest {
     @Test
     @DisplayName("生成的码是 8 位，且不含易混字符 0/O/1/I/L")
     void generatedCodeIsReadable() {
-        InviteCode code = service.create(24, "u_merchant_1");
+        InviteCode code = service.create(24, 100L);
 
         assertThat(code.getCode()).hasSize(8);
         assertThat(code.getCode()).matches("^[A-HJ-KM-NP-Z2-9]{8}$");
@@ -55,7 +56,7 @@ class InviteCodeServiceTest {
     @Test
     @DisplayName("不传有效期按 24 小时")
     void defaultExpireIs24Hours() {
-        InviteCode code = service.create(0, "u_merchant_1");
+        InviteCode code = service.create(0, 100L);
 
         assertThat(code.getExpireAt()).isAfter(LocalDateTime.now().plusHours(23));
         assertThat(code.getExpireAt()).isBefore(LocalDateTime.now().plusHours(25));
@@ -64,7 +65,7 @@ class InviteCodeServiceTest {
     @Test
     @DisplayName("有效期超过 30 天直接拒绝")
     void expireTooLongRejected() {
-        assertThatThrownBy(() -> service.create(721, "u_merchant_1"))
+        assertThatThrownBy(() -> service.create(721, 100L))
                 .isInstanceOf(BizException.class)
                 .hasMessageContaining("30 天");
         verify(inviteCodeMapper, never()).insert(any(InviteCode.class));
@@ -127,6 +128,6 @@ class InviteCodeServiceTest {
         assertThatThrownBy(() -> service.consume("   ", USER))
                 .isInstanceOf(BizException.class)
                 .hasMessageContaining("请输入邀请码");
-        verify(inviteCodeMapper, never()).consume(anyString(), anyString());
+        verify(inviteCodeMapper, never()).consume(anyString(), anyLong());
     }
 }

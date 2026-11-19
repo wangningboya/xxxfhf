@@ -5,7 +5,7 @@ import com.xxxfhf.meal.auth.UserContext;
 import com.xxxfhf.meal.common.ApiResponse;
 import com.xxxfhf.meal.common.PageResult;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -44,14 +44,14 @@ public class OrderController {
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
-        String userId = UserContext.userId();
+        Long userId = UserContext.userId();
         accessGuard.requireAccess(userId);
         return ApiResponse.ok(PageResult.of(orderService.mine(userId, status, page, pageSize)));
     }
 
     @GetMapping("/detail")
-    public ApiResponse<OrderService.OrderView> detail(@RequestParam String orderId) {
-        String userId = UserContext.userId();
+    public ApiResponse<OrderService.OrderView> detail(@RequestParam Long orderId) {
+        Long userId = UserContext.userId();
         accessGuard.requireAccess(userId);
         return ApiResponse.ok(orderService.detail(userId, orderId));
     }
@@ -70,7 +70,7 @@ public class OrderController {
                 UserContext.userId(), request.orderId(), request.reason()));
     }
 
-    public record IdRequest(@NotBlank(message = "缺少订单 ID") String orderId) {
+    public record IdRequest(@NotNull(message = "缺少订单 ID") Long orderId) {
     }
 
     /**
@@ -78,11 +78,11 @@ public class OrderController {
      * 校验交给 {@code DictService.requireValue}（字典 {@code pay_method} 里启用着的项才算合法），
      * 让它同时覆盖「缺值」与「已停用 / 不存在的值」，错误文案也能说清是哪种情况。
      */
-    public record ClaimPaidRequest(@NotBlank(message = "缺少订单 ID") String orderId,
+    public record ClaimPaidRequest(@NotNull(message = "缺少订单 ID") Long orderId,
                                    String payMethod) {
     }
 
-    public record CancelRequest(@NotBlank(message = "缺少订单 ID") String orderId,
+    public record CancelRequest(@NotNull(message = "缺少订单 ID") Long orderId,
                                 String reason) {
     }
 }

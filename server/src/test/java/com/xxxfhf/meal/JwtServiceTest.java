@@ -28,11 +28,11 @@ class JwtServiceTest {
     @DisplayName("签发后能解析出 userId 与账号类型")
     void issueAndParse() {
         JwtService service = newService(7);
-        String token = service.issue("u_1001", UserType.CUSTOMER, 0);
+        String token = service.issue(1001L, UserType.CUSTOMER, 0);
 
         Optional<JwtService.TokenPayload> payload = service.parse(token);
         assertThat(payload).isPresent();
-        assertThat(payload.get().userId()).isEqualTo("u_1001");
+        assertThat(payload.get().userId()).isEqualTo(1001L);
         assertThat(payload.get().userType()).isEqualTo(UserType.CUSTOMER);
     }
 
@@ -40,7 +40,7 @@ class JwtServiceTest {
     @DisplayName("被篡改的令牌解析失败，不抛异常")
     void tamperedTokenRejected() {
         JwtService service = newService(7);
-        String token = service.issue("u_1001", UserType.CUSTOMER, 0);
+        String token = service.issue(1001L, UserType.CUSTOMER, 0);
         String tampered = token.substring(0, token.length() - 2) + "xx";
 
         assertThat(service.parse(tampered)).isEmpty();
@@ -49,7 +49,7 @@ class JwtServiceTest {
     @Test
     @DisplayName("其他密钥签发的令牌不被接受")
     void tokenFromOtherSecretRejected() {
-        String foreign = newService(7).issue("u_9999", UserType.MERCHANT, 0);
+        String foreign = newService(7).issue(9999L, UserType.MERCHANT, 0);
         AppProperties other = new AppProperties();
         other.getJwt().setSecret("ffffffffffffffffffffffffffffffff");
         other.getJwt().setExpireDays(7);
@@ -63,7 +63,7 @@ class JwtServiceTest {
     void expiredTokenRejected() {
         // 负数表示过期时间在过去，仅测试用（生产配置由 AppProperties 限制在 1~30 天）
         JwtService service = newService(-1);
-        String token = service.issue("u_1001", UserType.CUSTOMER, 0);
+        String token = service.issue(1001L, UserType.CUSTOMER, 0);
 
         assertThat(service.parse(token)).isEmpty();
     }

@@ -59,7 +59,7 @@ public class PrepService {
         List<Order> orders = ordersOf(date);
 
         Map<String, DishAgg> dishMap = new LinkedHashMap<>();
-        Map<String, RegionAgg> regionMap = new LinkedHashMap<>();
+        Map<Long, RegionAgg> regionMap = new LinkedHashMap<>();
         RegionAgg selfPickup = new RegionAgg(null, "自取（不分区域）");
 
         for (Order order : orders) {
@@ -155,7 +155,7 @@ public class PrepService {
     private static void accumulateDishes(Map<String, DishAgg> dishMap, OrderItem item, int qty) {
         if (item.dishes() != null) {
             for (ComboDish dish : item.dishes()) {
-                DishAgg agg = dishMap.computeIfAbsent(dish.dishId(),
+                DishAgg agg = dishMap.computeIfAbsent(String.valueOf(dish.dishId()),
                         id -> new DishAgg(dish.dishId(), dish.name(), "dish", null));
                 agg.qty += dish.qtyOrDefault() * qty;
                 agg.combos.add(item.name());
@@ -169,7 +169,7 @@ public class PrepService {
                 }
                 String key = "spec:" + spec.optionName();
                 DishAgg agg = dishMap.computeIfAbsent(key,
-                        k -> new DishAgg(k, spec.optionName(), "spec", spec.groupName()));
+                        k -> new DishAgg(null, spec.optionName(), "spec", spec.groupName()));
                 agg.qty += qty;
                 agg.combos.add(item.name());
             }
@@ -184,13 +184,13 @@ public class PrepService {
      * 不在菜品库里，没有 sort 可比，统一放最后。
      */
     private void sortDishes(List<DishRow> rows) {
-        List<String> dishIds = new ArrayList<>();
+        List<Long> dishIds = new ArrayList<>();
         for (DishRow row : rows) {
             if ("dish".equals(row.kind())) {
                 dishIds.add(row.dishId());
             }
         }
-        Map<String, Integer> sortById = new HashMap<>();
+        Map<Long, Integer> sortById = new HashMap<>();
         if (!dishIds.isEmpty()) {
             // 菜品可能已经被删除，快照里的行照样要出：查不到的按 sort=0 处理
             for (Dish dish : dishMapper.selectList(Wrappers.<Dish>lambdaQuery()
@@ -247,14 +247,14 @@ public class PrepService {
     /* ==================== 聚合中间态 ==================== */
 
     private static final class DishAgg {
-        private final String dishId;
+        private final Long dishId;
         private final String name;
         private final String kind;
         private final String groupName;
         private int qty;
         private final Set<String> combos = new LinkedHashSet<>();
 
-        private DishAgg(String dishId, String name, String kind, String groupName) {
+        private DishAgg(Long dishId, String name, String kind, String groupName) {
             this.dishId = dishId;
             this.name = name;
             this.kind = kind;
@@ -267,7 +267,7 @@ public class PrepService {
     }
 
     private static final class RegionAgg {
-        private final String regionId;
+        private final Long regionId;
         private final String regionName;
         private int qty;
         private int orderCount;
@@ -275,7 +275,7 @@ public class PrepService {
         private final List<ContactRow> contacts = new ArrayList<>();
         private final Map<String, Integer> slots = new LinkedHashMap<>();
 
-        private RegionAgg(String regionId, String regionName) {
+        private RegionAgg(Long regionId, String regionName) {
             this.regionId = regionId;
             this.regionName = regionName;
         }
@@ -314,7 +314,7 @@ public class PrepService {
      * @param kinds dish = 菜品，spec = 规格选项
      * @param groupName 规格选项所属组名；菜品为 null
      */
-    public record DishRow(String dishId, String name, String kind, String groupName,
+    public record DishRow(Long dishId, String name, String kind, String groupName,
                           int qty, List<String> comboNames) {
     }
 
@@ -330,7 +330,7 @@ public class PrepService {
     /**
      * @param slots 仅自取栏有值（按半小时时段分组，便于安排出餐节奏）
      */
-    public record RegionRow(String regionId, String regionName, int qty, List<ComboQty> items,
+    public record RegionRow(Long regionId, String regionName, int qty, List<ComboQty> items,
                             int orderCount, List<ContactRow> contacts, List<SlotRow> slots) {
     }
 

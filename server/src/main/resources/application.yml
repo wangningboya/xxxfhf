@@ -29,8 +29,9 @@ spring:
     timeout-per-shutdown-phase: 20s
   servlet:
     multipart:
-      max-file-size: 5MB
-      max-request-size: 6MB
+      # 压缩在服务端做，这里要容得下原图；与 app.upload.max-size-mb 保持一致
+      max-file-size: 15MB
+      max-request-size: 16MB
 
   # 连接池参数两个环境一致，差异只在 url/账号密码（见 dev/prod 文件）
   datasource:
@@ -49,8 +50,8 @@ mybatis-plus:
   global-config:
     banner: false
     db-config:
-      # 主键统一 32 位 UUID 字符串，与建表脚本的 VARCHAR(32) 一致
-      id-type: assign_uuid
+      # 主键统一数据库自增 BIGINT，与建表脚本的 AUTO_INCREMENT 一致
+      id-type: auto
 
 app:
   jwt:
@@ -60,7 +61,12 @@ app:
     timeout-seconds: 5
   upload:
     url-prefix: /upload
-    max-size-mb: 5
+    # 原图上限：手机直出的高清图常在 8~12MB
+    max-size-mb: ${APP_UPLOAD_MAX_SIZE_MB:15}
+    # 压缩后长边（px）：小程序最大展示位 3x 屏约 1035px
+    max-edge: ${APP_UPLOAD_MAX_EDGE:1200}
+    # JPEG 质量（0~1）
+    jpeg-quality: ${APP_UPLOAD_JPEG_QUALITY:0.82}
   schedule:
     # 每 5 分钟；要更精确改 0 * * * * *
     prepay-release-cron: "${APP_PREPAY_RELEASE_CRON:0 */5 * * * *}"

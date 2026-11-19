@@ -65,14 +65,14 @@ public class CancelRequestTimeoutTask {
                 log.debug("取消申请自动同意已关闭（cancelRequestTimeoutHours={}）", hours);
                 return;
             }
-            List<String> ids = jdbcTemplate.queryForList(SCAN_SQL, String.class, hours, BATCH_LIMIT);
+            List<Long> ids = jdbcTemplate.queryForList(SCAN_SQL, Long.class, hours, BATCH_LIMIT);
             if (ids.isEmpty()) {
                 log.debug("取消申请超时扫描：无命中");
                 return;
             }
 
             int approved = 0;
-            for (String orderId : ids) {
+            for (Long orderId : ids) {
                 try {
                     orderAdminService.autoApproveCancelRequest(orderId, hours);
                     approved++;

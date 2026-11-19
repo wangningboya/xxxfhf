@@ -15,14 +15,14 @@ import com.baomidou.mybatisplus.annotation.TableName;
 @TableName("dish")
 public class Dish {
 
-    @TableId(type = IdType.ASSIGN_UUID)
-    private String id;
+    @TableId(type = IdType.AUTO)
+    private Long id;
 
     /** 菜名，如「红烧肉」 */
     private String name;
 
     /** 预留分类字段。本版不提供维护入口，也不参与前端分组展示（需求 4.3） */
-    private String categoryId;
+    private Long categoryId;
 
     /** enabled / disabled，见 GoodsStatus */
     private String status;
@@ -31,11 +31,11 @@ public class Dish {
 
     /* ---------------- getters / setters ---------------- */
 
-    public String getId() {
+    public Long getId() {
         return id;
     }
 
-    public void setId(String id) {
+    public void setId(Long id) {
         this.id = id;
     }
 
@@ -47,11 +47,11 @@ public class Dish {
         this.name = name;
     }
 
-    public String getCategoryId() {
+    public Long getCategoryId() {
         return categoryId;
     }
 
-    public void setCategoryId(String categoryId) {
+    public void setCategoryId(Long categoryId) {
         this.categoryId = categoryId;
     }
 

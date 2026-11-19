@@ -43,23 +43,23 @@ class JsonFieldMappingTest {
     private RoleMapper roleMapper;
 
     @Test
-    @DisplayName("user.role_ids 的 List<String> 能写入并原样读出")
+    @DisplayName("user.role_ids 的 List<Long> 能写入并原样读出")
     void userRoleIdsRoundTrip() {
         User user = new User();
         user.setOpenid("ut_" + UUID.randomUUID().toString().replace("-", ""));
         user.setAuditStatus(AuditStatus.PENDING);
-        user.setRoleIds(List.of("role_merchant"));
+        user.setRoleIds(List.of(1L));
         user.setCreatedAt(LocalDateTime.now());
 
         userMapper.insert(user);
-        assertThat(user.getId()).as("主键应被自动生成").isNotBlank();
+        assertThat(user.getId()).as("主键应被自动生成").isNotNull();
 
         User loaded = userMapper.selectById(user.getId());
         assertThat(loaded).isNotNull();
         assertThat(loaded.getRoleIds())
                 .as("若为 null，说明 TypeHandler 或 autoResultMap 配错了")
                 .isNotNull()
-                .containsExactly("role_merchant");
+                .containsExactly(1L);
     }
 
     @Test

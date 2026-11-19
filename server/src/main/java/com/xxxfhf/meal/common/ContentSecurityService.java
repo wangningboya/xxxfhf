@@ -48,7 +48,7 @@ public class ContentSecurityService {
      * @param content 待检测文本
      * @return true = 放行（干净，或检测接口不可用）；false = 确认含违规内容
      */
-    public boolean pass(String userId, String openid, String content) {
+    public boolean pass(Long userId, String openid, String content) {
         if (content == null || content.isBlank()) {
             return true;
         }

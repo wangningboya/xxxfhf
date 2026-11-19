@@ -7,6 +7,7 @@ import com.xxxfhf.meal.common.ApiResponse;
 import com.xxxfhf.meal.common.PageResult;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.NotEmpty;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -59,7 +60,7 @@ public class OrderAdminController {
 
     @GetMapping("/detail")
     @RequirePerm({Perms.ORDER_VIEW, Perms.ORDER_ACCEPT})
-    public ApiResponse<OrderAdminService.AdminOrderRow> detail(@RequestParam String orderId) {
+    public ApiResponse<OrderAdminService.AdminOrderRow> detail(@RequestParam Long orderId) {
         return ApiResponse.ok(orderAdminService.detail(orderId));
     }
 
@@ -71,7 +72,7 @@ public class OrderAdminController {
      */
     @GetMapping("/status-log")
     @RequirePerm({Perms.ORDER_VIEW, Perms.ORDER_ACCEPT})
-    public ApiResponse<List<OrderStatusLogService.Row>> statusLog(@RequestParam String orderId) {
+    public ApiResponse<List<OrderStatusLogService.Row>> statusLog(@RequestParam Long orderId) {
         return ApiResponse.ok(statusLogService.list(orderId));
     }
 
@@ -84,7 +85,7 @@ public class OrderAdminController {
      */
     @GetMapping("/{orderId}/contact-phone")
     @RequirePerm({Perms.ORDER_VIEW, Perms.ORDER_ACCEPT})
-    public ApiResponse<String> contactPhone(@PathVariable String orderId) {
+    public ApiResponse<String> contactPhone(@PathVariable Long orderId) {
         return ApiResponse.ok(orderAdminService.contactPhone(UserContext.userId(), orderId));
     }
 
@@ -124,7 +125,7 @@ public class OrderAdminController {
     @PostMapping("/payment")
     @RequirePerm(Perms.ORDER_PAYMENT)
     public ApiResponse<OrderService.OrderView> payment(@Valid @RequestBody PaymentRequest request) {
-        String operatorId = UserContext.userId();
+        Long operatorId = UserContext.userId();
         return switch (request.action()) {
             case "confirm" -> ApiResponse.ok(orderAdminService.confirmPayment(
                     operatorId, request.orderId(), request.payMethod()));
@@ -166,29 +167,29 @@ public class OrderAdminController {
     }
 
     public record AcceptRequest(
-            @NotEmpty(message = "请选择要接单的订单") List<String> orderIds) {
+            @NotEmpty(message = "请选择要接单的订单") List<Long> orderIds) {
     }
 
     /**
      * @param userId 替谁下单。必须是已通过审核的群成员
      */
     public record ProxyRequest(
-            @NotBlank(message = "请选择下单用户") String userId,
+            @NotNull(message = "请选择下单用户") Long userId,
             String serveDate,
             String deliveryType,
-            String addressId,
+            Long addressId,
             String pickupSlot,
             String remark,
             @NotEmpty(message = "请选择盒饭") List<OrderService.ItemInput> items) {
     }
 
     public record RejectRequest(
-            @NotBlank(message = "缺少订单 ID") String orderId,
+            @NotNull(message = "缺少订单 ID") Long orderId,
             @NotBlank(message = "拒单必须填写原因") String reason) {
     }
 
     public record AdvanceRequest(
-            @NotBlank(message = "缺少订单 ID") String orderId,
+            @NotNull(message = "缺少订单 ID") Long orderId,
             @NotBlank(message = "缺少目标状态") String status) {
     }
 
@@ -203,16 +204,16 @@ public class OrderAdminController {
      * {@code @NotBlank} —— {@code revert} 不需要方式，加了会让回退也跟着失败）。
      */
     public record PaymentRequest(
-            @NotBlank(message = "缺少订单 ID") String orderId,
+            @NotNull(message = "缺少订单 ID") Long orderId,
             @NotBlank(message = "缺少操作类型") String action,
             String payMethod) {
     }
 
-    public record IdRequest(@NotBlank(message = "缺少订单 ID") String orderId) {
+    public record IdRequest(@NotNull(message = "缺少订单 ID") Long orderId) {
     }
 
     public record CancelHandleRequest(
-            @NotBlank(message = "缺少订单 ID") String orderId,
+            @NotNull(message = "缺少订单 ID") Long orderId,
             Boolean approve,
             String remark) {
     }

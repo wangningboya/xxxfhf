@@ -49,7 +49,7 @@ public class DishService {
     @Transactional
     public Dish save(DishCommand cmd) {
         String name = requireName(cmd.name());
-        boolean creating = cmd.id() == null || cmd.id().isBlank();
+        boolean creating = cmd.id() == null;
 
         Dish dish;
         if (creating) {
@@ -65,7 +65,7 @@ public class DishService {
             }
         }
         dish.setName(name);
-        dish.setCategoryId(trimToNull(cmd.categoryId()));
+        dish.setCategoryId(cmd.categoryId());
 
         if (creating) {
             dishMapper.insert(dish);
@@ -79,7 +79,7 @@ public class DishService {
 
     /** 启用 / 停用。停用不会影响已把它配进盒饭的那些盒饭。 */
     @Transactional
-    public Dish updateStatus(String id, String status) {
+    public Dish updateStatus(Long id, String status) {
         requireStatus(status);
         Dish dish = require(id);
         dish.setStatus(status);
@@ -90,7 +90,7 @@ public class DishService {
 
     /** 删除。被盒饭引用时拒绝，并点名是哪几个盒饭，让商家能判断该不该停用。 */
     @Transactional
-    public void delete(String id) {
+    public void delete(Long id) {
         Dish dish = require(id);
         List<String> usedBy = comboNamesUsing(id);
         if (!usedBy.isEmpty()) {
@@ -101,7 +101,7 @@ public class DishService {
         log.info("删除菜品 id={} name={}", id, dish.getName());
     }
 
-    public Dish require(String id) {
+    public Dish require(Long id) {
         Dish dish = id == null ? null : dishMapper.selectById(id);
         if (dish == null) {
             throw BizException.notFound("菜品不存在");
@@ -115,7 +115,7 @@ public class DishService {
      * 盒饭的组成存在 JSON 列里，没有关联表可 join，所以整表取回在内存里比。
      * 单店盒饭数量在几十个量级，这个代价可以接受；真到上千个再考虑冗余一张关联表。
      */
-    private List<String> comboNamesUsing(String dishId) {
+    private List<String> comboNamesUsing(Long dishId) {
         List<Combo> combos = comboMapper.selectList(Wrappers.<Combo>lambdaQuery()
                 .select(Combo::getId, Combo::getName, Combo::getDishes));
         List<String> names = new ArrayList<>();
@@ -172,6 +172,6 @@ public class DishService {
      * @param id         为空 = 新增
      * @param sort       编辑时传 null 表示不修改排序
      */
-    public record DishCommand(String id, String name, String categoryId, Integer sort) {
+    public record DishCommand(Long id, String name, Long categoryId, Integer sort) {
     }
 }

@@ -14,7 +14,7 @@ import java.util.Set;
  * @param auditStatus 审核状态，下单与审核判断都读这里而不是读 token，保证审核通过即时生效
  * @param permissions 由角色解析出的权限项集合
  */
-public record CurrentUser(String userId, String userType, String auditStatus, Set<String> permissions) {
+public record CurrentUser(Long userId, String userType, String auditStatus, Set<String> permissions) {
 
     public boolean isMerchant() {
         return UserType.MERCHANT.equals(userType);

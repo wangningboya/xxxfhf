@@ -44,11 +44,11 @@ public class JwtService {
      * @param userType     customer / merchant（见 UserType）
      * @param tokenVersion 签发时的 user.token_version，拦截器据此比对踢人
      */
-    public String issue(String userId, String userType, int tokenVersion) {
+    public String issue(Long userId, String userType, int tokenVersion) {
         Instant now = Instant.now();
         return Jwts.builder()
                 .issuer(ISSUER)
-                .subject(userId)
+                .subject(String.valueOf(userId))
                 .claim(CLAIM_TYPE, userType)
                 .claim(CLAIM_VERSION, tokenVersion)
                 .issuedAt(Date.from(now))
@@ -65,21 +65,23 @@ public class JwtService {
                     .build()
                     .parseSignedClaims(token)
                     .getPayload();
-            String userId = claims.getSubject();
+            String subject = claims.getSubject();
             String userType = claims.get(CLAIM_TYPE, String.class);
             // ver 必须按 Number 读：jjwt-gson 会把数字 claim 反序列化成 Double，
             // 按 Integer 强转取值会抛 RequiredTypeException，被 catch 成「令牌无效」
             Object versionRaw = claims.get(CLAIM_VERSION);
-            if (userId == null || userId.isBlank() || userType == null || userType.isBlank()
+            if (subject == null || subject.isBlank() || userType == null || userType.isBlank()
                     || !(versionRaw instanceof Number versionNumber)) {
                 return Optional.empty();
             }
-            return Optional.of(new TokenPayload(userId, userType, versionNumber.intValue()));
+            // 主键是数据库自增 BIGINT，而 JWT subject 只能是字符串，故此处还原成 Long；
+            // 脏数据会抛 NumberFormatException（IllegalArgumentException 子类），落到下面的 catch
+            return Optional.of(new TokenPayload(Long.valueOf(subject.trim()), userType, versionNumber.intValue()));
         } catch (JwtException | IllegalArgumentException ex) {
             return Optional.empty();
         }
     }
 
-    public record TokenPayload(String userId, String userType, int tokenVersion) {
+    public record TokenPayload(Long userId, String userType, int tokenVersion) {
     }
 }

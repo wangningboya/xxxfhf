@@ -12,8 +12,8 @@ import java.time.LocalDateTime;
 @TableName("invite_code")
 public class InviteCode {
 
-    @TableId(type = IdType.ASSIGN_UUID)
-    private String id;
+    @TableId(type = IdType.AUTO)
+    private Long id;
 
     private String code;
 
@@ -22,19 +22,19 @@ public class InviteCode {
 
     private LocalDateTime expireAt;
 
-    private String usedBy;
+    private Long usedBy;
 
     private LocalDateTime usedAt;
 
-    private String createdBy;
+    private Long createdBy;
 
     private LocalDateTime createdAt;
 
-    public String getId() {
+    public Long getId() {
         return id;
     }
 
-    public void setId(String id) {
+    public void setId(Long id) {
         this.id = id;
     }
 
@@ -62,11 +62,11 @@ public class InviteCode {
         this.expireAt = expireAt;
     }
 
-    public String getUsedBy() {
+    public Long getUsedBy() {
         return usedBy;
     }
 
-    public void setUsedBy(String usedBy) {
+    public void setUsedBy(Long usedBy) {
         this.usedBy = usedBy;
     }
 
@@ -78,11 +78,11 @@ public class InviteCode {
         this.usedAt = usedAt;
     }
 
-    public String getCreatedBy() {
+    public Long getCreatedBy() {
         return createdBy;
     }
 
-    public void setCreatedBy(String createdBy) {
+    public void setCreatedBy(Long createdBy) {
         this.createdBy = createdBy;
     }
 

@@ -60,14 +60,14 @@ public class PrepayReleaseTask {
         try {
             // 分钟数读配置不写死：商家可能想把 30 分钟改成 20 分钟
             int minutes = Math.max(1, configService.getInt(ConfigKey.PREPAY_RELEASE_MINUTES, 30));
-            List<String> ids = jdbcTemplate.queryForList(SCAN_SQL, String.class, minutes, BATCH_LIMIT);
+            List<Long> ids = jdbcTemplate.queryForList(SCAN_SQL, Long.class, minutes, BATCH_LIMIT);
             if (ids.isEmpty()) {
                 log.debug("超时未付款扫描：无命中");
                 return;
             }
 
             int released = 0;
-            for (String orderId : ids) {
+            for (Long orderId : ids) {
                 try {
                     if (orderService.releaseForTimeout(orderId)) {
                         released++;

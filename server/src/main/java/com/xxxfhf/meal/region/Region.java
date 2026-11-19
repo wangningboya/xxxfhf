@@ -15,8 +15,8 @@ import java.time.LocalDateTime;
 @TableName("region")
 public class Region {
 
-    @TableId(type = IdType.ASSIGN_UUID)
-    private String id;
+    @TableId(type = IdType.AUTO)
+    private Long id;
 
     /** 区域名称，唯一。同名区域不允许重复创建 */
     private String name;
@@ -33,11 +33,11 @@ public class Region {
 
     /* ---------------- getters / setters ---------------- */
 
-    public String getId() {
+    public Long getId() {
         return id;
     }
 
-    public void setId(String id) {
+    public void setId(Long id) {
         this.id = id;
     }
 

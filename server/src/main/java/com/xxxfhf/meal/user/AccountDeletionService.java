@@ -63,7 +63,7 @@ public class AccountDeletionService {
     }
 
     /** 注销前的告知：会删什么、会留什么。页面据此展示后果，用户确认后才调 {@link #delete}。 */
-    public DeletionPreview preview(String userId) {
+    public DeletionPreview preview(Long userId) {
         User user = requireCustomer(userId);
         long orders = countOrders(userId);
         long addresses = countAddresses(userId);
@@ -78,7 +78,7 @@ public class AccountDeletionService {
      * @return 走了哪条分支、保留了几笔订单、删掉几条地址
      */
     @Transactional
-    public DeletionResult delete(String userId) {
+    public DeletionResult delete(Long userId) {
         User user = requireCustomer(userId);
         long orders = countOrders(userId);
 
@@ -125,7 +125,7 @@ public class AccountDeletionService {
      * <p>这里刻意用「重新 new 一个快照再 updateById」而不是 update wrapper 的 set：
      * JSON 列要靠字段上声明的 typeHandler 序列化，走 updateById 才会用上它。
      */
-    private int maskSnapshotPhones(String userId) {
+    private int maskSnapshotPhones(Long userId) {
         List<Order> orders = orderMapper.selectList(Wrappers.<Order>lambdaQuery()
                 .eq(Order::getUserId, userId)
                 .isNotNull(Order::getAddressSnapshot)
@@ -147,7 +147,7 @@ public class AccountDeletionService {
         return masked;
     }
 
-    private User requireCustomer(String userId) {
+    private User requireCustomer(Long userId) {
         User user = userMapper.selectById(userId);
         if (user == null) {
             throw BizException.unauthorized("登录已失效，请重新进入小程序");
@@ -158,13 +158,13 @@ public class AccountDeletionService {
         return user;
     }
 
-    private long countOrders(String userId) {
+    private long countOrders(Long userId) {
         Long count = orderMapper.selectCount(Wrappers.<Order>lambdaQuery()
                 .eq(Order::getUserId, userId));
         return count == null ? 0L : count;
     }
 
-    private long countAddresses(String userId) {
+    private long countAddresses(Long userId) {
         Long count = addressMapper.selectCount(Wrappers.<Address>lambdaQuery()
                 .eq(Address::getUserId, userId));
         return count == null ? 0L : count;

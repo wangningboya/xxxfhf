@@ -5,6 +5,7 @@ import com.xxxfhf.meal.auth.RequirePerm;
 import com.xxxfhf.meal.common.ApiResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -38,7 +39,7 @@ public class ComboController {
 
     @GetMapping("/detail")
     @RequirePerm(Perms.COMBO_MANAGE)
-    public ApiResponse<Combo> detail(@RequestParam String comboId) {
+    public ApiResponse<Combo> detail(@RequestParam Long comboId) {
         return ApiResponse.ok(comboService.detail(comboId));
     }
 
@@ -64,10 +65,10 @@ public class ComboController {
     }
 
     public record StatusRequest(
-            @NotBlank(message = "缺少盒饭 ID") String comboId,
+            @NotNull(message = "缺少盒饭 ID") Long comboId,
             @NotBlank(message = "缺少目标状态") String status) {
     }
 
-    public record IdRequest(@NotBlank(message = "缺少盒饭 ID") String comboId) {
+    public record IdRequest(@NotNull(message = "缺少盒饭 ID") Long comboId) {
     }
 }

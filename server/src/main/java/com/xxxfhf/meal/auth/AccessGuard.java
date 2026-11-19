@@ -28,7 +28,7 @@ public class AccessGuard {
     }
 
     /** 已准入即可：浏览菜单、看自己的审核状态用这个。 */
-    public User requireAccess(String userId) {
+    public User requireAccess(Long userId) {
         User user = requireUser(userId);
         GroupAccessService.AccessState state = groupAccessService.resolve(user);
         if (!state.accessGranted()) {
@@ -38,7 +38,7 @@ public class AccessGuard {
     }
 
     /** 已准入 **且** 审核通过：下单、取消、声称已付款这类会改变业务数据的操作用这个。 */
-    public User requireApproved(String userId) {
+    public User requireApproved(Long userId) {
         return requireApproved(requireAccess(userId));
     }
 
@@ -57,7 +57,7 @@ public class AccessGuard {
         return user;
     }
 
-    private User requireUser(String userId) {
+    private User requireUser(Long userId) {
         User user = userId == null ? null : userMapper.selectById(userId);
         if (user == null) {
             throw BizException.unauthorized("登录信息已失效，请重新登录");

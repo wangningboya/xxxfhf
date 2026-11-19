@@ -294,7 +294,7 @@ public class DictService {
     }
 
     @Transactional
-    public void deleteItem(String id) {
+    public void deleteItem(Long id) {
         DictItem item = itemMapper.selectById(id);
         if (item == null) {
             throw BizException.notFound("字典项不存在");
@@ -309,7 +309,7 @@ public class DictService {
 
     /** 单独改启停，列表里点开关用，省一次整表单提交。 */
     @Transactional
-    public ItemView setItemStatus(String id, String status) {
+    public ItemView setItemStatus(Long id, String status) {
         DictItem item = itemMapper.selectById(id);
         if (item == null) {
             throw BizException.notFound("字典项不存在");
@@ -340,7 +340,7 @@ public class DictService {
 
     /* ==================== 出参 / 入参 ==================== */
 
-    public record ItemView(String id, String typeCode, String itemValue, String itemLabel,
+    public record ItemView(Long id, String typeCode, String itemValue, String itemLabel,
                            String tagType, Integer sort, String status, boolean builtin) {
 
         static ItemView of(DictItem item) {
@@ -370,7 +370,7 @@ public class DictService {
     public record SaveTypeCommand(String typeCode, String typeName, String remark) {
     }
 
-    public record SaveItemCommand(String id, String typeCode, String itemValue, String itemLabel,
+    public record SaveItemCommand(Long id, String typeCode, String itemValue, String itemLabel,
                                   String tagType, Integer sort, String status) {
     }
 }

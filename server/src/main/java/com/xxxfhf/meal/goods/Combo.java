@@ -20,8 +20,8 @@ import java.util.List;
 @TableName(value = "combo", autoResultMap = true)
 public class Combo {
 
-    @TableId(type = IdType.ASSIGN_UUID)
-    private String id;
+    @TableId(type = IdType.AUTO)
+    private Long id;
 
     /** 盒饭名称，如「A 餐」 */
     private String name;
@@ -40,23 +40,23 @@ public class Combo {
 
     /** 启用的规格组 ID 列表；空数组 = 无规格 */
     @TableField(typeHandler = Jackson3TypeHandler.class)
-    private List<String> specGroupIds;
+    private List<Long> specGroupIds;
 
     /** on / off，见 GoodsStatus */
     private String status;
 
     /** 预留分类，本版不参与展示分组 */
-    private String categoryId;
+    private Long categoryId;
 
     private Integer sort;
 
     /* ---------------- getters / setters ---------------- */
 
-    public String getId() {
+    public Long getId() {
         return id;
     }
 
-    public void setId(String id) {
+    public void setId(Long id) {
         this.id = id;
     }
 
@@ -100,11 +100,11 @@ public class Combo {
         this.dishes = dishes;
     }
 
-    public List<String> getSpecGroupIds() {
+    public List<Long> getSpecGroupIds() {
         return specGroupIds;
     }
 
-    public void setSpecGroupIds(List<String> specGroupIds) {
+    public void setSpecGroupIds(List<Long> specGroupIds) {
         this.specGroupIds = specGroupIds;
     }
 
@@ -116,11 +116,11 @@ public class Combo {
         this.status = status;
     }
 
-    public String getCategoryId() {
+    public Long getCategoryId() {
         return categoryId;
     }
 
-    public void setCategoryId(String categoryId) {
+    public void setCategoryId(Long categoryId) {
         this.categoryId = categoryId;
     }
 

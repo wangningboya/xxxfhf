@@ -13,8 +13,8 @@ import com.baomidou.mybatisplus.annotation.TableName;
 @TableName("dict_item")
 public class DictItem {
 
-    @TableId(type = IdType.ASSIGN_UUID)
-    private String id;
+    @TableId(type = IdType.AUTO)
+    private Long id;
 
     private String typeCode;
 
@@ -33,11 +33,11 @@ public class DictItem {
     /** 1 内置项，不可删除、不可改存值 */
     private Boolean builtin;
 
-    public String getId() {
+    public Long getId() {
         return id;
     }
 
-    public void setId(String id) {
+    public void setId(Long id) {
         this.id = id;
     }
 

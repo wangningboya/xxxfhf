@@ -18,19 +18,19 @@ import java.time.LocalDateTime;
 @TableName("audit_log")
 public class AuditLog {
 
-    @TableId(type = IdType.ASSIGN_UUID)
-    private String id;
+    @TableId(type = IdType.AUTO)
+    private Long id;
 
     private String tableName;
 
-    private String recordId;
+    private Long recordId;
 
     private String action;
 
     /** 人读的一句话，含关键字段的前后值，如「驳回地址：3 栋没有 2 单元」 */
     private String summary;
 
-    private String operatorId;
+    private Long operatorId;
 
     private String operatorName;
 
@@ -41,11 +41,11 @@ public class AuditLog {
 
     /* ---------------- getters / setters ---------------- */
 
-    public String getId() {
+    public Long getId() {
         return id;
     }
 
-    public void setId(String id) {
+    public void setId(Long id) {
         this.id = id;
     }
 
@@ -57,11 +57,11 @@ public class AuditLog {
         this.tableName = tableName;
     }
 
-    public String getRecordId() {
+    public Long getRecordId() {
         return recordId;
     }
 
-    public void setRecordId(String recordId) {
+    public void setRecordId(Long recordId) {
         this.recordId = recordId;
     }
 
@@ -81,11 +81,11 @@ public class AuditLog {
         this.summary = summary;
     }
 
-    public String getOperatorId() {
+    public Long getOperatorId() {
         return operatorId;
     }
 
-    public void setOperatorId(String operatorId) {
+    public void setOperatorId(Long operatorId) {
         this.operatorId = operatorId;
     }
 

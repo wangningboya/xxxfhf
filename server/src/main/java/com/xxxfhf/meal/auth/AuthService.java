@@ -100,7 +100,7 @@ public class AuthService {
 
     /** 当前登录用户的准入与审核状态。前端每次进「我的」页或从后台切回来时刷新。 */
     @Transactional(readOnly = true)
-    public MeResult me(String userId) {
+    public MeResult me(Long userId) {
         User user = userMapper.selectById(userId);
         if (user == null) {
             throw BizException.unauthorized("登录已失效，请重新进入小程序");
@@ -126,7 +126,7 @@ public class AuthService {
      * <p>注意事务不能是 {@code readOnly}：审计要插行，只读事务会让记录静默失败。
      */
     @Transactional
-    public String myPhone(String userId) {
+    public String myPhone(Long userId) {
         User user = userMapper.selectById(userId);
         if (user == null) {
             throw BizException.unauthorized("登录已失效，请重新进入小程序");
@@ -214,7 +214,7 @@ public class AuthService {
      * 否则前端只能拿登录那一刻的旧菜单，改完角色要重新登录才看得到。
      */
     @Transactional(readOnly = true)
-    public AdminMeResult adminMe(String userId) {
+    public AdminMeResult adminMe(Long userId) {
         User user = userMapper.selectById(userId);
         if (user == null) {
             throw BizException.unauthorized("登录已失效，请重新登录");
@@ -232,12 +232,12 @@ public class AuthService {
      * 由角色聚合权限。角色为空则权限为空——商家账号没配角色时登进去是白屏，
      * 这是配置问题，不该由代码兜底给全权限。
      */
-    private Set<String> resolvePermissions(List<String> roleIds) {
+    private Set<String> resolvePermissions(List<Long> roleIds) {
         if (roleIds == null || roleIds.isEmpty()) {
             return Set.of();
         }
         Set<String> permissions = new LinkedHashSet<>();
-        for (String roleId : roleIds) {
+        for (Long roleId : roleIds) {
             Role role = roleMapper.selectById(roleId);
             if (role != null && role.getPermissions() != null) {
                 permissions.addAll(role.getPermissions());
@@ -256,7 +256,7 @@ public class AuthService {
      * @param rejectReason  驳回原因，仅 rejected 时有值
      * @param phone         已采集的手机号，可能为空
      */
-    public record LoginResult(String token, String userId, String nickName, String avatarUrl,
+    public record LoginResult(String token, Long userId, String nickName, String avatarUrl,
                               boolean accessGranted, String accessVia,
                               String auditStatus, String rejectReason, String phone) {
     }
@@ -266,7 +266,7 @@ public class AuthService {
      *
      * @param userType customer / merchant，取自库（不写进令牌），前端据此决定「我的」宫格是否出现商家工作台
      */
-    public record MeResult(String userId, String nickName, String avatarUrl,
+    public record MeResult(Long userId, String nickName, String avatarUrl,
                            boolean accessGranted, String accessVia,
                            String auditStatus, String rejectReason, String phone,
                            String userType) {
@@ -276,12 +276,12 @@ public class AuthService {
      * @param token       登录令牌（user_type = merchant）
      * @param permissions 权限项列表，后台据此显隐菜单；接口是否放行仍以服务端为准
      */
-    public record AdminLoginResult(String token, String userId, String username,
+    public record AdminLoginResult(String token, Long userId, String username,
                                    String displayName, List<String> permissions) {
     }
 
     /** 商家后台刷新后的登录态，与 AdminLoginResult 相比少了 token（令牌还在，不必重发）。 */
-    public record AdminMeResult(String userId, String username, String displayName,
+    public record AdminMeResult(Long userId, String username, String displayName,
                                 List<String> permissions) {
     }
 }

@@ -20,8 +20,8 @@ import java.util.List;
 @TableName(value = "`order`", autoResultMap = true)
 public class Order {
 
-    @TableId(type = IdType.ASSIGN_UUID)
-    private String id;
+    @TableId(type = IdType.AUTO)
+    private Long id;
 
     /** 订单号，yyyyMMdd-000001，对人报单号用这个 */
     private String orderNo;
@@ -32,7 +32,7 @@ public class Order {
      */
     private String requestId;
 
-    private String userId;
+    private Long userId;
 
     private LocalDate serveDate;
 
@@ -40,7 +40,7 @@ public class Order {
     private String deliveryType;
 
     /** 配送单的区域；**自取单为空**（自取单没有地址，也就没有区域） */
-    private String regionId;
+    private Long regionId;
 
     @TableField(typeHandler = Jackson3TypeHandler.class)
     private RegionSnapshot regionSnapshot;
@@ -100,15 +100,15 @@ public class Order {
     private LocalDateTime refundedAt;
 
     /** 标记退款的操作人，防重复退 */
-    private String refundOperator;
+    private Long refundOperator;
 
     /* ---------------- getters / setters ---------------- */
 
-    public String getId() {
+    public Long getId() {
         return id;
     }
 
-    public void setId(String id) {
+    public void setId(Long id) {
         this.id = id;
     }
 
@@ -128,11 +128,11 @@ public class Order {
         this.requestId = requestId;
     }
 
-    public String getUserId() {
+    public Long getUserId() {
         return userId;
     }
 
-    public void setUserId(String userId) {
+    public void setUserId(Long userId) {
         this.userId = userId;
     }
 
@@ -152,11 +152,11 @@ public class Order {
         this.deliveryType = deliveryType;
     }
 
-    public String getRegionId() {
+    public Long getRegionId() {
         return regionId;
     }
 
-    public void setRegionId(String regionId) {
+    public void setRegionId(Long regionId) {
         this.regionId = regionId;
     }
 
@@ -352,11 +352,11 @@ public class Order {
         this.refundedAt = refundedAt;
     }
 
-    public String getRefundOperator() {
+    public Long getRefundOperator() {
         return refundOperator;
     }
 
-    public void setRefundOperator(String refundOperator) {
+    public void setRefundOperator(Long refundOperator) {
         this.refundOperator = refundOperator;
     }
 }

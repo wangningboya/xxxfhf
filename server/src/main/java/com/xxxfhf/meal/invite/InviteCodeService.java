@@ -49,7 +49,7 @@ public class InviteCodeService {
      * @param createdBy   生成人 userId
      */
     @Transactional
-    public InviteCode create(int expireHours, String createdBy) {
+    public InviteCode create(int expireHours, Long createdBy) {
         int hours = expireHours <= 0 ? 24 : expireHours;
         if (hours > MAX_EXPIRE_HOURS) {
             throw BizException.param("有效期最长 " + MAX_EXPIRE_HOURS + " 小时（30 天）");
@@ -88,7 +88,7 @@ public class InviteCodeService {
      * 先查后改在并发下会让同一个码被两个人用掉。
      */
     @Transactional
-    public void consume(String rawCode, String userId) {
+    public void consume(String rawCode, Long userId) {
         String code = rawCode == null ? "" : rawCode.trim().toUpperCase();
         if (code.isEmpty()) {
             throw BizException.param("请输入邀请码");
@@ -146,8 +146,8 @@ public class InviteCodeService {
     }
 
     /** 该用户是否曾用邀请码进入过。登录时判准入用，只查索引不扫表。 */
-    public boolean hasConsumed(String userId) {
-        if (userId == null || userId.isBlank()) {
+    public boolean hasConsumed(Long userId) {
+        if (userId == null) {
             return false;
         }
         Long count = inviteCodeMapper.selectCount(

@@ -13,7 +13,7 @@ import java.util.List;
  * @param price 单价快照，单位分（取的是菜单发布时的价格快照，不是盒饭库当前价）
  * @param specs 所选规格，存名称与差价而不是 ID：选项被删了也能还原当时选的是什么
  */
-public record OrderItem(String comboId, String name, Integer price, Integer qty,
+public record OrderItem(Long comboId, String name, Integer price, Integer qty,
                         List<ComboDish> dishes, List<Spec> specs) {
 
     /**

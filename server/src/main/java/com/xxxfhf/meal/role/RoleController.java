@@ -6,6 +6,7 @@ import com.xxxfhf.meal.auth.UserContext;
 import com.xxxfhf.meal.common.ApiResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -87,20 +88,20 @@ public class RoleController {
     }
 
     public record SaveRequest(
-            String id,
+            Long id,
             @NotBlank(message = "请填写角色名称")
             @Size(max = 64, message = "角色名称最多 64 个字") String name,
             List<String> permissions) {
     }
 
-    public record DeleteRequest(@NotBlank(message = "缺少角色 ID") String id) {
+    public record DeleteRequest(@NotNull(message = "缺少角色 ID") Long id) {
     }
 
     public record AssignRequest(
-            @NotBlank(message = "缺少账号 ID") String userId,
-            List<String> roleIds) {
+            @NotNull(message = "缺少账号 ID") Long userId,
+            List<Long> roleIds) {
     }
 
-    public record UnlockRequest(@NotBlank(message = "缺少账号 ID") String userId) {
+    public record UnlockRequest(@NotNull(message = "缺少账号 ID") Long userId) {
     }
 }

@@ -22,10 +22,10 @@ import java.time.LocalDateTime;
 @TableName("order_status_log")
 public class OrderStatusLog {
 
-    @TableId(type = IdType.ASSIGN_UUID)
-    private String id;
+    @TableId(type = IdType.AUTO)
+    private Long id;
 
-    private String orderId;
+    private Long orderId;
 
     /** order 订单状态线 / pay 收款状态线 / event 业务事件 */
     private String logType;
@@ -50,7 +50,7 @@ public class OrderStatusLog {
      */
     private String payMethod;
 
-    private String operatorId;
+    private Long operatorId;
 
     /** 操作人当时的名称快照 */
     private String operatorName;
@@ -62,19 +62,19 @@ public class OrderStatusLog {
 
     /* ---------------- getters / setters ---------------- */
 
-    public String getId() {
+    public Long getId() {
         return id;
     }
 
-    public void setId(String id) {
+    public void setId(Long id) {
         this.id = id;
     }
 
-    public String getOrderId() {
+    public Long getOrderId() {
         return orderId;
     }
 
-    public void setOrderId(String orderId) {
+    public void setOrderId(Long orderId) {
         this.orderId = orderId;
     }
 
@@ -126,11 +126,11 @@ public class OrderStatusLog {
         this.payMethod = payMethod;
     }
 
-    public String getOperatorId() {
+    public Long getOperatorId() {
         return operatorId;
     }
 
-    public void setOperatorId(String operatorId) {
+    public void setOperatorId(Long operatorId) {
         this.operatorId = operatorId;
     }
 

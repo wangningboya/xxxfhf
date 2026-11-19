@@ -111,7 +111,7 @@ public class NotifyService {
         }
         // 操作人与来源在**触发这一刻**取好：afterCommit 里 ThreadLocal 虽然还在同一线程，
         // 但把上下文带过去才说得清「这条通知是哪次操作引发的」（需求 4.20）。
-        String operatorId = AuditHelper.actor();
+        Long operatorId = AuditHelper.actor();
         String source = AuditHelper.source();
         Runnable task = () -> {
             try {
@@ -134,7 +134,7 @@ public class NotifyService {
         }
     }
 
-    private void doFire(NotifyType type, Order order, String operatorId, String source) {
+    private void doFire(NotifyType type, Order order, Long operatorId, String source) {
         Template template = templates().get(type.code());
         if (template == null || template.templateId() == null || template.templateId().isBlank()) {
             // 模板还没申请下来，静默跳过（F-I01 未完成时系统也要能跑），但要留下痕迹：
@@ -195,7 +195,7 @@ public class NotifyService {
      * <p>这里写库失败由 {@code OrderStatusLogService} 内部吞掉，不会反过来影响推送流程。
      */
     private void recordNotify(Order order, NotifyType type, boolean ok, String detail,
-                              String operatorId, String source) {
+                              Long operatorId, String source) {
         if (order.getId() == null) {
             return;
         }
@@ -303,7 +303,7 @@ public class NotifyService {
         if (page == null || page.isBlank()) {
             return null;
         }
-        return page.replace("{orderId}", order.getId() == null ? "" : order.getId());
+        return page.replace("{orderId}", order.getId() == null ? "" : String.valueOf(order.getId()));
     }
 
     /**

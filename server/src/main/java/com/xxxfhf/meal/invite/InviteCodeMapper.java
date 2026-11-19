@@ -22,7 +22,7 @@ public interface InviteCodeMapper extends BaseMapper<InviteCode> {
                AND status = 'unused'
                AND expire_at > NOW()
             """)
-    int consume(@Param("code") String code, @Param("userId") String userId);
+    int consume(@Param("code") String code, @Param("userId") Long userId);
 
     /** 把已过有效期但仍标 unused 的码批量标成 expired。由扫描任务调用，不影响核销判定。 */
     @Update("""

@@ -58,8 +58,8 @@ public class AddressService {
     }
 
     /** 某个用户的全部地址（含待确认的），用户端与商家端都用这一个查询。 */
-    public List<Address> listByUser(String userId) {
-        if (userId == null || userId.isBlank()) {
+    public List<Address> listByUser(Long userId) {
+        if (userId == null) {
             throw BizException.param("缺少用户 ID");
         }
         return addressMapper.selectList(Wrappers.<Address>lambdaQuery()
@@ -78,7 +78,7 @@ public class AddressService {
      * @param userId   只看某个用户的（原来的用法，现在降级成筛选条件）
      * @param keyword  联系人 / 手机号 / 详细地址模糊匹配
      */
-    public PageResult<AddressRow> page(String status, String userId, String regionId, String keyword,
+    public PageResult<AddressRow> page(String status, Long userId, Long regionId, String keyword,
                                        int page, int pageSize) {
         String kw = keyword == null ? "" : keyword.trim();
         // 待确认队列要「先来的先审」，所以正序；其余页签看最近发生的，倒序。
@@ -91,14 +91,14 @@ public class AddressService {
         Page<Address> pager = new Page<>(Math.max(page, 1), Math.min(Math.max(pageSize, 1), 100));
         IPage<Address> result = addressMapper.selectPage(pager, Wrappers.<Address>lambdaQuery()
                 .eq(status != null && !status.isBlank(), Address::getStatus, status)
-                .eq(userId != null && !userId.isBlank(), Address::getUserId, userId)
-                .eq(regionId != null && !regionId.isBlank(), Address::getRegionId, regionId)
+                .eq(userId != null, Address::getUserId, userId)
+                .eq(regionId != null, Address::getRegionId, regionId)
                 .and(!kw.isEmpty(), w -> w.like(Address::getContactName, kw)
                         .or().like(Address::getPhone, kw)
                         .or().like(Address::getDetail, kw))
                 .last(orderBy));
 
-        Map<String, User> users = usersOf(result.getRecords());
+        Map<Long, User> users = usersOf(result.getRecords());
         List<AddressRow> rows = new ArrayList<>(result.getRecords().size());
         for (Address address : result.getRecords()) {
             User user = users.get(address.getUserId());
@@ -117,12 +117,12 @@ public class AddressService {
     }
 
     /** 一次查完本页涉及的账号，避免逐行查用户表 */
-    private Map<String, User> usersOf(List<Address> addresses) {
+    private Map<Long, User> usersOf(List<Address> addresses) {
         if (addresses.isEmpty()) {
             return Map.of();
         }
-        List<String> ids = addresses.stream().map(Address::getUserId).distinct().toList();
-        Map<String, User> map = new HashMap<>(ids.size());
+        List<Long> ids = addresses.stream().map(Address::getUserId).distinct().toList();
+        Map<Long, User> map = new HashMap<>(ids.size());
         for (User user : userMapper.selectBatchIds(ids)) {
             map.put(user.getId(), user);
         }
@@ -132,10 +132,10 @@ public class AddressService {
     /** 商家录入 / 修改：直接可用。 */
     @Transactional
     public Address saveByMerchant(AddressCommand cmd) {
-        if (cmd.userId() == null || cmd.userId().isBlank()) {
+        if (cmd.userId() == null) {
             throw BizException.param("缺少归属用户");
         }
-        Address address = cmd.id() == null || cmd.id().isBlank() ? new Address() : require(cmd.id());
+        Address address = cmd.id() == null ? new Address() : require(cmd.id());
         if (address.getId() != null && !cmd.userId().equals(address.getUserId())) {
             throw BizException.param("不能把地址改到其他用户名下");
         }
@@ -165,8 +165,8 @@ public class AddressService {
      * 修改也回到 pending —— 改完地址若立刻生效，等于绕过了上面说的那一眼。
      */
     @Transactional
-    public Address saveByUser(String userId, AddressCommand cmd) {
-        boolean creating = cmd.id() == null || cmd.id().isBlank();
+    public Address saveByUser(Long userId, AddressCommand cmd) {
+        boolean creating = cmd.id() == null;
         Address address;
         if (creating) {
             address = new Address();
@@ -203,7 +203,7 @@ public class AddressService {
      * 必须单独走一次条件更新：`updateById` 会跳过 null 字段，
      * 只把 status 改回 pending 的话，上一次的驳回原因会一直挂在地址上。
      */
-    private void clearRejectReason(String addressId) {
+    private void clearRejectReason(Long addressId) {
         if (addressId == null) {
             return;
         }
@@ -219,7 +219,7 @@ public class AddressService {
      * 三种状态之外一律拒绝 —— 地址状态直接决定这单能不能下，不能出现未定义值。
      */
     @Transactional
-    public Address updateStatus(String addressId, String status, String reason) {
+    public Address updateStatus(Long addressId, String status, String reason) {
         String target = status == null ? "" : status.trim();
         if (!"active".equals(target) && !"pending".equals(target) && !"rejected".equals(target)) {
             throw BizException.param("状态只能是 active、pending 或 rejected");
@@ -264,7 +264,7 @@ public class AddressService {
 
     /** 删除。历史订单存的是地址快照，删地址不影响已下的单。 */
     @Transactional
-    public void delete(String addressId) {
+    public void delete(Long addressId) {
         Address address = require(addressId);
         addressMapper.deleteById(addressId);
         log.info("删除地址 id={}", addressId);
@@ -273,7 +273,7 @@ public class AddressService {
                 "删除地址：" + describe(address));
     }
 
-    public Address require(String id) {
+    public Address require(Long id) {
         Address address = id == null ? null : addressMapper.selectById(id);
         if (address == null) {
             throw BizException.notFound("地址不存在");
@@ -282,9 +282,9 @@ public class AddressService {
     }
 
     /** 字段填充与校验。区域必填且必须存在、启用。 */
-    private void fill(Address address, AddressCommand cmd, String userId) {
-        String regionId = cmd.regionId() == null ? "" : cmd.regionId().trim();
-        if (regionId.isEmpty()) {
+    private void fill(Address address, AddressCommand cmd, Long userId) {
+        Long regionId = cmd.regionId();
+        if (regionId == null) {
             throw BizException.param("请选择所属区域");
         }
         Region region = regionService.require(regionId);
@@ -327,7 +327,7 @@ public class AddressService {
      * <p>它会被拼进配送单与备菜表，传播面比昵称大；只有命中违规才拒，
      * 检测接口不可用时放行（熟人小店，挡住正常用户比漏一句话更糟）。
      */
-    private void requireContentOk(String userId, String content, String message) {
+    private void requireContentOk(Long userId, String content, String message) {
         if (content == null) {
             return;
         }
@@ -363,8 +363,8 @@ public class AddressService {
      * 不直接把实体塞进响应：表格要看「这是谁提的」，而实体上没有昵称；
      * 同时审计四列对前端隐藏，提交时间只能由这里显式带出来。
      */
-    public record AddressRow(String id, String userId, String userName, String userPhone,
-                             String userAuditStatus, String regionId, String regionName,
+    public record AddressRow(Long id, Long userId, String userName, String userPhone,
+                             String userAuditStatus, Long regionId, String regionName,
                              String contactName, String phone, String detail, String tag,
                              String source, String status, String rejectReason,
                              LocalDateTime createdAt) {
@@ -376,7 +376,7 @@ public class AddressService {
      * @param id 为空 = 新增；非空 = 修改
      * @param phone 必填（需求 4.8：配送送达后要能联系到人），11 位大陆手机号
      */
-    public record AddressCommand(String id, String userId, String regionId, String contactName,
+    public record AddressCommand(Long id, Long userId, Long regionId, String contactName,
                                  String phone, String detail, String tag) {
     }
 }

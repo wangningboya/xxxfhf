@@ -26,7 +26,7 @@ public interface DailyMenuMapper extends BaseMapper<DailyMenu> {
                AND (limit_qty IS NULL OR sold_qty + #{qty} <= limit_qty)
             """)
     int occupy(@Param("serveDate") LocalDate serveDate,
-               @Param("comboId") String comboId,
+               @Param("comboId") Long comboId,
                @Param("qty") int qty);
 
     /**
@@ -42,6 +42,6 @@ public interface DailyMenuMapper extends BaseMapper<DailyMenu> {
                AND combo_id = #{comboId}
             """)
     int release(@Param("serveDate") LocalDate serveDate,
-                @Param("comboId") String comboId,
+                @Param("comboId") Long comboId,
                 @Param("qty") int qty);
 }

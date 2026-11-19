@@ -77,7 +77,7 @@ public class OrderAdminService {
         Page<Order> pager = new Page<>(Math.max(page, 1), Math.min(Math.max(pageSize, 1), 100));
 
         String kw = keyword == null ? "" : keyword.trim();
-        List<String> matchedUserIds = new ArrayList<>();
+        List<Long> matchedUserIds = new ArrayList<>();
         if (!kw.isEmpty()) {
             // 订单表没有用户昵称，先按昵称 / 手机号查出用户 ID 再筛订单
             List<User> users = userMapper.selectList(Wrappers.<User>lambdaQuery()
@@ -105,7 +105,7 @@ public class OrderAdminService {
         return mapped;
     }
 
-    public AdminOrderRow detail(String orderId) {
+    public AdminOrderRow detail(Long orderId) {
         Order order = orderService.require(orderId);
         return toRows(List.of(order)).get(0);
     }
@@ -119,7 +119,7 @@ public class OrderAdminService {
      * 不该让整批都接不了。
      */
     @Transactional
-    public AcceptResult accept(String operatorId, List<String> orderIds) {
+    public AcceptResult accept(Long operatorId, List<Long> orderIds) {
         if (orderIds == null || orderIds.isEmpty()) {
             throw BizException.param("请选择要接单的订单");
         }
@@ -131,7 +131,7 @@ public class OrderAdminService {
         List<String> skipped = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
 
-        for (String orderId : orderIds) {
+        for (Long orderId : orderIds) {
             Order order = orderId == null ? null : orderMapper.selectById(orderId);
             if (order == null) {
                 skipped.add("订单不存在：" + orderId);
@@ -169,7 +169,7 @@ public class OrderAdminService {
 
     /** 拒单：原因必填、释放份数、已收钱转待退款。 */
     @Transactional
-    public OrderService.OrderView reject(String operatorId, String orderId, String reason) {
+    public OrderService.OrderView reject(Long operatorId, Long orderId, String reason) {
         String trimmed = requireReason(reason);
         Order order = orderService.require(orderId);
 
@@ -202,7 +202,7 @@ public class OrderAdminService {
      * 配送叫「配送中」，不发取餐通知。
      */
     @Transactional
-    public OrderService.OrderView advance(String operatorId, String orderId, String target) {
+    public OrderService.OrderView advance(Long operatorId, Long orderId, String target) {
         if (target == null || target.isBlank()) {
             throw BizException.param("缺少目标状态");
         }
@@ -253,7 +253,7 @@ public class OrderAdminService {
      * 自取单与配送单同一口径 —— 码是餐盒上的核对凭据，用户看不到不代表商家不能用。
      */
     @Transactional
-    public OrderService.OrderView pickupByCode(String operatorId, String serveDateRaw, String code) {
+    public OrderService.OrderView pickupByCode(Long operatorId, String serveDateRaw, String code) {
         LocalDate serveDate = DateParam.parse(serveDateRaw, "供餐日期");
         if (serveDate == null) {
             serveDate = clock.today();
@@ -320,7 +320,7 @@ public class OrderAdminService {
      * <p>返回的明文只在这一次响应的内存里存在，前端不落缓存、不进 data —— 拨完即忘。
      */
     @Transactional
-    public String contactPhone(String operatorId, String orderId) {
+    public String contactPhone(Long operatorId, Long orderId) {
         Order order = orderService.require(orderId);
         LocalDateTime now = LocalDateTime.now();
 
@@ -401,7 +401,7 @@ public class OrderAdminService {
      * 代码里不再写死三个常量。
      */
     @Transactional
-    public OrderService.OrderView confirmPayment(String operatorId, String orderId,
+    public OrderService.OrderView confirmPayment(Long operatorId, Long orderId,
                                                  String payMethodRaw) {
         Order order = orderService.require(orderId);
         String payMethod = dictService.requireValue(DictCodes.PAY_METHOD, "收款方式",
@@ -432,7 +432,7 @@ public class OrderAdminService {
      * 否则商家只能一直挂着一笔不存在的钱。
      */
     @Transactional
-    public OrderService.OrderView revertPayment(String operatorId, String orderId) {
+    public OrderService.OrderView revertPayment(Long operatorId, Long orderId) {
         Order order = orderService.require(orderId);
         int affected = orderMapper.update(null, Wrappers.<Order>lambdaUpdate()
                 .set(Order::getPayStatus, PayStatus.UNPAID)
@@ -456,7 +456,7 @@ public class OrderAdminService {
      * 这就是「防重复退」的落地方式，同时留下操作人与时间。
      */
     @Transactional
-    public OrderService.OrderView refund(String operatorId, String orderId) {
+    public OrderService.OrderView refund(Long operatorId, Long orderId) {
         Order order = orderService.require(orderId);
         LocalDateTime now = LocalDateTime.now();
         int affected = orderMapper.update(null, Wrappers.<Order>lambdaUpdate()
@@ -484,7 +484,7 @@ public class OrderAdminService {
      * 驳回：只清掉申请标记，订单回到正常流转（接单按钮随之恢复），备注原因回给用户。
      */
     @Transactional
-    public OrderService.OrderView handleCancelRequest(String operatorId, String orderId,
+    public OrderService.OrderView handleCancelRequest(Long operatorId, Long orderId,
                                                       boolean approve, String remark) {
         return doHandleCancelRequest(operatorId, orderId, approve, remark,
                 approve ? CancelRequest.APPROVED : CancelRequest.REJECTED);
@@ -497,12 +497,12 @@ public class OrderAdminService {
      * 操作人留空表示系统。**不另写一套状态流转**，否则两条路径迟早会分叉。
      */
     @Transactional
-    public OrderService.OrderView autoApproveCancelRequest(String orderId, int timeoutHours) {
+    public OrderService.OrderView autoApproveCancelRequest(Long orderId, int timeoutHours) {
         return doHandleCancelRequest(null, orderId, true,
                 "超过 " + timeoutHours + " 小时未处理，系统自动同意", CancelRequest.AUTO_APPROVED);
     }
 
-    private OrderService.OrderView doHandleCancelRequest(String operatorId, String orderId,
+    private OrderService.OrderView doHandleCancelRequest(Long operatorId, Long orderId,
                                                          boolean approve, String remark,
                                                          String result) {
         Order order = orderService.require(orderId);
@@ -522,7 +522,7 @@ public class OrderAdminService {
 
         // 定时任务没有登录态，操作人与来源必须显式给 —— 事后看到「系统同意的」，
         // 才知道当时商家根本没处理，这跟「商家点了同意」是两回事
-        String actorId = operatorId == null ? AuditHelper.SYSTEM : operatorId;
+        Long actorId = operatorId == null ? AuditHelper.SYSTEM : operatorId;
         String source = operatorId == null ? AuditHelper.SOURCE_TASK : AuditHelper.source();
 
         if (approve) {
@@ -575,8 +575,8 @@ public class OrderAdminService {
         if (orders.isEmpty()) {
             return List.of();
         }
-        List<String> userIds = orders.stream().map(Order::getUserId).distinct().toList();
-        Map<String, User> users = new HashMap<>();
+        List<Long> userIds = orders.stream().map(Order::getUserId).distinct().toList();
+        Map<Long, User> users = new HashMap<>();
         for (User user : userMapper.selectBatchIds(userIds)) {
             users.put(user.getId(), user);
         }

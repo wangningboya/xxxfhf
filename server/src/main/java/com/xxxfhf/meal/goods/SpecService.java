@@ -50,7 +50,7 @@ public class SpecService {
     @Transactional
     public SpecGroup save(SpecCommand cmd) {
         String name = requireName(cmd.name());
-        boolean creating = cmd.id() == null || cmd.id().isBlank();
+        boolean creating = cmd.id() == null;
 
         SpecGroup group;
         if (creating) {
@@ -87,7 +87,7 @@ public class SpecService {
      *                      为 false 直接 409，把受影响盒饭清单写进提示文案里。
      */
     @Transactional
-    public SpecGroup updateStatus(String id, String status, boolean confirmUnbind) {
+    public SpecGroup updateStatus(Long id, String status, boolean confirmUnbind) {
         requireStatus(status);
         SpecGroup group = require(id);
 
@@ -99,7 +99,7 @@ public class SpecService {
                         + "请确认后重新提交");
             }
             for (Combo combo : refs) {
-                List<String> ids = combo.getSpecGroupIds() == null
+                List<Long> ids = combo.getSpecGroupIds() == null
                         ? new ArrayList<>() : new ArrayList<>(combo.getSpecGroupIds());
                 ids.remove(id);
                 combo.setSpecGroupIds(ids);
@@ -115,7 +115,7 @@ public class SpecService {
     }
 
     /** 停用前的二次确认用：列出会被连带解除引用的盒饭。 */
-    public List<ComboBrief> affectedCombos(String specGroupId) {
+    public List<ComboBrief> affectedCombos(Long specGroupId) {
         require(specGroupId);
         return combosReferencing(specGroupId).stream()
                 .map(c -> new ComboBrief(c.getId(), c.getName(), c.getStatus()))
@@ -124,7 +124,7 @@ public class SpecService {
 
     /** 删除。被任一盒饭引用时拒绝 —— 只能停用（停用会连带解除引用）。 */
     @Transactional
-    public void delete(String id) {
+    public void delete(Long id) {
         SpecGroup group = require(id);
         List<Combo> refs = combosReferencing(id);
         if (!refs.isEmpty()) {
@@ -135,7 +135,7 @@ public class SpecService {
         log.info("删除规格组 id={} name={}", id, group.getName());
     }
 
-    public SpecGroup require(String id) {
+    public SpecGroup require(Long id) {
         SpecGroup group = id == null ? null : specGroupMapper.selectById(id);
         if (group == null) {
             throw BizException.notFound("规格组不存在");
@@ -143,7 +143,7 @@ public class SpecService {
         return group;
     }
 
-    private List<Combo> combosReferencing(String specGroupId) {
+    private List<Combo> combosReferencing(Long specGroupId) {
         List<Combo> combos = comboMapper.selectList(Wrappers.<Combo>lambdaQuery()
                 .select(Combo::getId, Combo::getName, Combo::getStatus, Combo::getSpecGroupIds));
         List<Combo> hits = new ArrayList<>();
@@ -215,11 +215,11 @@ public class SpecService {
      * @param sort        组展示顺序，编辑时传 null 表示不修改
      * @param countInPrep 是否计入备菜；不传默认 true（主食这类物料型规格的常态）
      */
-    public record SpecCommand(String id, String name, Boolean required, Boolean countInPrep,
+    public record SpecCommand(Long id, String name, Boolean required, Boolean countInPrep,
                               List<SpecOption> options, Integer sort) {
     }
 
     /** 受影响盒饭的简要信息，只给确认弹窗看。 */
-    public record ComboBrief(String comboId, String name, String status) {
+    public record ComboBrief(Long comboId, String name, String status) {
     }
 }

@@ -30,7 +30,7 @@ class ContentSecurityServiceTest {
 
     @Test
     void blankContentPassesWithoutCallingWx() {
-        assertThat(contentSecurityService.pass("u1", "openid", "   ")).isTrue();
+        assertThat(contentSecurityService.pass(1L, "openid", "   ")).isTrue();
         verify(wxApiClient, never()).msgSecCheck(any(), any());
     }
 
@@ -38,7 +38,7 @@ class ContentSecurityServiceTest {
     void riskyContentIsRejected() {
         when(wxApiClient.msgSecCheck("违规文本", "openid")).thenReturn(WxApiClient.CONTENT_RISKY);
 
-        assertThat(contentSecurityService.pass("u1", "openid", "违规文本")).isFalse();
+        assertThat(contentSecurityService.pass(1L, "openid", "违规文本")).isFalse();
     }
 
     @Test
@@ -46,14 +46,14 @@ class ContentSecurityServiceTest {
         // -1 = 本地调用失败（网络、没配 appSecret），不能当成违规拒绝
         when(wxApiClient.msgSecCheck("正常昵称", "openid")).thenReturn(-1);
 
-        assertThat(contentSecurityService.pass("u1", "openid", "正常昵称")).isTrue();
+        assertThat(contentSecurityService.pass(1L, "openid", "正常昵称")).isTrue();
     }
 
     @Test
     void unknownErrcodePasses() {
         when(wxApiClient.msgSecCheck("正常昵称", "openid")).thenReturn(45009);
 
-        assertThat(contentSecurityService.pass("u1", "openid", "正常昵称")).isTrue();
+        assertThat(contentSecurityService.pass(1L, "openid", "正常昵称")).isTrue();
     }
 
     @Test

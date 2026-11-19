@@ -12,7 +12,7 @@ import java.time.LocalDateTime;
  * @param remark 处理备注。驳回时必须写原因，用户端会展示；自动同意时写明是系统处理
  */
 public record CancelRequest(String reason, LocalDateTime appliedAt,
-                            LocalDateTime handledAt, String result, String handledBy,
+                            LocalDateTime handledAt, String result, Long handledBy,
                             String remark) {
 
     public static final String APPROVED = "approved";

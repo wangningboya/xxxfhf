@@ -48,6 +48,15 @@ public class AppProperties {
         if (jwt.getExpireDays() <= 0 || jwt.getExpireDays() > 30) {
             throw new IllegalStateException("APP_JWT_EXPIRE_DAYS 必须在 1~30 之间");
         }
+        if (upload.getMaxSizeMb() < 1 || upload.getMaxSizeMb() > 50) {
+            throw new IllegalStateException("APP_UPLOAD_MAX_SIZE_MB 必须在 1~50 之间");
+        }
+        if (upload.getMaxEdge() < 200 || upload.getMaxEdge() > 4000) {
+            throw new IllegalStateException("APP_UPLOAD_MAX_EDGE 必须在 200~4000 之间");
+        }
+        if (upload.getJpegQuality() <= 0.1f || upload.getJpegQuality() > 1.0f) {
+            throw new IllegalStateException("APP_UPLOAD_JPEG_QUALITY 必须在 0.1~1.0 之间");
+        }
     }
 
     public Jwt getJwt() {
@@ -174,8 +183,12 @@ public class AppProperties {
         private String dir = "";
         /** 对外访问前缀，与 Nginx 的 location 保持一致。 */
         private String urlPrefix = "/upload";
-        /** 单图大小上限（MB）。 */
-        private int maxSizeMb = 5;
+        /** 单图大小上限（MB）。压缩在服务端做，这里卡的是原图，要容纳手机直出的高清图。 */
+        private int maxSizeMb = 15;
+        /** 压缩后长边上限（px）。小程序最大展示位 3x 屏约 1035px，1200 足够。 */
+        private int maxEdge = 1200;
+        /** JPEG 输出质量（0~1）。0.82 在 1200px 尺寸下肉眼与原图无差。 */
+        private float jpegQuality = 0.82f;
 
         public String getDir() {
             return dir;
@@ -199,6 +212,22 @@ public class AppProperties {
 
         public void setMaxSizeMb(int maxSizeMb) {
             this.maxSizeMb = maxSizeMb;
+        }
+
+        public int getMaxEdge() {
+            return maxEdge;
+        }
+
+        public void setMaxEdge(int maxEdge) {
+            this.maxEdge = maxEdge;
+        }
+
+        public float getJpegQuality() {
+            return jpegQuality;
+        }
+
+        public void setJpegQuality(float jpegQuality) {
+            this.jpegQuality = jpegQuality;
         }
     }
 

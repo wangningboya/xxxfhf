@@ -122,7 +122,7 @@ public class RoleService {
      * 内置角色只允许改名：权限项被改了就等于把店主权限改小，而这个页面本身要靠 role.manage 才进得来。
      */
     @Transactional
-    public RoleView save(String operatorId, String id, String name, List<String> permissions) {
+    public RoleView save(Long operatorId, Long id, String name, List<String> permissions) {
         String trimmed = name == null ? "" : name.trim();
         if (trimmed.isEmpty()) {
             throw BizException.param("请填写角色名称");
@@ -132,7 +132,7 @@ public class RoleService {
         }
 
         Role role;
-        boolean creating = id == null || id.isBlank();
+        boolean creating = id == null;
         if (creating) {
             role = new Role();
             role.setName(trimmed);
@@ -167,7 +167,7 @@ public class RoleService {
     }
 
     @Transactional
-    public void delete(String operatorId, String id) {
+    public void delete(Long operatorId, Long id) {
         Role role = roleMapper.selectById(id);
         if (role == null) {
             throw BizException.notFound("角色不存在，可能已被删除");
@@ -197,7 +197,7 @@ public class RoleService {
     @Transactional(readOnly = true)
     public List<AccountRow> accounts() {
         List<Role> roles = roleMapper.selectList(null);
-        Map<String, String> roleNames = new HashMap<>();
+        Map<Long, String> roleNames = new HashMap<>();
         for (Role role : roles) {
             roleNames.put(role.getId(), role.getName());
         }
@@ -209,9 +209,9 @@ public class RoleService {
         LocalDateTime now = LocalDateTime.now();
         List<AccountRow> rows = new ArrayList<>(merchants.size());
         for (User user : merchants) {
-            List<String> ids = user.getRoleIds() == null ? List.of() : user.getRoleIds();
+            List<Long> ids = user.getRoleIds() == null ? List.of() : user.getRoleIds();
             List<String> names = new ArrayList<>(ids.size());
-            for (String roleId : ids) {
+            for (Long roleId : ids) {
                 names.add(roleNames.getOrDefault(roleId, "已删除的角色"));
             }
             String display = user.getNickName() == null || user.getNickName().isBlank()
@@ -233,7 +233,7 @@ public class RoleService {
      * 唯一例外是操作人不给自己改（避免 self-lock），这层由 Controller 先挡一次。
      */
     @Transactional
-    public AccountRow assign(String operatorId, String userId, List<String> roleIds) {
+    public AccountRow assign(Long operatorId, Long userId, List<Long> roleIds) {
         User user = userMapper.selectById(userId);
         if (user == null) {
             throw BizException.notFound("账号不存在");
@@ -242,12 +242,12 @@ public class RoleService {
             throw BizException.param("只有商家账号可以分配后台角色");
         }
 
-        List<String> cleaned = roleIds == null ? List.of() : new ArrayList<>(new LinkedHashSet<>(roleIds));
+        List<Long> cleaned = roleIds == null ? List.of() : new ArrayList<>(new LinkedHashSet<>(roleIds));
         if (cleaned.isEmpty()) {
             throw BizException.param("至少要保留一个角色，否则该账号登录后没有任何功能可用");
         }
-        for (String roleId : cleaned) {
-            if (roleId == null || roleId.isBlank() || roleMapper.selectById(roleId) == null) {
+        for (Long roleId : cleaned) {
+            if (roleId == null || roleMapper.selectById(roleId) == null) {
                 throw BizException.param("角色不存在，请刷新后重试");
             }
         }
@@ -272,7 +272,7 @@ public class RoleService {
      * 其他账号在这里手动解锁。清失败计数与锁定时间，一步到位。
      */
     @Transactional
-    public AccountRow unlock(String operatorId, String userId) {
+    public AccountRow unlock(Long operatorId, Long userId) {
         User user = userMapper.selectById(userId);
         if (user == null) {
             throw BizException.notFound("账号不存在");
@@ -319,7 +319,7 @@ public class RoleService {
      * @param builtin     内置角色不可删、权限项不可改
      * @param memberCount 有多少商家账号在用这个角色
      */
-    public record RoleView(String id, String name, boolean builtin,
+    public record RoleView(Long id, String name, boolean builtin,
                            List<String> permissions, int memberCount,
                            java.time.LocalDateTime createdAt) {
     }
@@ -328,11 +328,11 @@ public class RoleService {
     }
 
     /** 角色下拉选项：只有 id 与名称，不含权限项清单（见 {@link #options()}）。 */
-    public record RoleOption(String id, String name) {
+    public record RoleOption(Long id, String name) {
     }
 
-    public record AccountRow(String userId, String username, String displayName,
-                             List<String> roleIds, List<String> roleNames,
+    public record AccountRow(Long userId, String username, String displayName,
+                             List<Long> roleIds, List<String> roleNames,
                              String auditStatus, java.time.LocalDateTime createdAt,
                              /** 锁定截止时间；未锁定为 null（过期的锁不出现在响应里） */
                              java.time.LocalDateTime lockedUntil,

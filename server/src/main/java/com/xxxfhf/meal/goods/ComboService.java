@@ -72,7 +72,7 @@ public class ComboService {
         return list(null, null);
     }
 
-    public Combo detail(String id) {
+    public Combo detail(Long id) {
         return require(id);
     }
 
@@ -81,9 +81,9 @@ public class ComboService {
         String name = requireName(cmd.name());
         int price = requirePrice(cmd.price());
         List<ComboDish> dishes = normalizeDishes(cmd.dishes());
-        List<String> specGroupIds = normalizeSpecGroupIds(cmd.specGroupIds());
+        List<Long> specGroupIds = normalizeSpecGroupIds(cmd.specGroupIds());
 
-        boolean creating = cmd.id() == null || cmd.id().isBlank();
+        boolean creating = cmd.id() == null;
         Combo combo;
         if (creating) {
             combo = new Combo();
@@ -103,7 +103,7 @@ public class ComboService {
         combo.setPrice(price);
         combo.setDishes(dishes);
         combo.setSpecGroupIds(specGroupIds);
-        combo.setCategoryId(trimToNull(cmd.categoryId()));
+        combo.setCategoryId(cmd.categoryId());
 
         if (creating) {
             comboMapper.insert(combo);
@@ -117,7 +117,7 @@ public class ComboService {
 
     /** 上架 / 下架。下架不影响已下单的订单（订单存的是快照）。 */
     @Transactional
-    public Combo updateStatus(String id, String status) {
+    public Combo updateStatus(Long id, String status) {
         if (!GoodsStatus.ON.equals(status) && !GoodsStatus.OFF.equals(status)) {
             throw BizException.param("状态只能是 on 或 off");
         }
@@ -133,10 +133,13 @@ public class ComboService {
      * 订单明细里虽然存了快照，但删掉整份盒饭会让「这个盒饭卖过多少」永久失去追溯入口。
      */
     @Transactional
-    public void delete(String id) {
+    public void delete(Long id) {
         Combo combo = require(id);
+        // 按 JSON 里的 comboId 精确判断，不能用 LIKE '%id%'：主键是自增 BIGINT，
+        // 数字做子串匹配会把 13、23 也算成引用 3 的订单。
         Integer used = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM `order` WHERE items LIKE ?", Integer.class, "%" + id + "%");
+                "SELECT COUNT(*) FROM `order` WHERE JSON_CONTAINS(JSON_EXTRACT(items, '$[*].comboId'), CAST(? AS CHAR))",
+                Integer.class, id);
         if (used != null && used > 0) {
             throw BizException.conflict("「" + combo.getName() + "」已被 " + used
                     + " 笔历史订单引用，只能下架不能删除");
@@ -145,7 +148,7 @@ public class ComboService {
         log.info("删除盒饭 id={} name={}", id, combo.getName());
     }
 
-    public Combo require(String id) {
+    public Combo require(Long id) {
         Combo combo = id == null ? null : comboMapper.selectById(id);
         if (combo == null) {
             throw BizException.notFound("盒饭不存在");
@@ -165,13 +168,13 @@ public class ComboService {
         if (raw == null || raw.isEmpty()) {
             throw BizException.param("盒饭至少要包含一道菜");
         }
-        Map<String, Dish> cache = new HashMap<>();
+        Map<Long, Dish> cache = new HashMap<>();
         List<ComboDish> result = new ArrayList<>(raw.size());
-        Set<String> seen = new HashSet<>();
+        Set<Long> seen = new HashSet<>();
 
         for (ComboDish item : raw) {
-            String dishId = item == null || item.dishId() == null ? "" : item.dishId().trim();
-            if (dishId.isEmpty()) {
+            Long dishId = item == null ? null : item.dishId();
+            if (dishId == null) {
                 throw BizException.param("组成菜品缺少菜品 ID");
             }
             if (!seen.add(dishId)) {
@@ -194,25 +197,24 @@ public class ComboService {
     }
 
     /** 规格组只能是启用中的；停用组不允许被新启用（停用会把引用一起解除）。 */
-    private List<String> normalizeSpecGroupIds(List<String> raw) {
+    private List<Long> normalizeSpecGroupIds(List<Long> raw) {
         if (raw == null || raw.isEmpty()) {
             return new ArrayList<>();
         }
-        List<String> result = new ArrayList<>(raw.size());
-        Set<String> seen = new HashSet<>();
-        for (String id : raw) {
-            String specGroupId = id == null ? "" : id.trim();
-            if (specGroupId.isEmpty() || !seen.add(specGroupId)) {
+        List<Long> result = new ArrayList<>(raw.size());
+        Set<Long> seen = new HashSet<>();
+        for (Long id : raw) {
+            if (id == null || !seen.add(id)) {
                 continue;
             }
-            SpecGroup group = specGroupMapper.selectById(specGroupId);
+            SpecGroup group = specGroupMapper.selectById(id);
             if (group == null) {
-                throw BizException.param("规格组不存在：" + specGroupId);
+                throw BizException.param("规格组不存在：" + id);
             }
             if (!GoodsStatus.ENABLED.equals(group.getStatus())) {
                 throw BizException.param("「" + group.getName() + "」已停用，不能启用");
             }
-            result.add(specGroupId);
+            result.add(id);
         }
         return result;
     }
@@ -257,8 +259,8 @@ public class ComboService {
      * @param specGroupIds 启用的规格组；空数组表示这份盒饭没有规格
      * @param sort         编辑时传 null 表示不修改排序
      */
-    public record ComboCommand(String id, String name, String cover, String desc, Integer price,
-                               List<ComboDish> dishes, List<String> specGroupIds,
-                               String categoryId, Integer sort) {
+    public record ComboCommand(Long id, String name, String cover, String desc, Integer price,
+                               List<ComboDish> dishes, List<Long> specGroupIds,
+                               Long categoryId, Integer sort) {
     }
 }

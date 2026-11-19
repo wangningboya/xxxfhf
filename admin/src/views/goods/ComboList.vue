@@ -76,7 +76,7 @@
           <el-input-number v-model="form.sort" :min="0" :max="9999" />
         </el-form-item>
         <el-form-item label="封面">
-          <el-upload :show-file-list="false" :http-request="uploadCover" accept="image/*">
+          <el-upload :show-file-list="false" :http-request="uploadCover" accept="image/jpeg,image/png">
             <el-image v-if="form.cover" :src="form.cover" fit="cover" class="cover-preview" />
             <el-button v-else>上传封面</el-button>
           </el-upload>

@@ -52,7 +52,7 @@ public class AuditService {
      * @param action    动作码，用 {@link AuditActions} 里的常量
      * @param summary   人读的一句话，写清「哪条、做了什么、关键值前后是什么」
      */
-    public void record(String tableName, String recordId, String action, String summary) {
+    public void record(String tableName, Long recordId, String action, String summary) {
         record(tableName, recordId, action, summary, AuditHelper.actor(), AuditHelper.source());
     }
 
@@ -63,12 +63,12 @@ public class AuditService {
      * 而真实原因是「商家没处理」，看日志的人需要一眼分辨。
      */
     @Transactional
-    public void record(String tableName, String recordId, String action, String summary,
-                       String operatorId, String source) {
+    public void record(String tableName, Long recordId, String action, String summary,
+                       Long operatorId, String source) {
         try {
             AuditLog entry = new AuditLog();
             entry.setTableName(tableName);
-            entry.setRecordId(recordId == null ? "" : recordId);
+            entry.setRecordId(recordId == null ? 0L : recordId);
             entry.setAction(action);
             entry.setSummary(truncate(summary));
             entry.setOperatorId(operatorId == null ? AuditHelper.SYSTEM : operatorId);
@@ -91,18 +91,18 @@ public class AuditService {
      * <p>公开给 {@code OrderStatusLogService} 复用：订单流转记录同样要存快照，
      * 「昵称优先、其次账号、再退 id」这套口径只能有一份，两份迟早会分叉。
      */
-    public String operatorName(String operatorId) {
-        if (AuditHelper.SYSTEM.equals(operatorId)) {
+    public String operatorName(Long operatorId) {
+        if (operatorId == null || AuditHelper.SYSTEM.equals(operatorId)) {
             return "系统";
         }
         User user = userMapper.selectById(operatorId);
         if (user == null) {
-            return operatorId;
+            return String.valueOf(operatorId);
         }
         if (user.getNickName() != null && !user.getNickName().isBlank()) {
             return user.getNickName();
         }
-        return user.getUsername() == null ? operatorId : user.getUsername();
+        return user.getUsername() == null ? String.valueOf(operatorId) : user.getUsername();
     }
 
     /* ==================== 查询 ==================== */
@@ -184,9 +184,9 @@ public class AuditService {
     /**
      * 列表行。中文名随行下发，前端不必再维护一份动作码映射。
      */
-    public record AuditRow(String id, String tableName, String tableNameLabel, String recordId,
+    public record AuditRow(Long id, String tableName, String tableNameLabel, Long recordId,
                            String action, String actionLabel, String summary,
-                           String operatorId, String operatorName, String source, String sourceLabel,
+                           Long operatorId, String operatorName, String source, String sourceLabel,
                            LocalDateTime createdAt) {
     }
 }

@@ -33,7 +33,7 @@ public abstract class AuditEntity {
 
     @TableField(fill = FieldFill.INSERT)
     @JsonIgnore
-    private String createdBy;
+    private Long createdBy;
 
     @TableField(fill = FieldFill.INSERT_UPDATE)
     @JsonIgnore
@@ -41,7 +41,7 @@ public abstract class AuditEntity {
 
     @TableField(fill = FieldFill.INSERT_UPDATE)
     @JsonIgnore
-    private String updatedBy;
+    private Long updatedBy;
 
     public LocalDateTime getCreatedAt() {
         return createdAt;
@@ -51,11 +51,11 @@ public abstract class AuditEntity {
         this.createdAt = createdAt;
     }
 
-    public String getCreatedBy() {
+    public Long getCreatedBy() {
         return createdBy;
     }
 
-    public void setCreatedBy(String createdBy) {
+    public void setCreatedBy(Long createdBy) {
         this.createdBy = createdBy;
     }
 
@@ -67,11 +67,11 @@ public abstract class AuditEntity {
         this.updatedAt = updatedAt;
     }
 
-    public String getUpdatedBy() {
+    public Long getUpdatedBy() {
         return updatedBy;
     }
 
-    public void setUpdatedBy(String updatedBy) {
+    public void setUpdatedBy(Long updatedBy) {
         this.updatedBy = updatedBy;
     }
 }

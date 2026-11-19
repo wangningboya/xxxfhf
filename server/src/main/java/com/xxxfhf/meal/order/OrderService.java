@@ -103,7 +103,7 @@ public class OrderService {
      * 占份放在最后一步之前，是因为前面的校验失败不该先占住别人的份数。
      */
     @Transactional
-    public OrderView create(String userId, CreateCommand cmd) {
+    public OrderView create(Long userId, CreateCommand cmd) {
         accessGuard.requireApproved(userId);
         return doCreate(userId, cmd, false);
     }
@@ -119,12 +119,12 @@ public class OrderService {
      * 停业、限量、菜单发布状态一概照旧校验 —— 这几条是「有没有得卖」，与谁来下单无关。
      */
     @Transactional
-    public OrderView createForUser(String targetUserId, CreateCommand cmd) {
+    public OrderView createForUser(Long targetUserId, CreateCommand cmd) {
         accessGuard.requireApproved(targetUserId);
         return doCreate(targetUserId, cmd, true);
     }
 
-    private OrderView doCreate(String userId, CreateCommand cmd, boolean skipCutoff) {
+    private OrderView doCreate(Long userId, CreateCommand cmd, boolean skipCutoff) {
         String requestId = trimToNull(cmd.requestId());
         if (requestId != null && requestId.length() > 64) {
             throw BizException.param("请求号过长");
@@ -160,11 +160,11 @@ public class OrderService {
         String deliveryType = normalizeDeliveryType(cmd.deliveryType());
         AddressSnapshot addressSnapshot = null;
         RegionSnapshot regionSnapshot = null;
-        String regionId = null;
+        Long regionId = null;
         String pickupSlot = null;
 
         if ("delivery".equals(deliveryType)) {
-            if (cmd.addressId() == null || cmd.addressId().isBlank()) {
+            if (cmd.addressId() == null) {
                 throw BizException.param("配送单必须选择收货地址");
             }
             Address address = addressService.require(cmd.addressId());
@@ -268,7 +268,7 @@ public class OrderService {
             throw BizException.param("一单最多 " + MAX_ITEM_KINDS + " 种盒饭");
         }
 
-        Map<String, DailyMenu> byCombo = new HashMap<>();
+        Map<Long, DailyMenu> byCombo = new HashMap<>();
         for (DailyMenu menu : menuMapper.selectList(Wrappers.<DailyMenu>lambdaQuery()
                 .eq(DailyMenu::getServeDate, serveDate)
                 .eq(DailyMenu::getStatus, MenuStatus.PUBLISHED))) {
@@ -278,8 +278,8 @@ public class OrderService {
         List<OrderItem> result = new ArrayList<>(inputs.size());
         Set<String> seen = new HashSet<>();
         for (ItemInput input : inputs) {
-            String comboId = input == null ? "" : trim(input.comboId());
-            if (comboId.isEmpty()) {
+            Long comboId = input == null ? null : input.comboId();
+            if (comboId == null) {
                 throw BizException.param("明细缺少盒饭 ID");
             }
             // 去重按「盒饭 + 规格」算：同盒饭选不同规格（白米饭 / 杂粮饭）是两行，允许同单；
@@ -316,7 +316,7 @@ public class OrderService {
      * 前端购物车按「盒饭 + 规格」分两行（cart.js 的 lineKey 同口径），
      * 服务端去重若只按 comboId，会把用户同盒饭买两种主食误判为重复提交。
      */
-    private static String itemKey(String comboId, List<String> optionIds) {
+    private static String itemKey(Long comboId, List<String> optionIds) {
         Set<String> unique = new TreeSet<>();
         if (optionIds != null) {
             for (String id : optionIds) {
@@ -405,7 +405,7 @@ public class OrderService {
 
     /* ==================== 查询 ==================== */
 
-    public IPage<OrderView> mine(String userId, String status, int page, int pageSize) {
+    public IPage<OrderView> mine(Long userId, String status, int page, int pageSize) {
         Page<Order> pager = new Page<>(Math.max(page, 1), Math.min(Math.max(pageSize, 1), 100));
         IPage<Order> result = orderMapper.selectPage(pager, Wrappers.<Order>lambdaQuery()
                 .eq(Order::getUserId, userId)
@@ -418,7 +418,7 @@ public class OrderService {
         return mapped;
     }
 
-    public OrderView detail(String userId, String orderId) {
+    public OrderView detail(Long userId, Long orderId) {
         return toView(requireOwned(orderId, userId));
     }
 
@@ -433,7 +433,7 @@ public class OrderService {
      * <p>合法值以字典 {@code pay_method} 为准（商家可自己加项），不再写死三个常量。
      */
     @Transactional
-    public OrderView claimPaid(String userId, String orderId, String payMethodRaw) {
+    public OrderView claimPaid(Long userId, Long orderId, String payMethodRaw) {
         Order order = requireOwned(orderId, userId);
         String payMethod = dictService.requireValue(DictCodes.PAY_METHOD, "收款方式",
                 payMethodRaw, "标记付款");
@@ -472,7 +472,7 @@ public class OrderService {
      * - 其余（已接单及之后）→ 拒绝，引导联系商家
      */
     @Transactional
-    public OrderView cancel(String userId, String orderId, String reason) {
+    public OrderView cancel(Long userId, Long orderId, String reason) {
         Order order = requireOwned(orderId, userId);
         if (OrderStatus.isFinal(order.getStatus())) {
             throw BizException.conflict("订单已" + OrderStatus.label(order.getStatus()) + "，不能再取消");
@@ -540,7 +540,7 @@ public class OrderService {
      * claimed 也算：用户说付了但商家没核对，这时既不能认定已收也不能当没收到。
      * 统一挂「待退款」让商家去核对，比两边都不动更容易收口。
      */
-    void moveToRefundingIfPaid(String orderId) {
+    void moveToRefundingIfPaid(Long orderId) {
         Order order = require(orderId);
         String pay = order.getPayStatus();
         if (!PayStatus.CLAIMED.equals(pay) && !PayStatus.PAID.equals(pay)) {
@@ -572,7 +572,7 @@ public class OrderService {
      * @return 是否真的释放了（已经不是待接单 / 用户声称已付款 / 已释放过，都返回 false）
      */
     @Transactional
-    public boolean releaseForTimeout(String orderId) {
+    public boolean releaseForTimeout(Long orderId) {
         Order order = require(orderId);
         if (!OrderStatus.PENDING_ACCEPT.equals(order.getStatus())
                 || Boolean.TRUE.equals(order.getStockReleased())
@@ -599,7 +599,7 @@ public class OrderService {
         return true;
     }    /* ==================== 内部 ==================== */
 
-    Order require(String orderId) {
+    Order require(Long orderId) {
         Order order = orderId == null ? null : orderMapper.selectById(orderId);
         if (order == null) {
             throw BizException.notFound("订单不存在");
@@ -607,7 +607,7 @@ public class OrderService {
         return order;
     }
 
-    private Order requireOwned(String orderId, String userId) {
+    private Order requireOwned(Long orderId, Long userId) {
         Order order = require(orderId);
         if (!order.getUserId().equals(userId)) {
             throw BizException.forbidden("只能查看自己的订单");
@@ -687,7 +687,7 @@ public class OrderService {
      * <p>只有命中违规才拒（87014），检测接口不可用时放行——熟人小店的场景里，
      * 把正常用户挡在门外比漏掉一句话更糟。备注会进配送单与备菜表，传播面比昵称大。
      */
-    private void requireContentOk(String userId, String content, String message) {
+    private void requireContentOk(Long userId, String content, String message) {
         if (content == null) {
             return;
         }
@@ -752,7 +752,7 @@ public class OrderService {
      * @param pickupSlot   自取单必填，必须是配置里的时段之一
      * @param requestId    幂等号，前端每次进入确认页生成一个
      */
-    public record CreateCommand(String serveDate, String deliveryType, String addressId,
+    public record CreateCommand(String serveDate, String deliveryType, Long addressId,
                                 String pickupSlot, String remark,
                                 List<ItemInput> items, String requestId) {
     }
@@ -761,7 +761,7 @@ public class OrderService {
      * @param optionIds 所选规格选项 ID。**不传组 ID**：一个选项必属一组，
      *                  由服务端按快照反向定位所属组，前端少一层映射就少一处出错
      */
-    public record ItemInput(String comboId, Integer qty, List<String> optionIds) {
+    public record ItemInput(Long comboId, Integer qty, List<String> optionIds) {
     }
 
     /**
@@ -773,7 +773,7 @@ public class OrderService {
      * @param payStatusTag 收款状态配色，同上
      * @param cancelRequestedAt 申请提交时间，前端用来显示「已等待多久」
      */
-    public record OrderView(String orderId, String orderNo, LocalDate serveDate, String deliveryType,
+    public record OrderView(Long orderId, String orderNo, LocalDate serveDate, String deliveryType,
                             String status, String statusLabel, String statusTag,
                             String payStatus, String payStatusLabel, String payStatusTag,
                             String payMethod, String payMethodLabel,

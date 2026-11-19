@@ -69,7 +69,7 @@ public class MenuService {
         boolean cutoff = clock.isCutoff(date);
         boolean orderable = clock.isOrderable(date);
 
-        Map<String, DailyMenu> byCombo = publishedMap(date);
+        Map<Long, DailyMenu> byCombo = publishedMap(date);
         // 排序与可见性都以盒饭库为准：下架的盒饭即使还在菜单里也不展示（下架即彻底隐藏）
         List<MenuItemView> items = new ArrayList<>();
         for (Combo combo : comboService.listOnSale()) {
@@ -84,7 +84,7 @@ public class MenuService {
 
     /** 全部菜单（盒饭库全量，仅上架的），带「明日供应」标记。只浏览，不提供加购。 */
     public List<ComboAllItem> allCombos() {
-        Set<String> tomorrow = publishedMap(clock.tomorrow()).keySet();
+        Set<Long> tomorrow = publishedMap(clock.tomorrow()).keySet();
         List<ComboAllItem> result = new ArrayList<>();
         for (Combo combo : comboService.listOnSale()) {
             result.add(new ComboAllItem(combo.getId(), combo.getName(), combo.getCover(), combo.getDesc(),
@@ -99,7 +99,7 @@ public class MenuService {
     /** 商家看某日菜单：草稿也返回，否则草稿状态永远看不见。 */
     public AdminMenuView adminView(LocalDate serveDate) {
         LocalDate date = requireDate(serveDate);
-        Map<String, DailyMenu> byCombo = allMap(date);
+        Map<Long, DailyMenu> byCombo = allMap(date);
         List<MenuItemView> items = new ArrayList<>();
         for (Combo combo : comboService.listAll()) {
             DailyMenu menu = byCombo.get(combo.getId());
@@ -130,12 +130,12 @@ public class MenuService {
         }
 
         List<MenuInput> inputs = items == null ? List.of() : items;
-        Map<String, DailyMenu> existing = allMap(date);
-        Set<String> keep = new LinkedHashSet<>();
+        Map<Long, DailyMenu> existing = allMap(date);
+        Set<Long> keep = new LinkedHashSet<>();
 
         for (MenuInput input : inputs) {
-            String comboId = input == null ? "" : trim(input.comboId());
-            if (comboId.isEmpty()) {
+            Long comboId = input == null ? null : input.comboId();
+            if (comboId == null) {
                 throw BizException.param("菜单项缺少盒饭 ID");
             }
             if (!keep.add(comboId)) {
@@ -272,19 +272,19 @@ public class MenuService {
 
     /* ==================== 内部 ==================== */
 
-    private Map<String, DailyMenu> publishedMap(LocalDate date) {
+    private Map<Long, DailyMenu> publishedMap(LocalDate date) {
         List<DailyMenu> list = menuMapper.selectList(Wrappers.<DailyMenu>lambdaQuery()
                 .eq(DailyMenu::getServeDate, date)
                 .eq(DailyMenu::getStatus, MenuStatus.PUBLISHED));
-        Map<String, DailyMenu> map = new HashMap<>(list.size());
+        Map<Long, DailyMenu> map = new HashMap<>(list.size());
         for (DailyMenu menu : list) {
             map.put(menu.getComboId(), menu);
         }
         return map;
     }
 
-    private Map<String, DailyMenu> allMap(LocalDate date) {
-        Map<String, DailyMenu> map = new HashMap<>();
+    private Map<Long, DailyMenu> allMap(LocalDate date) {
+        Map<Long, DailyMenu> map = new HashMap<>();
         for (DailyMenu menu : menusOf(date)) {
             map.put(menu.getComboId(), menu);
         }
@@ -312,7 +312,7 @@ public class MenuService {
         if (combo.getSpecGroupIds() == null || combo.getSpecGroupIds().isEmpty()) {
             return result;
         }
-        for (String groupId : combo.getSpecGroupIds()) {
+        for (Long groupId : combo.getSpecGroupIds()) {
             SpecGroup group = specGroupMapper.selectById(groupId);
             if (group == null || !GoodsStatus.ENABLED.equals(group.getStatus())) {
                 // 停用的组不进快照：停用意味着商家已经确认解除引用，这里再带上就是脏数据
@@ -341,7 +341,7 @@ public class MenuService {
     }
 
     private static String nameOf(DailyMenu menu) {
-        return menu.getComboSnapshot() == null ? menu.getComboId() : menu.getComboSnapshot().name();
+        return menu.getComboSnapshot() == null ? String.valueOf(menu.getComboId()) : menu.getComboSnapshot().name();
     }
 
     private static List<ComboDish> nullToEmpty(List<ComboDish> dishes) {
@@ -391,7 +391,7 @@ public class MenuService {
      *
      * @param remainQty 剩余份数；limitQty 为 null（不限量）时也是 null，前端显示「不限量」
      */
-    public record MenuItemView(String comboId, String name, String cover, Integer price,
+    public record MenuItemView(Long comboId, String name, String cover, Integer price,
                                List<ComboDish> dishes,
                                List<ComboSnapshot.SpecGroupSnapshot> specGroups,
                                Integer limitQty, Integer soldQty, Integer remainQty, String status) {
@@ -402,7 +402,7 @@ public class MenuService {
      *
      * @param tomorrowSupplied 是否在明天那份菜单里，前端据此打「明日供应 / 暂不供应」标签
      */
-    public record ComboAllItem(String comboId, String name, String cover, String desc, Integer price,
+    public record ComboAllItem(Long comboId, String name, String cover, String desc, Integer price,
                                List<ComboDish> dishes,
                                List<ComboSnapshot.SpecGroupSnapshot> specGroups,
                                boolean tomorrowSupplied) {
@@ -413,6 +413,6 @@ public class MenuService {
      *
      * @param limitQty null 表示不限量
      */
-    public record MenuInput(String comboId, Integer limitQty) {
+    public record MenuInput(Long comboId, Integer limitQty) {
     }
 }

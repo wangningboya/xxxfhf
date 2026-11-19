@@ -17,13 +17,13 @@ import com.xxxfhf.meal.audit.AuditEntity;
 @TableName("address")
 public class Address extends AuditEntity {
 
-    @TableId(type = IdType.ASSIGN_UUID)
-    private String id;
+    @TableId(type = IdType.AUTO)
+    private Long id;
 
-    private String userId;
+    private Long userId;
 
     /** 所属区域，必填 */
-    private String regionId;
+    private Long regionId;
 
     /** 区域名称冗余，列表展示与选择器直接用，省一次 join */
     private String regionName;
@@ -49,27 +49,27 @@ public class Address extends AuditEntity {
 
     /* ---------------- getters / setters ---------------- */
 
-    public String getId() {
+    public Long getId() {
         return id;
     }
 
-    public void setId(String id) {
+    public void setId(Long id) {
         this.id = id;
     }
 
-    public String getUserId() {
+    public Long getUserId() {
         return userId;
     }
 
-    public void setUserId(String userId) {
+    public void setUserId(Long userId) {
         this.userId = userId;
     }
 
-    public String getRegionId() {
+    public Long getRegionId() {
         return regionId;
     }
 
-    public void setRegionId(String regionId) {
+    public void setRegionId(Long regionId) {
         this.regionId = regionId;
     }
 

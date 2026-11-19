@@ -61,7 +61,7 @@ public class OrderStatusLogService {
      * @param remark     补充说明：拒单原因、取消原因等，可为 null
      * @param at         发生时间。**必须与业务时间戳同一个 now**，两处不出现毫秒级差异
      */
-    public void record(String orderId, String action, String fromStatus, String toStatus,
+    public void record(Long orderId, String action, String fromStatus, String toStatus,
                        String remark, LocalDateTime at) {
         record(orderId, action, fromStatus, toStatus, remark, null,
                 AuditHelper.actor(), AuditHelper.source(), at);
@@ -75,7 +75,7 @@ public class OrderStatusLogService {
      *
      * @param payMethod 见 {@link PayMethod}；非收款方式类动作传 null
      */
-    public void record(String orderId, String action, String fromStatus, String toStatus,
+    public void record(Long orderId, String action, String fromStatus, String toStatus,
                        String remark, String payMethod, LocalDateTime at) {
         record(orderId, action, fromStatus, toStatus, remark, payMethod,
                 AuditHelper.actor(), AuditHelper.source(), at);
@@ -90,8 +90,8 @@ public class OrderStatusLogService {
      * <p>推送结果记录也走这个重载 —— 它在事务提交后执行，ThreadLocal 虽然还在，
      * 但操作人必须还原成「触发这次推送的那次操作」，不能取到别处的上下文。
      */
-    public void record(String orderId, String action, String fromStatus, String toStatus,
-                       String remark, String operatorId, String source, LocalDateTime at) {
+    public void record(Long orderId, String action, String fromStatus, String toStatus,
+                       String remark, Long operatorId, String source, LocalDateTime at) {
         record(orderId, action, fromStatus, toStatus, remark, null, operatorId, source, at);
     }
 
@@ -101,8 +101,8 @@ public class OrderStatusLogService {
      * <p><b>注意</b>：方法内是单条 insert，自带事务，不依赖 {@code @Transactional} ——
      * 而且同类自调用本就不经过代理，加注解只会让人误以为有外层事务保护。
      */
-    public void record(String orderId, String action, String fromStatus, String toStatus,
-                       String remark, String payMethod, String operatorId, String source,
+    public void record(Long orderId, String action, String fromStatus, String toStatus,
+                       String remark, String payMethod, Long operatorId, String source,
                        LocalDateTime at) {
         try {
             OrderStatusLog entry = new OrderStatusLog();
@@ -137,8 +137,8 @@ public class OrderStatusLogService {
      * 「业务没成、日志却留下」的情况。
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void recordNotify(String orderId, String action, String remark,
-                             String operatorId, String source) {
+    public void recordNotify(Long orderId, String action, String remark,
+                             Long operatorId, String source) {
         record(orderId, action, null, null, remark, null, operatorId, source, LocalDateTime.now());
     }
 
@@ -154,7 +154,7 @@ public class OrderStatusLogService {
      * <p>{@code ready} 是个例外：一个状态两种叫法（自取「待取餐」、配送「配送中」），
      * 字典一项只能存一个名，这里按订单的取送方式现算，与订单详情的状态标签同源。
      */
-    public List<Row> list(String orderId) {
+    public List<Row> list(Long orderId) {
         Order order = orderId == null ? null : orderMapper.selectById(orderId);
         if (order == null) {
             throw BizException.notFound("订单不存在");
@@ -232,11 +232,11 @@ public class OrderStatusLogService {
      * @param fromStatusTag   状态标签配色（字典配置），查不到为 null
      * @param payMethodLabel  收款方式中文名；非收款方式那两条之外为 null
      */
-    public record Row(String id, String logType, String action, String actionLabel,
+    public record Row(Long id, String logType, String action, String actionLabel,
                       String fromStatus, String fromStatusLabel, String fromStatusTag,
                       String toStatus, String toStatusLabel, String toStatusTag,
                       String remark, String payMethod, String payMethodLabel,
-                      String operatorId, String operatorName, String source, String sourceLabel,
+                      Long operatorId, String operatorName, String source, String sourceLabel,
                       LocalDateTime createdAt) {
     }
 }

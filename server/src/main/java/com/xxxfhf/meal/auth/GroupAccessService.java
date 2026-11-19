@@ -87,7 +87,7 @@ public class GroupAccessService {
      * @param iv            同上返回的向量
      */
     @Transactional
-    public AccessState bindByShare(String userId, String encryptedData, String iv) {
+    public AccessState bindByShare(Long userId, String encryptedData, String iv) {
         User user = requireUser(userId);
 
         if (user.getGroupOpenId() != null && !user.getGroupOpenId().isBlank()) {
@@ -130,7 +130,7 @@ public class GroupAccessService {
      * 被禁用的用户不放行——禁用是商家主动切断，不能被一张码绕过。
      */
     @Transactional
-    public AccessState bindByInvite(String userId, String rawCode) {
+    public AccessState bindByInvite(Long userId, String rawCode) {
         User user = requireUser(userId);
 
         if (AuditStatus.DISABLED.equals(user.getAuditStatus())) {
@@ -161,7 +161,7 @@ public class GroupAccessService {
      * 省掉手机号快速验证能力的按次费用与隐私声明负担。
      */
     @Transactional
-    public String updatePhone(String userId, String phone) {
+    public String updatePhone(Long userId, String phone) {
         User user = requireUser(userId);
         String normalized = PhoneValidator.require(phone);
         String before = user.getPhone();
@@ -186,7 +186,7 @@ public class GroupAccessService {
      * 昵称只用于商家审核列表辨认人，不做唯一性校验：群里重名很常见，为了唯一而拦人得不偿失。
      */
     @Transactional
-    public String updateNickName(String userId, String rawNickName) {
+    public String updateNickName(Long userId, String rawNickName) {
         User user = requireUser(userId);
         String nickName = NickNameValidator.require(rawNickName);
         // 内容安全：昵称会出现在商家审核列表里，是公开可见的文本，先过一遍微信检测
@@ -208,7 +208,7 @@ public class GroupAccessService {
      * 用户手快连点两次不该看到红字。
      */
     @Transactional
-    public AccessState reapply(String userId) {
+    public AccessState reapply(Long userId) {
         User user = requireUser(userId);
         if (!AuditStatus.REJECTED.equals(user.getAuditStatus())) {
             return resolve(user);
@@ -220,7 +220,7 @@ public class GroupAccessService {
         return resolve(user);
     }
 
-    private User requireUser(String userId) {
+    private User requireUser(Long userId) {
         User user = userMapper.selectById(userId);
         if (user == null) {
             throw BizException.unauthorized("登录已失效，请重新进入小程序");
