@@ -393,8 +393,34 @@ public class OrderService {
         }
     }
 
-    /** 释放份数。与状态变更同事务，调用方必须在同一个 @Transactional 里。 */
+    /**
+     * 释放份数（幂等）。
+     *
+     * <p>先抢占 {@code stock_released}，只有抢到的那一次才真正减库存：同一单可能被两条路径
+     * 先后要求释放（拒单后用户又申请取消、定时任务与商家操作交叉），减两次等于白送份数，
+     * 而 {@code GREATEST(..., 0)} 只防负数、不防重复扣减。
+     *
+     * <p>与状态变更同事务，调用方必须在同一个 @Transactional 里。
+     */
     void releaseStock(Order order) {
+        if (Boolean.TRUE.equals(order.getStockReleased())) {
+            // 调用方已经知道释放过了，连抢占都不用做
+            return;
+        }
+        int claimed = orderMapper.update(null, Wrappers.<Order>lambdaUpdate()
+                .set(Order::getStockReleased, true)
+                .set(Order::getStockReleasedAt, LocalDateTime.now())
+                .eq(Order::getId, order.getId())
+                .eq(Order::getStockReleased, false));
+        if (claimed == 0) {
+            log.info("份数已释放过，跳过 orderNo={}", order.getOrderNo());
+            return;
+        }
+        doReleaseStock(order);
+    }
+
+    /** 真正把份数加回去。只有 {@link #releaseStock} 抢占成功、或超时任务已经自己抢过的那条路径能调。 */
+    private void doReleaseStock(Order order) {
         if (order.getItems() == null || order.getItems().isEmpty()) {
             return;
         }
@@ -474,10 +500,12 @@ public class OrderService {
     @Transactional
     public OrderView cancel(Long userId, Long orderId, String reason) {
         Order order = requireOwned(orderId, userId);
-        if (OrderStatus.isFinal(order.getStatus())) {
-            throw BizException.conflict("订单已" + OrderStatus.label(order.getStatus()) + "，不能再取消");
-        }
-        if (!OrderStatus.PENDING_ACCEPT.equals(order.getStatus())) {
+        // 能不能自己取消由转移表说了算；终态与「已接单及之后」对用户是两种不同的答复，
+        // 所以允许判定统一、文案仍然分开
+        if (!OrderTransition.CANCEL_BY_USER.allows(order.getStatus())) {
+            if (OrderStatus.isFinal(order.getStatus())) {
+                throw BizException.conflict("订单已" + OrderStatus.label(order.getStatus()) + "，不能再取消");
+            }
             throw BizException.conflict("商家已接单，无法自行取消，请联系商家处理");
         }
 
@@ -489,17 +517,18 @@ public class OrderService {
             // 截单前：直接取消。条件更新防并发（另一个入口可能同时拒单）
             LocalDateTime now = LocalDateTime.now();
             int affected = orderMapper.update(null, Wrappers.<Order>lambdaUpdate()
-                    .set(Order::getStatus, OrderStatus.CANCELLED)
+                    .set(Order::getStatus, OrderTransition.CANCEL_BY_USER.target())
                     .set(Order::getCancelRequested, false)
                     .eq(Order::getId, orderId)
-                    .eq(Order::getStatus, OrderStatus.PENDING_ACCEPT));
+                    .in(Order::getStatus, OrderTransition.CANCEL_BY_USER.fromStatuses()));
             if (affected == 0) {
                 throw BizException.conflict("订单状态已变化，请刷新后重试");
             }
             // 先记流转再动份数与收款：时间轴上「已取消」要排在「转入待退款」之前，
             // 两条都带同一个 now，靠毫秒级先后保持顺序
-            statusLogService.record(orderId, OrderLogActions.ORDER_CANCEL,
-                    OrderStatus.PENDING_ACCEPT, OrderStatus.CANCELLED, trimmedReason, now);
+            statusLogService.record(orderId, OrderTransition.CANCEL_BY_USER.logAction(),
+                    order.getStatus(), OrderTransition.CANCEL_BY_USER.target(),
+                    trimmedReason, now);
             releaseStock(order);
             moveToRefundingIfPaid(orderId);
             log.info("用户取消订单 orderNo={}（截单前）", order.getOrderNo());
@@ -591,7 +620,9 @@ public class OrderService {
         if (affected == 0) {
             return false;
         }
-        releaseStock(order);
+        // 上面那条 UPDATE 已经把 stock_released 置 true 了，这里不能再走 releaseStock
+        // （抢占会失败，库存永远减不回去），直接减库存
+        doReleaseStock(order);
         // 订单状态没变（仍在待接单），但份数被系统收走了 —— 不记的话商家会以为份数凭空少了一份
         statusLogService.record(orderId, OrderLogActions.EVENT_STOCK_RELEASE, null, null,
                 "超时未付款，份数已释放", AuditHelper.SYSTEM, AuditHelper.SOURCE_TASK, now);

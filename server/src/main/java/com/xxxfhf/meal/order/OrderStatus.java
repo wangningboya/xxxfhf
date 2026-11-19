@@ -52,22 +52,17 @@ public final class OrderStatus {
      *
      * 一条直线：已接单 → 出餐（ready）→ 已完成。取送方式不改变路径，
      * 只改变 ready 这个状态在界面上叫什么。
+     *
+     * <p>判定委托给 {@link OrderTransition}：接口层、审单、定时任务都从这里问，
+     * 状态机只保留一份事实。
      */
     public static boolean canAdvance(String from, String to) {
-        return switch (from == null ? "" : from) {
-            case ACCEPTED -> READY.equals(to);
-            case READY -> COMPLETED.equals(to);
-            default -> false;
-        };
+        return OrderTransition.advance(from, to).isPresent();
     }
 
     /** 该状态下商家「下一步」的目标状态。没有可推进的返回 null。 */
     public static String nextOf(String from) {
-        return switch (from == null ? "" : from) {
-            case ACCEPTED -> READY;
-            case READY -> COMPLETED;
-            default -> null;
-        };
+        return OrderTransition.nextOf(from);
     }
 
     /**
@@ -77,9 +72,11 @@ public final class OrderStatus {
      * 「出餐到完工」这条状态机，凭空出餐；已完成的不再重复核销。
      * 自取单与配送单同一口径 —— 码印在餐盒上，是商家核对「这盒是不是这一单」的
      * 凭据，不发给用户不代表不能用，但同样得等餐出来了再核。
+     *
+     * <p>委托给 {@link OrderTransition#PICKUP}，与核销接口用的是同一条约束。
      */
     public static boolean canPickup(String status) {
-        return READY.equals(status);
+        return OrderTransition.PICKUP.allows(status);
     }
 
     /**

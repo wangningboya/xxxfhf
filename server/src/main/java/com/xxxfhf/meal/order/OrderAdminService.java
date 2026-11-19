@@ -143,11 +143,12 @@ public class OrderAdminService {
             }
             // 业务时间戳与流转记录取同一个 now：两处差几毫秒，排查时会以为是两次操作
             LocalDateTime now = LocalDateTime.now();
+            // 允许的起始状态来自转移表，SQL 与校验不再各写一份
             int affected = orderMapper.update(null, Wrappers.<Order>lambdaUpdate()
-                    .set(Order::getStatus, OrderStatus.ACCEPTED)
+                    .set(Order::getStatus, OrderTransition.ACCEPT.target())
                     .set(Order::getAcceptedAt, now)
                     .eq(Order::getId, orderId)
-                    .eq(Order::getStatus, OrderStatus.PENDING_ACCEPT)
+                    .in(Order::getStatus, OrderTransition.ACCEPT.fromStatuses())
                     .eq(Order::getCancelRequested, false));
             if (affected == 0) {
                 skipped.add(order.getOrderNo() + "：订单状态已变化");
@@ -157,8 +158,8 @@ public class OrderAdminService {
             if (Boolean.TRUE.equals(order.getStockReleased())) {
                 warnings.add(order.getOrderNo() + "：份数曾因超时未付款被释放，请确认该盒饭是否还有余量");
             }
-            statusLogService.record(order.getId(), OrderLogActions.ORDER_ACCEPT,
-                    OrderStatus.PENDING_ACCEPT, OrderStatus.ACCEPTED, null, now);
+            statusLogService.record(order.getId(), OrderTransition.ACCEPT.logAction(),
+                    order.getStatus(), OrderTransition.ACCEPT.target(), null, now);
             // 通知用户「已接单」。用更新前的对象即可：模板只用到订单号、明细、供餐日这些不变字段
             notifyService.accepted(order);
         }
@@ -172,20 +173,21 @@ public class OrderAdminService {
     public OrderService.OrderView reject(Long operatorId, Long orderId, String reason) {
         String trimmed = requireReason(reason);
         Order order = orderService.require(orderId);
+        OrderTransition.REJECT.require(order.getStatus());
 
         int affected = orderMapper.update(null, Wrappers.<Order>lambdaUpdate()
-                .set(Order::getStatus, OrderStatus.REJECTED)
+                .set(Order::getStatus, OrderTransition.REJECT.target())
                 .set(Order::getRejectReason, trimmed)
                 .eq(Order::getId, orderId)
-                .eq(Order::getStatus, OrderStatus.PENDING_ACCEPT));
+                .in(Order::getStatus, OrderTransition.REJECT.fromStatuses()));
         if (affected == 0) {
-            throw BizException.conflict("只有待接单的订单可以拒单，当前状态是「"
-                    + OrderStatus.label(order.getStatus()) + "」");
+            // 上面刚校验过状态，走到这里只可能是并发改动，与「状态本来就不对」要给不同的话
+            throw BizException.conflict("订单状态已变化，请刷新后重试");
         }
 
         // 先记拒单再动份数与收款：时间轴上「已拒单」要排在「转入待退款」之前
-        statusLogService.record(orderId, OrderLogActions.ORDER_REJECT,
-                OrderStatus.PENDING_ACCEPT, OrderStatus.REJECTED, trimmed, LocalDateTime.now());
+        statusLogService.record(orderId, OrderTransition.REJECT.logAction(),
+                order.getStatus(), OrderTransition.REJECT.target(), trimmed, LocalDateTime.now());
         orderService.releaseStock(order);
         orderService.moveToRefundingIfPaid(orderId);
         log.info("商家拒单 orderNo={} 操作人={} 原因={}", order.getOrderNo(), operatorId, trimmed);
@@ -207,8 +209,10 @@ public class OrderAdminService {
             throw BizException.param("缺少目标状态");
         }
         Order order = orderService.require(orderId);
-        if (!OrderStatus.canAdvance(order.getStatus(), target)) {
-            String next = OrderStatus.nextOf(order.getStatus());
+        // 命中的转移同时给出目标状态与动作码，不用再按 target 反推该记 ORDER_READY 还是 ORDER_COMPLETE
+        OrderTransition transition = OrderTransition.advance(order.getStatus(), target).orElse(null);
+        if (transition == null) {
+            String next = OrderTransition.nextOf(order.getStatus());
             throw BizException.conflict("订单当前状态（"
                     + OrderStatus.label(order.getStatus(), order.getDeliveryType())
                     + "）不能推进到「" + OrderStatus.label(target, order.getDeliveryType()) + "」"
@@ -223,20 +227,19 @@ public class OrderAdminService {
                     order.getStatus(), target, operatorId);
         }
         int affected = orderMapper.update(null, Wrappers.<Order>lambdaUpdate()
-                .set(Order::getStatus, target)
+                .set(Order::getStatus, transition.target())
                 .eq(Order::getId, orderId)
-                .eq(Order::getStatus, order.getStatus()));
+                .in(Order::getStatus, transition.fromStatuses()));
         if (affected == 0) {
             throw BizException.conflict("订单状态已变化，请刷新后重试");
         }
         log.info("订单推进 orderNo={} {} -> {} 操作人={}",
-                order.getOrderNo(), order.getStatus(), target, operatorId);
+                order.getOrderNo(), order.getStatus(), transition.target(), operatorId);
         Order advanced = orderService.require(orderId);
         // 出餐与完成分成两个动作码：目标状态不同，商家在时间轴上一眼能看出这单走到哪一步
-        statusLogService.record(orderId,
-                OrderStatus.READY.equals(target) ? OrderLogActions.ORDER_READY : OrderLogActions.ORDER_COMPLETE,
-                order.getStatus(), target, null, LocalDateTime.now());
-        if (OrderStatus.READY.equals(target)
+        statusLogService.record(orderId, transition.logAction(),
+                order.getStatus(), transition.target(), null, LocalDateTime.now());
+        if (transition == OrderTransition.READY
                 && !OrderStatus.TYPE_DELIVERY.equals(advanced.getDeliveryType())) {
             // 只有自取单发「可以取餐了」+ 取餐码。配送单进的是同一个 ready，
             // 但用户在等送货上门，硬套取餐模板等于告诉他「自己去拿」，是错的提醒 —— 静默不发。
@@ -271,7 +274,7 @@ public class OrderAdminService {
             throw BizException.notFound("没有找到取餐码 " + trimmed + " 对应的订单，请核对供餐日");
         }
         Order order = hits.get(0);
-        if (!OrderStatus.canPickup(order.getStatus())) {
+        if (!OrderTransition.PICKUP.allows(order.getStatus())) {
             String label = OrderStatus.label(order.getStatus(), order.getDeliveryType());
             if (OrderStatus.ACCEPTED.equals(order.getStatus())) {
                 // 已接单还没出餐：连「下一步该点什么」一起给出来，只说不能核销商家会卡在这
@@ -287,17 +290,18 @@ public class OrderAdminService {
         }
 
         int affected = orderMapper.update(null, Wrappers.<Order>lambdaUpdate()
-                .set(Order::getStatus, OrderStatus.COMPLETED)
+                .set(Order::getStatus, OrderTransition.PICKUP.target())
                 .eq(Order::getId, order.getId())
-                .eq(Order::getStatus, OrderStatus.READY));
+                .in(Order::getStatus, OrderTransition.PICKUP.fromStatuses()));
         if (affected == 0) {
             throw BizException.conflict("订单状态已变化，请刷新后重试");
         }
         log.info("取餐核销 orderNo={} code={} 操作人={}", order.getOrderNo(), trimmed, operatorId);
         // 核销的目标态也是「已完成」，但和商家手动点「完成订单」分成两个动作码：
         // 事后要分得清这单是输码核对的，还是直接点了按钮
-        statusLogService.record(order.getId(), OrderLogActions.ORDER_PICKUP,
-                order.getStatus(), OrderStatus.COMPLETED, "取餐码 " + trimmed, LocalDateTime.now());
+        statusLogService.record(order.getId(), OrderTransition.PICKUP.logAction(),
+                order.getStatus(), OrderTransition.PICKUP.target(), "取餐码 " + trimmed,
+                LocalDateTime.now());
         return orderService.toView(orderService.require(order.getId()));
     }
 
@@ -526,20 +530,25 @@ public class OrderAdminService {
         String source = operatorId == null ? AuditHelper.SOURCE_TASK : AuditHelper.source();
 
         if (approve) {
+            // 终态单不该再有可同意的申请（申请与拒单并发时会留下这种脏数据）：
+            // 驳回分支不能加这条校验，否则那种单的申请永远清不掉，卡在待处理列表里
+            OrderTransition.CANCEL_APPROVED.require(order.getStatus(), order.getDeliveryType());
             int affected = orderMapper.update(null, Wrappers.<Order>lambdaUpdate()
-                    .set(Order::getStatus, OrderStatus.CANCELLED)
+                    .set(Order::getStatus, OrderTransition.CANCEL_APPROVED.target())
                     .set(Order::getCancelRequested, false)
                     .set(Order::getCancelRequest, handled)
                     .set(Order::getCancelRequestedAt, null)
                     .eq(Order::getId, orderId)
+                    .in(Order::getStatus, OrderTransition.CANCEL_APPROVED.fromStatuses())
                     .eq(Order::getCancelRequested, true));
             if (affected == 0) {
                 throw BizException.conflict("申请状态已变化，请刷新后重试");
             }
             // 同意取消与超时自动同意共用一个动作码，靠来源（admin / task）区分：
             // 同一件事的两种触发方式，拆两个码只会让前端文案维护两份
-            statusLogService.record(orderId, OrderLogActions.ORDER_CANCEL,
-                    order.getStatus(), OrderStatus.CANCELLED, trimmedRemark, actorId, source, now);
+            statusLogService.record(orderId, OrderTransition.CANCEL_APPROVED.logAction(),
+                    order.getStatus(), OrderTransition.CANCEL_APPROVED.target(),
+                    trimmedRemark, actorId, source, now);
             orderService.releaseStock(order);
             orderService.moveToRefundingIfPaid(orderId);
         } else {
