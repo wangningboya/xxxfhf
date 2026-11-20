@@ -7,24 +7,25 @@
     <view class="invite-body" wx:if="{{showInvite}}">
       <view class="invite-desc">群里没有群卡片、或者对方不在群里时，用邀请码放行。一次性、有有效期。</view>
       <view class="invite-list" wx:if="{{inviteCodes.length}}">
-        <view
-          class="invite-item"
-          wx:for="{{inviteCodes}}"
-          wx:key="code"
-          data-code="{{item.code}}"
-          bindtap="onCopyCode"
-        >
-          <text class="invite-code">{{item.code}}</text>
-          <text class="invite-status invite-status-{{item.status}}">{{item.statusText}}</text>
-          <!-- catchtap：父级是「点击复制」，作废不能顺带把码复制走 -->
-          <text
-            class="invite-revoke"
-            wx:if="{{item.status === 'unused'}}"
-            data-code="{{item.code}}"
-            catchtap="onRevokeCode"
-          >
-            作废
-          </text>
+        <view class="invite-item" wx:for="{{inviteCodes}}" wx:key="code">
+          <view class="invite-line">
+            <text class="invite-code">{{item.code}}</text>
+            <text class="invite-status invite-status-{{item.status}}">{{item.statusText}}</text>
+            <!-- 显式「复制」按钮：整行点击复制太隐蔽，商家找不到入口 -->
+            <text class="invite-action" data-code="{{item.code}}" bindtap="onCopyCode">复制</text>
+            <text
+              class="invite-revoke"
+              wx:if="{{item.status === 'unused'}}"
+              data-code="{{item.code}}"
+              catchtap="onRevokeCode"
+            >
+              作废
+            </text>
+          </view>
+          <!-- 用过的码要能对上人：谁用的、手机尾号 -->
+          <view class="invite-user" wx:if="{{item.usedByName}}">
+            使用者：{{item.usedByName}}{{item.usedByPhone ? '（' + item.usedByPhone + '）' : ''}}
+          </view>
         </view>
       </view>
       <view class="btn" bindtap="onCreateInvite">{{creating ? '生成中…' : '生成邀请码'}}</view>

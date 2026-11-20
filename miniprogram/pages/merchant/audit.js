@@ -207,10 +207,21 @@ Page({
     // 默认 48 小时：够群主把卡片发出去、对方隔天打开
     request({ url: '/admin/invite/create', method: 'POST', data: { expireHours: 48 } })
       .then((invite) => {
+        // 确认键直接当「复制」用：生成完的下一步就是发给对方，少点一次
         wx.showModal({
           title: '邀请码已生成',
-          content: invite.code + '\n有效期 48 小时，一次性使用',
-          showCancel: false,
+          content:
+            invite.code +
+            '\n有效期至 ' +
+            (invite.expireAt || '').replace('T', ' ').slice(0, 16) +
+            '，一次性使用',
+          confirmText: '复制',
+          cancelText: '关闭',
+          success: (res) => {
+            if (res.confirm) {
+              this.copyCode(invite.code);
+            }
+          },
         });
         this.loadInvites();
       })
@@ -218,7 +229,14 @@ Page({
       .then(() => this.setData({ creating: false }));
   },
 
+  copyCode(code) {
+    if (!code) {
+      return;
+    }
+    wx.setClipboardData({ data: code });
+  },
+
   onCopyCode(e) {
-    wx.setClipboardData({ data: e.currentTarget.dataset.code });
+    this.copyCode(e.currentTarget.dataset.code);
   },
 });

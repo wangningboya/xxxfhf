@@ -5,6 +5,8 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xxxfhf.meal.common.BizException;
 import com.xxxfhf.meal.common.ErrorCode;
+import com.xxxfhf.meal.user.User;
+import com.xxxfhf.meal.user.UserMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DuplicateKeyException;
@@ -13,6 +15,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 /**
  * 邀请码：生成、列表、核销。
@@ -36,10 +42,12 @@ public class InviteCodeService {
     private static final int MAX_EXPIRE_HOURS = 24 * 30;
 
     private final InviteCodeMapper inviteCodeMapper;
+    private final UserMapper userMapper;
     private final SecureRandom random = new SecureRandom();
 
-    public InviteCodeService(InviteCodeMapper inviteCodeMapper) {
+    public InviteCodeService(InviteCodeMapper inviteCodeMapper, UserMapper userMapper) {
         this.inviteCodeMapper = inviteCodeMapper;
+        this.userMapper = userMapper;
     }
 
     /**
@@ -79,6 +87,28 @@ public class InviteCodeService {
         return inviteCodeMapper.selectPage(pager, Wrappers.<InviteCode>lambdaQuery()
                 .eq(status != null && !status.isBlank(), InviteCode::getStatus, status)
                 .orderByDesc(InviteCode::getCreatedAt));
+    }
+
+    /**
+     * 本页邀请码里被谁用了：一次 in 查询把用户行捞回来，避免列表逐行查用户（N+1）。
+     *
+     * @return userId → 用户行；未使用的码不会出现在结果里，使用者已被删除的也查不到
+     */
+    public Map<Long, User> usersUsedBy(List<InviteCode> codes) {
+        List<Long> ids = codes.stream()
+                .map(InviteCode::getUsedBy)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        List<User> users = userMapper.selectBatchIds(ids);
+        Map<Long, User> map = new HashMap<>(users.size());
+        for (User user : users) {
+            map.put(user.getId(), user);
+        }
+        return map;
     }
 
     /**

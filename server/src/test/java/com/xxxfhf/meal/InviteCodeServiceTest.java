@@ -5,6 +5,8 @@ import com.xxxfhf.meal.invite.InviteCode;
 import com.xxxfhf.meal.invite.InviteCodeMapper;
 import com.xxxfhf.meal.invite.InviteCodeService;
 import com.xxxfhf.meal.invite.InviteStatus;
+import com.xxxfhf.meal.user.User;
+import com.xxxfhf.meal.user.UserMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -13,6 +15,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -22,6 +26,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -37,6 +42,9 @@ class InviteCodeServiceTest {
 
     @Mock
     private InviteCodeMapper inviteCodeMapper;
+
+    @Mock
+    private UserMapper userMapper;
 
     @InjectMocks
     private InviteCodeService service;
@@ -120,6 +128,33 @@ class InviteCodeServiceTest {
         assertThatThrownBy(() -> service.consume("ABCD2345", USER))
                 .isInstanceOf(BizException.class)
                 .hasMessageContaining("已过期");
+    }
+
+    @Test
+    @DisplayName("批量查使用者：跳过未使用的码，未使用的码不参与查询")
+    void usersUsedByBatches() {
+        InviteCode used = new InviteCode();
+        used.setCode("AAAABBBB");
+        used.setUsedBy(USER);
+        InviteCode unused = new InviteCode();
+        unused.setCode("CCCCDDDD");
+        User user = new User();
+        user.setId(USER);
+        when(userMapper.selectBatchIds(List.of(USER))).thenReturn(List.of(user));
+
+        Map<Long, User> users = service.usersUsedBy(List.of(used, unused));
+
+        assertThat(users).containsEntry(USER, user);
+    }
+
+    @Test
+    @DisplayName("整页都没人用过：不查用户表")
+    void usersUsedBySkipsQueryWhenNoUsers() {
+        InviteCode unused = new InviteCode();
+        unused.setCode("CCCCDDDD");
+
+        assertThat(service.usersUsedBy(List.of(unused))).isEmpty();
+        verifyNoInteractions(userMapper);
     }
 
     @Test

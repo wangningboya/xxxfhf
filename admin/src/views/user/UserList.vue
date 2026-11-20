@@ -206,8 +206,8 @@
       </el-tab-pane>
     </el-tabs>
 
-    <!-- 邀请码管理：发错群时能立刻作废，不用等它过期 -->
-    <el-dialog v-model="inviteVisible" title="邀请码管理" width="680px">
+    <!-- 邀请码管理：发错群时能立刻作废，不用等它过期；使用者要看得见，否则对不上人 -->
+    <el-dialog v-model="inviteVisible" title="邀请码管理" width="780px">
       <div class="invite-head">
         <el-select v-model="inviteStatus" placeholder="全部状态" clearable style="width: 140px" @change="loadInvites">
           <el-option
@@ -226,6 +226,15 @@
         <el-table-column label="状态" width="100">
           <template #default="{ row }">
             <el-tag size="small" :type="inviteTag(row.status)">{{ inviteLabel(row.status) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="使用者" min-width="150">
+          <template #default="{ row }">
+            <template v-if="row.usedByName">
+              <div>{{ row.usedByName }}</div>
+              <div v-if="row.usedByPhone" class="muted">{{ row.usedByPhone }}</div>
+            </template>
+            <span v-else class="muted">—</span>
           </template>
         </el-table-column>
         <el-table-column label="有效期至" width="150">
@@ -248,6 +257,20 @@
           </template>
         </el-table-column>
       </el-table>
+    </el-dialog>
+
+    <!-- 生成结果单独弹窗：邀请码要能一键复制，而 prompt 的输入框里放不了按钮 -->
+    <el-dialog v-model="inviteCreatedVisible" title="邀请码已生成" width="420px" @closed="inviteCreated = null">
+      <div class="invite-created">
+        <div class="invite-created-code">{{ inviteCreated ? inviteCreated.code : '' }}</div>
+        <div class="muted">
+          有效期至 {{ (inviteCreated && inviteCreated.expireAt || '').replace('T', ' ').slice(0, 16) }}，一次性使用
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="inviteCreatedVisible = false">关闭</el-button>
+        <el-button type="primary" @click="onCopyCreatedInvite">复制</el-button>
+      </template>
     </el-dialog>
 
     <!-- 代填 / 修改手机号：接口早就有了，之前两端都只能看不能改 -->
@@ -560,6 +583,11 @@ async function onBatchApprove() {
   load();
 }
 
+/* ==================== 生成邀请码 ==================== */
+
+const inviteCreatedVisible = ref(false);
+const inviteCreated = ref(null);
+
 function onCreateInvite() {
   ElMessageBox.prompt('邀请码有效期（小时，1-720）', '生成一次性邀请码', {
     inputValue: '168',
@@ -575,17 +603,55 @@ function onCreateInvite() {
       http
         .post('/admin/invite/create', { expireHours: hours })
         .then((result) => {
-          ElMessageBox.alert(
-            '邀请码：' + result.code + '\n有效期至 ' + (result.expireAt || '').replace('T', ' ').slice(0, 16),
-            '生成成功',
-            { type: 'success' }
-          )
-            // 点 × 关闭结果提示框也会 reject，不接住会被全局兜底当成"未知错误"
-            .catch(() => {});
+          // 单独弹窗展示，code 放大且带「复制」按钮：生成后下一步就是发给对方
+          inviteCreated.value = result;
+          inviteCreatedVisible.value = true;
         })
         .catch(() => {});
     })
     .catch(() => {});
+}
+
+/**
+ * 复制文本。navigator.clipboard 只在 https / localhost 下存在，
+ * 商家后台常部署在 http 内网，所以保留 textarea + execCommand 兜底。
+ */
+async function copyText(text) {
+  if (!text) {
+    return false;
+  }
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (e) {
+    // 权限被拒或浏览器不支持，走下面的兜底
+  }
+  const area = document.createElement('textarea');
+  area.value = text;
+  area.setAttribute('readonly', '');
+  area.style.position = 'fixed';
+  area.style.top = '-1000px';
+  document.body.appendChild(area);
+  area.select();
+  let ok = false;
+  try {
+    ok = document.execCommand('copy');
+  } catch (e) {
+    ok = false;
+  }
+  document.body.removeChild(area);
+  return ok;
+}
+
+async function onCopyCreatedInvite() {
+  const ok = await copyText(inviteCreated.value && inviteCreated.value.code);
+  if (ok) {
+    ElMessage.success('已复制，发给用户即可');
+  } else {
+    ElMessage.warning('复制失败，请手动选中邀请码复制');
+  }
 }
 
 const inviteVisible = ref(false);
@@ -819,5 +885,20 @@ onMounted(load);
 
 .unlock-btn {
   margin-left: 6px;
+}
+
+/* 生成结果：码要大、能一眼核对；user-select: all 让手选也是整段 */
+.invite-created {
+  text-align: center;
+  padding: 8px 0 4px;
+}
+
+.invite-created-code {
+  font-family: Consolas, 'JetBrains Mono', monospace;
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: 4px;
+  margin-bottom: 10px;
+  user-select: all;
 }
 </style>

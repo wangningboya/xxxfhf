@@ -40,11 +40,14 @@
 }
 
 .invite-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: block;
   padding: 14rpx 0;
   border-bottom: 1rpx solid #f4f5f7;
+}
+
+.invite-line {
+  display: flex;
+  align-items: center;
 }
 
 .invite-code {
@@ -75,6 +78,22 @@
   font-size: 22rpx;
   color: #d93026;
   border: 1rpx solid #f0b9b4;
+  border-radius: 20rpx;
+}
+
+/* 使用者那行：码用掉了才出现，字号小一档，不抢码本身 */
+.invite-user {
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  color: #9a9a9a;
+}
+
+.invite-action {
+  margin-left: 18rpx;
+  padding: 4rpx 14rpx;
+  font-size: 22rpx;
+  color: #07c160;
+  border: 1rpx solid #a8e6c1;
   border-radius: 20rpx;
 }
 

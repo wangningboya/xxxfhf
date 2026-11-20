@@ -6,6 +6,7 @@ import com.xxxfhf.meal.common.MaskUtil;
 import com.xxxfhf.meal.common.NickNameValidator;
 import com.xxxfhf.meal.common.PhoneValidator;
 import com.xxxfhf.meal.audit.AuditActions;
+import com.xxxfhf.meal.audit.AuditHelper;
 import com.xxxfhf.meal.audit.AuditService;
 import com.xxxfhf.meal.config.ConfigKey;
 import com.xxxfhf.meal.config.ConfigService;
@@ -18,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -139,7 +141,8 @@ public class GroupAccessService {
     /**
      * 用邀请码取得准入资格。
      *
-     * 被驳回过的用户用了新的邀请码，视为重新申请：回到待审核、清空驳回原因。
+     * <p>邀请码是商家亲手发出去的：发码就是对这个人点头，所以核销成功即视为审核通过，
+     * 不再让人停在待审核里等第二次确认。被驳回的人用新码进来同样直接通过。
      * 被禁用的用户不放行——禁用是商家主动切断，不能被一张码绕过。
      */
     @Transactional
@@ -159,19 +162,28 @@ public class GroupAccessService {
         if (AuditStatus.DISABLED.equals(user.getAuditStatus())) {
             throw BizException.forbidden("账号已被禁用，请联系群管理员");
         }
-        if (user.getGroupOpenId() != null && !user.getGroupOpenId().isBlank()) {
-            // 已经是群成员，不需要邀请码
+        if (AuditStatus.APPROVED.equals(user.getAuditStatus())) {
+            // 已经通过的人再交一次码没有意义；核销掉只会白烧一张，留给下一个人
             return resolve(user);
         }
 
-        inviteCodeService.consume(rawCode, user.getId());
+        String code = rawCode == null ? "" : rawCode.trim().toUpperCase();
+        inviteCodeService.consume(code, user.getId());
 
-        if (AuditStatus.REJECTED.equals(user.getAuditStatus())) {
-            user.setAuditStatus(AuditStatus.PENDING);
-            user.setRejectReason(null);
-            userMapper.updateById(user);
-            log.info("被驳回用户用邀请码重新进入，状态回到待审核 userId={}", user.getId());
-        }
+        // 核销成功即通过审核。写在这一层而不是各个调用点，是为了让首次建号（/auth/join）
+        // 和已登记用户（/auth/invite）共用同一条规则，且都落在调用方的事务里。
+        String from = user.getAuditStatus();
+        user.setAuditStatus(AuditStatus.APPROVED);
+        user.setApprovedAt(LocalDateTime.now());
+        user.setRejectReason(null);
+        userMapper.updateById(user);
+        log.info("凭邀请码进入自动通过审核 userId={} {} -> approved", user.getId(), from);
+
+        // 这是系统代做的动作（请求来自免登录的 /auth/join，没有登录态可用），
+        // 所以操作人记 SYSTEM、来源记小程序，摘要里写清是凭哪张码自动通过的
+        auditService.record(AuditActions.TABLE_USER, user.getId(), AuditActions.USER_APPROVE,
+                "凭邀请码 " + code + " 进入，自动通过审核（" + auditStatusLabel(from) + " → 已通过）",
+                AuditHelper.SYSTEM, AuditHelper.SOURCE_MINIPROGRAM);
         return resolve(user);
     }
 
@@ -241,6 +253,17 @@ public class GroupAccessService {
         userMapper.updateById(user);
         log.info("用户重新提交审核申请 userId={}", userId);
         return resolve(user);
+    }
+
+    /** 操作记录里指代审核状态。自动通过这条只会出现待审核 / 已驳回，其余兜底保留。 */
+    private static String auditStatusLabel(String status) {
+        return switch (status == null ? "" : status) {
+            case AuditStatus.PENDING -> "待审核";
+            case AuditStatus.REJECTED -> "已驳回";
+            case AuditStatus.DISABLED -> "已停用";
+            case AuditStatus.APPROVED -> "已通过";
+            default -> "未准入";
+        };
     }
 
     private User requireUser(Long userId) {
