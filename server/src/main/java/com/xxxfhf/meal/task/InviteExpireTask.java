@@ -26,8 +26,8 @@ public class InviteExpireTask {
         this.inviteCodeService = inviteCodeService;
     }
 
-    /** 每 10 分钟一次。码量极小，扫描成本可忽略。 */
-    @Scheduled(fixedDelay = 600_000L, initialDelay = 60_000L)
+    /** 每 1 分钟一次。码量极小，扫描成本可忽略；列表查询前也会兜一次，不让商家看到「未使用」的过期码。 */
+    @Scheduled(fixedDelay = 60_000L, initialDelay = 60_000L)
     public void markExpired() {
         try {
             int affected = inviteCodeService.markExpired();

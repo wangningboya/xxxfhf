@@ -1,5 +1,9 @@
 package com.xxxfhf.meal;
 
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import com.xxxfhf.meal.audit.AuditActions;
+import com.xxxfhf.meal.audit.AuditService;
 import com.xxxfhf.meal.common.BizException;
 import com.xxxfhf.meal.invite.InviteCode;
 import com.xxxfhf.meal.invite.InviteCodeMapper;
@@ -7,6 +11,8 @@ import com.xxxfhf.meal.invite.InviteCodeService;
 import com.xxxfhf.meal.invite.InviteStatus;
 import com.xxxfhf.meal.user.User;
 import com.xxxfhf.meal.user.UserMapper;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,8 +29,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -46,8 +54,21 @@ class InviteCodeServiceTest {
     @Mock
     private UserMapper userMapper;
 
+    @Mock
+    private AuditService auditService;
+
     @InjectMocks
     private InviteCodeService service;
+
+    /**
+     * 单测不起 Spring 容器，MyBatis-Plus 的 lambda 列名缓存不会自动建立；
+     * 作废用例里的 lambdaUpdate().set(...) 会立即解析列名，必须先建缓存。
+     */
+    @BeforeAll
+    static void initLambdaCache() {
+        MapperBuilderAssistant assistant = new MapperBuilderAssistant(new MybatisConfiguration(), "");
+        TableInfoHelper.initTableInfo(assistant, InviteCode.class);
+    }
 
     @Test
     @DisplayName("生成的码是 8 位，且不含易混字符 0/O/1/I/L")
@@ -59,6 +80,9 @@ class InviteCodeServiceTest {
         assertThat(code.getStatus()).isEqualTo(InviteStatus.UNUSED);
         assertThat(code.getExpireAt()).isAfter(LocalDateTime.now().plusHours(23));
         verify(inviteCodeMapper).insert(any(InviteCode.class));
+        // 发码等于放人进来，必须留一条 invite.create
+        verify(auditService).record(eq(AuditActions.TABLE_INVITE), any(), eq(AuditActions.INVITE_CREATE),
+                contains("生成邀请码"));
     }
 
     @Test
@@ -155,6 +179,54 @@ class InviteCodeServiceTest {
 
         assertThat(service.usersUsedBy(List.of(unused))).isEmpty();
         verifyNoInteractions(userMapper);
+    }
+
+    @Test
+    @DisplayName("批量生成：按数量生成，每张都落库")
+    void createBatchCreatesEachCode() {
+        List<InviteCode> codes = service.createBatch(3, 24, 100L);
+
+        assertThat(codes).hasSize(3);
+        assertThat(codes).extracting(InviteCode::getCode).doesNotHaveDuplicates();
+        verify(inviteCodeMapper, times(3)).insert(any(InviteCode.class));
+    }
+
+    @Test
+    @DisplayName("批量生成：0 个或 21 个都拒绝，不静默截断")
+    void createBatchRejectsOutOfRange() {
+        assertThatThrownBy(() -> service.createBatch(0, 24, 100L))
+                .isInstanceOf(BizException.class)
+                .hasMessageContaining("最多生成 20");
+        assertThatThrownBy(() -> service.createBatch(21, 24, 100L))
+                .isInstanceOf(BizException.class)
+                .hasMessageContaining("最多生成 20");
+        verify(inviteCodeMapper, never()).insert(any(InviteCode.class));
+    }
+
+    @Test
+    @DisplayName("作废成功记一条 invite.revoke")
+    void revokeRecordsAudit() {
+        InviteCode revoked = new InviteCode();
+        revoked.setId(9L);
+        revoked.setCode("ABCD2345");
+        revoked.setStatus(InviteStatus.REVOKED);
+        when(inviteCodeMapper.update(any(), any())).thenReturn(1);
+        when(inviteCodeMapper.selectOne(any())).thenReturn(revoked);
+
+        service.revoke("abcd2345");
+
+        verify(auditService).record(eq(AuditActions.TABLE_INVITE), eq(9L), eq(AuditActions.INVITE_REVOKE),
+                contains("作废邀请码"));
+    }
+
+    @Test
+    @DisplayName("红点：未读条数与标记已读直接走 SQL")
+    void unreadAndMarkRead() {
+        when(inviteCodeMapper.countUnread()).thenReturn(3L);
+        when(inviteCodeMapper.markRead()).thenReturn(2);
+
+        assertThat(service.unreadCount()).isEqualTo(3L);
+        assertThat(service.markRead()).isEqualTo(2);
     }
 
     @Test

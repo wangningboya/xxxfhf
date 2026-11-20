@@ -203,30 +203,70 @@ Page({
     if (this.data.creating) {
       return;
     }
+    // 张数让商家自己选：默认 1 张，边界与网页后台一致（1-20）
+    wx.showModal({
+      title: '生成邀请码',
+      editable: true,
+      placeholderText: '生成几张？1-20',
+      content: '1',
+      confirmText: '生成',
+      success: (res) => {
+        if (!res.confirm) {
+          return;
+        }
+        const count = parseInt((res.content || '1').trim(), 10);
+        if (!(count >= 1 && count <= 20)) {
+          wx.showToast({ title: '数量需在 1-20 之间', icon: 'none' });
+          return;
+        }
+        this.createInvites(count);
+      },
+    });
+  },
+
+  createInvites(count) {
     this.setData({ creating: true });
     // 默认 48 小时：够群主把卡片发出去、对方隔天打开
-    request({ url: '/admin/invite/create', method: 'POST', data: { expireHours: 48 } })
-      .then((invite) => {
-        // 确认键直接当「复制」用：生成完的下一步就是发给对方，少点一次
-        wx.showModal({
-          title: '邀请码已生成',
-          content:
-            invite.code +
-            '\n有效期至 ' +
-            (invite.expireAt || '').replace('T', ' ').slice(0, 16) +
-            '，一次性使用',
-          confirmText: '复制',
-          cancelText: '关闭',
-          success: (res) => {
-            if (res.confirm) {
-              this.copyCode(invite.code);
-            }
-          },
-        });
+    request({ url: '/admin/invite/batch', method: 'POST', data: { count, expireHours: 48 } })
+      .then((codes) => {
+        if (!codes || !codes.length) {
+          return;
+        }
+        this.showCreatedInvites(codes);
         this.loadInvites();
       })
       .catch((err) => app.toastError(err))
       .then(() => this.setData({ creating: false }));
+  },
+
+  /** 生成完的下一步就是发给对方，所以确认键直接当「复制」用 */
+  showCreatedInvites(codes) {
+    const text = codes.map((item) => item.code).join('\n');
+    const expireAt = (codes[0].expireAt || '').replace('T', ' ').slice(0, 16);
+    const single = codes.length === 1;
+    wx.showModal({
+      title: single ? '邀请码已生成' : '已生成 ' + codes.length + ' 个邀请码',
+      content: text + '\n有效期至 ' + expireAt + '，一次性使用',
+      confirmText: single ? '复制' : '全部复制',
+      cancelText: '关闭',
+      success: (res) => {
+        if (res.confirm) {
+          this.copyCode(text);
+        }
+      },
+    });
+  },
+
+  /** 列表里的「全部复制」：只复制还没用掉的，已用/作废的发给别人也没用 */
+  onCopyAllCodes() {
+    const codes = (this.data.inviteCodes || [])
+      .filter((item) => item.status === 'unused')
+      .map((item) => item.code);
+    if (!codes.length) {
+      wx.showToast({ title: '没有未使用的邀请码', icon: 'none' });
+      return;
+    }
+    this.copyCode(codes.join('\n'));
   },
 
   copyCode(code) {

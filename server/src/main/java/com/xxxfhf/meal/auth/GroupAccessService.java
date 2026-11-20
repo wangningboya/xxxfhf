@@ -10,6 +10,7 @@ import com.xxxfhf.meal.audit.AuditHelper;
 import com.xxxfhf.meal.audit.AuditService;
 import com.xxxfhf.meal.config.ConfigKey;
 import com.xxxfhf.meal.config.ConfigService;
+import com.xxxfhf.meal.invite.InviteAttemptGuard;
 import com.xxxfhf.meal.invite.InviteCodeService;
 import com.xxxfhf.meal.user.AuditStatus;
 import com.xxxfhf.meal.user.User;
@@ -47,17 +48,20 @@ public class GroupAccessService {
     private final WxCrypto wxCrypto;
     private final ConfigService configService;
     private final InviteCodeService inviteCodeService;
+    private final InviteAttemptGuard inviteAttemptGuard;
     private final AuditService auditService;
     private final ContentSecurityService contentSecurity;
 
     public GroupAccessService(UserMapper userMapper, SessionKeyStore sessionKeyStore, WxCrypto wxCrypto,
                               ConfigService configService, InviteCodeService inviteCodeService,
+                              InviteAttemptGuard inviteAttemptGuard,
                               AuditService auditService, ContentSecurityService contentSecurity) {
         this.userMapper = userMapper;
         this.sessionKeyStore = sessionKeyStore;
         this.wxCrypto = wxCrypto;
         this.configService = configService;
         this.inviteCodeService = inviteCodeService;
+        this.inviteAttemptGuard = inviteAttemptGuard;
         this.auditService = auditService;
         this.contentSecurity = contentSecurity;
     }
@@ -168,7 +172,20 @@ public class GroupAccessService {
         }
 
         String code = rawCode == null ? "" : rawCode.trim().toUpperCase();
-        inviteCodeService.consume(code, user.getId());
+        // 按 openid 限次：首次进入失败时用户行会随事务回滚，userId 下次就变了，只有 openid 稳定。
+        // 拿到 openid 前先查一次锁，锁着连库都不碰，也不消耗商家发出的码。
+        String attemptKey = user.getOpenid() == null || user.getOpenid().isBlank()
+                ? "u:" + user.getId()
+                : user.getOpenid();
+        inviteAttemptGuard.check(attemptKey);
+        try {
+            inviteCodeService.consume(code, user.getId());
+        } catch (BizException ex) {
+            // 只有「码不对/已用/作废/过期」这类业务拒绝才计数；数据库异常不是用户的错
+            inviteAttemptGuard.onFailure(attemptKey);
+            throw ex;
+        }
+        inviteAttemptGuard.onSuccess(attemptKey);
 
         // 核销成功即通过审核。写在这一层而不是各个调用点，是为了让首次建号（/auth/join）
         // 和已登记用户（/auth/invite）共用同一条规则，且都落在调用方的事务里。

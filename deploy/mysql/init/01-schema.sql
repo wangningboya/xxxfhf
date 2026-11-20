@@ -225,6 +225,8 @@ CREATE TABLE IF NOT EXISTS `invite_code` (
     `expire_at`  DATETIME    NOT NULL COMMENT '过期时间',
     `used_by`    BIGINT               DEFAULT NULL COMMENT '使用者 userId',
     `used_at`    DATETIME             DEFAULT NULL COMMENT '使用时间',
+    -- 已用未读 = used_by 非空且 read_at 为空，后台靠它亮红点；打开邀请码管理时写 NOW()
+    `read_at`    DATETIME             DEFAULT NULL COMMENT '商家查看使用提醒的时间；NULL=还没看过',
     `created_by` BIGINT               DEFAULT NULL COMMENT '生成人 userId；系统生成写 0',
     `created_at` DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     PRIMARY KEY (`id`),

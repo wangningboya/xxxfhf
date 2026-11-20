@@ -13,6 +13,18 @@
   justify-content: space-between;
 }
 
+.invite-head-right {
+  display: flex;
+  align-items: center;
+}
+
+/* 「全部复制」：绿色文字，与右侧「展开」拉开距离，避免误点 */
+.invite-copy-all {
+  margin-right: 24rpx;
+  font-size: 24rpx;
+  color: #07c160;
+}
+
 .invite-title {
   font-size: 28rpx;
   font-weight: 600;

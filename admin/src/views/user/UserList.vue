@@ -31,7 +31,16 @@
           批量通过（{{ selected.length }}）
         </el-button>
         <el-button v-if="auth.has('user.audit')" @click="onCreateInvite">生成邀请码</el-button>
-        <el-button v-if="auth.has('user.audit')" @click="openInvites">邀请码管理</el-button>
+        <!-- 红点：有码被用了但还没点开看过。点开后清零，不影响码本身 -->
+        <el-badge
+          v-if="auth.has('user.audit')"
+          :value="inviteUnread"
+          :hidden="!inviteUnread"
+          :max="99"
+          class="invite-badge"
+        >
+          <el-button @click="openInvites">邀请码管理</el-button>
+        </el-badge>
       </div>
     </div>
 
@@ -206,8 +215,8 @@
       </el-tab-pane>
     </el-tabs>
 
-    <!-- 邀请码管理：发错群时能立刻作废，不用等它过期；使用者要看得见，否则对不上人 -->
-    <el-dialog v-model="inviteVisible" title="邀请码管理" width="780px">
+    <!-- 邀请码管理：发错群时能立刻作废，不用等它过期；使用者与生成人都要看得见，否则对不上人 -->
+    <el-dialog v-model="inviteVisible" title="邀请码管理" width="900px">
       <div class="invite-head">
         <el-select v-model="inviteStatus" placeholder="全部状态" clearable style="width: 140px" @change="loadInvites">
           <el-option
@@ -220,8 +229,13 @@
         <span class="muted">作废只对「未使用」的码有效；已使用的码作废会误导对方以为准入被撤销</span>
       </div>
       <el-table v-loading="inviteLoading" :data="invites" border size="small" style="width: 100%">
-        <el-table-column prop="code" label="邀请码" width="130">
-          <template #default="{ row }"><code>{{ row.code }}</code></template>
+        <el-table-column prop="code" label="邀请码" width="170">
+          <template #default="{ row }">
+            <code>{{ row.code }}</code>
+            <el-button link type="primary" class="copy-link" @click="onCopyInviteCode(row.code)">
+              复制
+            </el-button>
+          </template>
         </el-table-column>
         <el-table-column label="状态" width="100">
           <template #default="{ row }">
@@ -235,6 +249,11 @@
               <div v-if="row.usedByPhone" class="muted">{{ row.usedByPhone }}</div>
             </template>
             <span v-else class="muted">—</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="生成人" width="110">
+          <template #default="{ row }">
+            <span :class="{ muted: !row.createdByName }">{{ row.createdByName || '—' }}</span>
           </template>
         </el-table-column>
         <el-table-column label="有效期至" width="150">
@@ -259,17 +278,56 @@
       </el-table>
     </el-dialog>
 
-    <!-- 生成结果单独弹窗：邀请码要能一键复制，而 prompt 的输入框里放不了按钮 -->
-    <el-dialog v-model="inviteCreatedVisible" title="邀请码已生成" width="420px" @closed="inviteCreated = null">
-      <div class="invite-created">
-        <div class="invite-created-code">{{ inviteCreated ? inviteCreated.code : '' }}</div>
-        <div class="muted">
-          有效期至 {{ (inviteCreated && inviteCreated.expireAt || '').replace('T', ' ').slice(0, 16) }}，一次性使用
+    <!-- 生成表单：数量 1~20，一次给一个小群发完 -->
+    <el-dialog v-model="inviteFormVisible" title="生成邀请码" width="440px">
+      <el-form label-width="80px">
+        <el-form-item label="数量">
+          <el-input-number v-model="inviteForm.count" :min="1" :max="20" :step="1" />
+          <span class="muted form-hint">最多 20 张</span>
+        </el-form-item>
+        <el-form-item label="有效期">
+          <el-input-number v-model="inviteForm.expireHours" :min="1" :max="720" :step="24" />
+          <span class="muted form-hint">小时（1-720）</span>
+        </el-form-item>
+      </el-form>
+      <div class="muted">一次性使用；用户凭码进入后直接通过审核。</div>
+      <template #footer>
+        <el-button @click="inviteFormVisible = false">取消</el-button>
+        <el-button type="primary" :loading="inviteCreating" @click="onSubmitInvites">生成</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 生成结果逐张展示：每张旁边一个复制，多张再给「全部复制」 -->
+    <el-dialog
+      v-model="inviteCreatedVisible"
+      title="邀请码已生成"
+      width="480px"
+      @closed="inviteCreatedList = []"
+    >
+      <div class="invite-created-list">
+        <div
+          v-for="item in inviteCreatedList"
+          :key="item.code"
+          class="invite-created-row"
+          :class="{ single: inviteCreatedList.length === 1 }"
+        >
+          <code class="invite-created-code">{{ item.code }}</code>
+          <div class="muted invite-created-exp">
+            有效期至 {{ (item.expireAt || '').replace('T', ' ').slice(0, 16) }}
+          </div>
+          <el-button link type="primary" @click="onCopyInviteCode(item.code)">复制</el-button>
         </div>
       </div>
+      <div class="muted">一次性使用；用户凭码进入后直接通过审核。</div>
       <template #footer>
         <el-button @click="inviteCreatedVisible = false">关闭</el-button>
-        <el-button type="primary" @click="onCopyCreatedInvite">复制</el-button>
+        <el-button
+          v-if="inviteCreatedList.length > 1"
+          type="primary"
+          @click="onCopyAllInvites"
+        >
+          全部复制（{{ inviteCreatedList.length }}）
+        </el-button>
       </template>
     </el-dialog>
 
@@ -362,7 +420,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import http from '../../api';
 import { useAuthStore } from '../../stores/auth';
@@ -583,33 +641,45 @@ async function onBatchApprove() {
   load();
 }
 
-/* ==================== 生成邀请码 ==================== */
+/* ==================== 邀请码：生成 / 复制 / 红点 ==================== */
 
+const inviteFormVisible = ref(false);
+const inviteCreating = ref(false);
+const inviteForm = ref({ count: 1, expireHours: 168 });
 const inviteCreatedVisible = ref(false);
-const inviteCreated = ref(null);
+const inviteCreatedList = ref([]);
+const inviteUnread = ref(0);
+let invitePollTimer = null;
 
 function onCreateInvite() {
-  ElMessageBox.prompt('邀请码有效期（小时，1-720）', '生成一次性邀请码', {
-    inputValue: '168',
-    inputPattern: /^\d+$/,
-    inputErrorMessage: '请填数字',
-  })
-    .then(({ value }) => {
-      const hours = Number(value);
-      if (hours < 1 || hours > 720) {
-        ElMessage.warning('有效期需在 1 到 720 小时之间');
-        return;
-      }
-      http
-        .post('/admin/invite/create', { expireHours: hours })
-        .then((result) => {
-          // 单独弹窗展示，code 放大且带「复制」按钮：生成后下一步就是发给对方
-          inviteCreated.value = result;
-          inviteCreatedVisible.value = true;
-        })
-        .catch(() => {});
+  inviteForm.value = { count: 1, expireHours: 168 };
+  inviteFormVisible.value = true;
+}
+
+function onSubmitInvites() {
+  const count = Number(inviteForm.value.count);
+  const expireHours = Number(inviteForm.value.expireHours);
+  // 与服务端同一套边界，先给一句人话，省一次往返
+  if (!(count >= 1 && count <= 20)) {
+    ElMessage.warning('数量需在 1 到 20 之间');
+    return;
+  }
+  if (!(expireHours >= 1 && expireHours <= 720)) {
+    ElMessage.warning('有效期需在 1 到 720 小时之间');
+    return;
+  }
+  inviteCreating.value = true;
+  http
+    .post('/admin/invite/batch', { count, expireHours })
+    .then((list) => {
+      inviteCreatedList.value = list || [];
+      inviteFormVisible.value = false;
+      inviteCreatedVisible.value = true;
     })
-    .catch(() => {});
+    .catch(() => {})
+    .finally(() => {
+      inviteCreating.value = false;
+    });
 }
 
 /**
@@ -645,13 +715,37 @@ async function copyText(text) {
   return ok;
 }
 
-async function onCopyCreatedInvite() {
-  const ok = await copyText(inviteCreated.value && inviteCreated.value.code);
+async function onCopyInviteCode(code) {
+  const ok = await copyText(code);
   if (ok) {
     ElMessage.success('已复制，发给用户即可');
   } else {
     ElMessage.warning('复制失败，请手动选中邀请码复制');
   }
+}
+
+async function onCopyAllInvites() {
+  // 一张一行：粘到群里或记事本里逐行对得上人
+  const text = inviteCreatedList.value.map((item) => item.code).join('\n');
+  const ok = await copyText(text);
+  if (ok) {
+    ElMessage.success('已复制 ' + inviteCreatedList.value.length + ' 个邀请码');
+  } else {
+    ElMessage.warning('复制失败，请手动选中邀请码复制');
+  }
+}
+
+/** 红点：多少张码被用了但还没点开看过。登录后每分钟刷一次。 */
+function loadInviteUnread() {
+  if (!auth.has('user.audit')) {
+    return;
+  }
+  http
+    .get('/admin/invite/unread-count')
+    .then((count) => {
+      inviteUnread.value = Number(count) || 0;
+    })
+    .catch(() => {});
 }
 
 const inviteVisible = ref(false);
@@ -662,6 +756,13 @@ const invites = ref([]);
 function openInvites() {
   inviteVisible.value = true;
   loadInvites();
+  // 打开列表就等于已经看到提醒：清红点。清失败不打扰商家，下次打开再试
+  http
+    .post('/admin/invite/mark-read')
+    .then(() => {
+      inviteUnread.value = 0;
+    })
+    .catch(() => {});
 }
 
 function loadInvites() {
@@ -859,7 +960,18 @@ function onUnlock(row) {
     .catch(() => {});
 }
 
-onMounted(load);
+onMounted(() => {
+  load();
+  loadInviteUnread();
+  // 一分钟刷一次：商家开着后台时，有人用码也能及时看到红点
+  invitePollTimer = window.setInterval(loadInviteUnread, 60_000);
+});
+
+onUnmounted(() => {
+  if (invitePollTimer) {
+    window.clearInterval(invitePollTimer);
+  }
+});
 </script>
 
 <style scoped>
@@ -887,18 +999,53 @@ onMounted(load);
   margin-left: 6px;
 }
 
-/* 生成结果：码要大、能一眼核对；user-select: all 让手选也是整段 */
-.invite-created {
-  text-align: center;
-  padding: 8px 0 4px;
+/* 邀请码管理按钮上的红点，与左边按钮留出间距 */
+.invite-badge {
+  margin-left: 12px;
+}
+
+/* 表格里的复制按钮贴得太近会看不清 */
+.copy-link {
+  margin-left: 8px;
+}
+
+.form-hint {
+  margin-left: 8px;
+}
+
+/* 生成结果：码可整段选中；多张时列表内部滚动，不撑高弹窗 */
+.invite-created-list {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.invite-created-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 4px;
+  border-bottom: 1px dashed #ebeef5;
+}
+
+.invite-created-row:last-child {
+  border-bottom: none;
 }
 
 .invite-created-code {
   font-family: Consolas, 'JetBrains Mono', monospace;
-  font-size: 30px;
+  font-size: 20px;
   font-weight: 600;
-  letter-spacing: 4px;
-  margin-bottom: 10px;
+  letter-spacing: 2px;
   user-select: all;
+}
+
+/* 只生成一张时放大，方便一眼核对 */
+.invite-created-row.single .invite-created-code {
+  font-size: 30px;
+  letter-spacing: 4px;
+}
+
+.invite-created-exp {
+  flex: 1;
 }
 </style>

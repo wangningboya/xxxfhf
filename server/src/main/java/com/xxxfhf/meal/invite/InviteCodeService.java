@@ -3,6 +3,8 @@ package com.xxxfhf.meal.invite;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.xxxfhf.meal.audit.AuditActions;
+import com.xxxfhf.meal.audit.AuditService;
 import com.xxxfhf.meal.common.BizException;
 import com.xxxfhf.meal.common.ErrorCode;
 import com.xxxfhf.meal.user.User;
@@ -15,6 +17,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -41,13 +45,21 @@ public class InviteCodeService {
     /** 有效期上限 30 天，防止「永不过期」的码在群里长期流传 */
     private static final int MAX_EXPIRE_HOURS = 24 * 30;
 
+    /** 一次最多生成 20 张：够一次给一个小群发，又不至于让商家手滑刷出几百张码 */
+    private static final int MAX_BATCH = 20;
+
+    private static final DateTimeFormatter MINUTE = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+
     private final InviteCodeMapper inviteCodeMapper;
     private final UserMapper userMapper;
+    private final AuditService auditService;
     private final SecureRandom random = new SecureRandom();
 
-    public InviteCodeService(InviteCodeMapper inviteCodeMapper, UserMapper userMapper) {
+    public InviteCodeService(InviteCodeMapper inviteCodeMapper, UserMapper userMapper,
+                             AuditService auditService) {
         this.inviteCodeMapper = inviteCodeMapper;
         this.userMapper = userMapper;
+        this.auditService = auditService;
     }
 
     /**
@@ -72,6 +84,10 @@ public class InviteCodeService {
             code.setCreatedAt(LocalDateTime.now());
             try {
                 inviteCodeMapper.insert(code);
+                // 发码等于放人进来，必须留痕：记到 invite_code 上，操作人/来源由当前请求上下文自动取
+                auditService.record(AuditActions.TABLE_INVITE, code.getId(), AuditActions.INVITE_CREATE,
+                        "生成邀请码 " + code.getCode() + "（有效期 " + hours + " 小时，至 "
+                                + MINUTE.format(code.getExpireAt()) + "）");
                 log.info("生成邀请码 code={} 有效期={}h 生成人={}", code.getCode(), hours, createdBy);
                 return code;
             } catch (DuplicateKeyException ex) {
@@ -82,7 +98,28 @@ public class InviteCodeService {
         throw new BizException(ErrorCode.SERVER_ERROR, "邀请码生成失败，请重试");
     }
 
+    /**
+     * 批量生成。单张与批量走同一条 create，审计、撞码重试、有效期校验都只有一份规则。
+     *
+     * @param count 1 ~ 20，超出直接拒绝，不静默截断
+     */
+    @Transactional
+    public List<InviteCode> createBatch(int count, int expireHours, Long createdBy) {
+        if (count < 1 || count > MAX_BATCH) {
+            throw BizException.param("一次最多生成 " + MAX_BATCH + " 个邀请码");
+        }
+        List<InviteCode> codes = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            codes.add(create(expireHours, createdBy));
+        }
+        log.info("批量生成邀请码 {} 个 生成人={}", count, createdBy);
+        return codes;
+    }
+
     public IPage<InviteCode> list(String status, int page, int pageSize) {
+        // 扫描任务是 1 分钟一次，商家点开列表时不该再看到「已过期却显示未使用」的码；
+        // 这条 UPDATE 幂等，执行代价可忽略。
+        inviteCodeMapper.markExpired();
         Page<InviteCode> pager = new Page<>(Math.max(page, 1), Math.min(Math.max(pageSize, 1), 100));
         return inviteCodeMapper.selectPage(pager, Wrappers.<InviteCode>lambdaQuery()
                 .eq(status != null && !status.isBlank(), InviteCode::getStatus, status)
@@ -90,25 +127,35 @@ public class InviteCodeService {
     }
 
     /**
-     * 本页邀请码里被谁用了：一次 in 查询把用户行捞回来，避免列表逐行查用户（N+1）。
+     * 批量查用户行：一页邀请码里的使用者、生成人合并成一次 in 查询，避免列表逐行查用户（N+1）。
      *
-     * @return userId → 用户行；未使用的码不会出现在结果里，使用者已被删除的也查不到
+     * @return userId → 用户行；null / 0 这类无效 id 会被过滤，查不到的人（已删除）不在结果里
      */
-    public Map<Long, User> usersUsedBy(List<InviteCode> codes) {
-        List<Long> ids = codes.stream()
-                .map(InviteCode::getUsedBy)
+    public Map<Long, User> usersByIds(List<Long> ids) {
+        List<Long> distinct = ids.stream()
                 .filter(Objects::nonNull)
+                .filter(id -> id > 0)
                 .distinct()
                 .toList();
-        if (ids.isEmpty()) {
+        if (distinct.isEmpty()) {
             return Map.of();
         }
-        List<User> users = userMapper.selectBatchIds(ids);
+        List<User> users = userMapper.selectBatchIds(distinct);
         Map<Long, User> map = new HashMap<>(users.size());
         for (User user : users) {
             map.put(user.getId(), user);
         }
         return map;
+    }
+
+    /** 本页邀请码里被谁用了。未使用的码不会出现在结果里，使用者已被删除的也查不到。 */
+    public Map<Long, User> usersUsedBy(List<InviteCode> codes) {
+        return usersByIds(codes.stream().map(InviteCode::getUsedBy).toList());
+    }
+
+    /** 本页邀请码分别是谁生成的。系统生成的 created_by=0 不会出现在结果里。 */
+    public Map<Long, User> usersCreatedBy(List<InviteCode> codes) {
+        return usersByIds(codes.stream().map(InviteCode::getCreatedBy).toList());
     }
 
     /**
@@ -172,7 +219,24 @@ public class InviteCodeService {
             throw BizException.conflict("该邀请码已是「" + existing.getStatus() + "」状态，无需重复作废");
         }
         log.info("邀请码已作废 code={}", code);
-        return inviteCodeMapper.selectOne(Wrappers.<InviteCode>lambdaQuery().eq(InviteCode::getCode, code));
+        InviteCode revoked = inviteCodeMapper.selectOne(
+                Wrappers.<InviteCode>lambdaQuery().eq(InviteCode::getCode, code));
+        if (revoked != null) {
+            auditService.record(AuditActions.TABLE_INVITE, revoked.getId(), AuditActions.INVITE_REVOKE,
+                    "作废邀请码 " + code + "（原状态：未使用）");
+        }
+        return revoked;
+    }
+
+    /** 后台红点数：码被用了但商家还没点开过邀请码管理。 */
+    public long unreadCount() {
+        return inviteCodeMapper.countUnread();
+    }
+
+    /** 商家点开邀请码管理后清红点。只改 read_at，不影响核销与状态。 */
+    @Transactional
+    public int markRead() {
+        return inviteCodeMapper.markRead();
     }
 
     /** 该用户是否曾用邀请码进入过。登录时判准入用，只查索引不扫表。 */

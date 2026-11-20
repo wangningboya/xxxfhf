@@ -23,6 +23,7 @@ public final class AuditActions {
 
     public static final String TABLE_ADDRESS = "address";
     public static final String TABLE_USER = "user";
+    public static final String TABLE_INVITE = "invite_code";
 
     /* ---------------- 地址 ---------------- */
 
@@ -48,6 +49,13 @@ public final class AuditActions {
     /** 用户在小程序里自己注销（不是商家删人）：删除或匿名化，记录里只留昵称与账号尾号 */
     public static final String USER_SELF_DELETE = "user.selfDelete";
 
+    /* ---------------- 邀请码 ---------------- */
+
+    /** 生成邀请码：单张与批量都记，批量时一张一行，事后能对上是哪次发的 */
+    public static final String INVITE_CREATE = "invite.create";
+    /** 作废邀请码：只作废未使用的码，记下来是为了「谁把哪张码收了」可追溯 */
+    public static final String INVITE_REVOKE = "invite.revoke";
+
     /** 筛选下拉用；顺序即页面展示顺序，按业务域成组 */
     private static final List<Action> ALL = List.of(
             new Action(ADDRESS_CREATE, "新增地址", TABLE_ADDRESS),
@@ -64,7 +72,9 @@ public final class AuditActions {
             new Action(USER_PROMOTE, "指定为商家", TABLE_USER),
             new Action(USER_PHONE, "修改手机号", TABLE_USER),
             new Action(USER_PHONE_VIEW, "查看完整手机号", TABLE_USER),
-            new Action(USER_SELF_DELETE, "用户自助注销", TABLE_USER)
+            new Action(USER_SELF_DELETE, "用户自助注销", TABLE_USER),
+            new Action(INVITE_CREATE, "生成邀请码", TABLE_INVITE),
+            new Action(INVITE_REVOKE, "作废邀请码", TABLE_INVITE)
     );
 
     private AuditActions() {

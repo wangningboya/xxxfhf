@@ -159,6 +159,7 @@ public class AuditService {
         return switch (tableName) {
             case AuditActions.TABLE_ADDRESS -> "地址";
             case AuditActions.TABLE_USER -> "用户";
+            case AuditActions.TABLE_INVITE -> "邀请码";
             default -> tableName;
         };
     }

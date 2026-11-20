@@ -120,7 +120,7 @@
   <view class="nick-mask" wx:if="{{needNickName}}">
     <view class="nick-panel">
       <view class="nick-title">先留个称呼</view>
-      <view class="nick-desc">商家审核时靠它认出你，填一次就好。</view>
+      <view class="nick-desc">方便商家认出你，填一次就好。</view>
       <input
         class="nick-input"
         type="nickname"
