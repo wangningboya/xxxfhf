@@ -4,10 +4,12 @@
  * 为什么不做服务端购物车：购物车在「下单成功」那一刻就失去意义，
  * 为它建表、建接口、处理多端同步，成本远大于收益。份数真正的约束在下单时由服务端原子占用。
  *
- * 一条购物车只对应一个供餐日：切到另一个供餐日就清空，避免把明天的菜下到后天的单里。
+ * 一条购物车只对应「明天」那份菜单：切供餐日不清空，跨 0 点（车里的日期 ≤ 今天）才算过期。
  *
  * 同一盒饭选了不同规格算两行（key 里带规格选项），否则改规格会把前一行覆盖掉。
  */
+
+const { dateStr } = require('./format');
 
 const KEY = 'meal_cart';
 
@@ -84,4 +86,35 @@ function goodsAmount(cart) {
   }, 0);
 }
 
-module.exports = { load, save, clear, addLine, setQty, count, goodsAmount, lineKey, empty };
+/**
+ * 购物车是否已过期：车里的供餐日 ≤ 今天。
+ *
+ * 加购时写入的 serveDate 恒为「明天」，过了 0 点它就变成今天，服务端只收明天，
+ * 这一车已经不可能提交。日期是 yyyy-MM-dd，字符串序就是日期序，不必转 Date。
+ */
+function isStale(cart, today) {
+  return !!cart && !!cart.serveDate && cart.serveDate <= (today || dateStr());
+}
+
+/** 过期就直接清车，返回是否真清了（页面据此决定要不要提示） */
+function expireIfStale(today) {
+  if (!isStale(load(), today)) {
+    return false;
+  }
+  clear();
+  return true;
+}
+
+module.exports = {
+  load,
+  save,
+  clear,
+  addLine,
+  setQty,
+  count,
+  goodsAmount,
+  lineKey,
+  empty,
+  isStale,
+  expireIfStale,
+};

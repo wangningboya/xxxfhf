@@ -45,11 +45,46 @@ Page({
 
   onShow() {
     this.refreshCartBar();
+    this.scheduleMidnight();
     if (this.loadingNow) {
       return;
     }
     this.loadingNow = true;
     this.init();
+  },
+
+  onHide() {
+    this.clearMidnightTimer();
+  },
+
+  onUnload() {
+    this.clearMidnightTimer();
+  },
+
+  /**
+   * 跨 0 点的定时器：页面开着也要当场作废购物车、把日期推进到新的一天。
+   *
+   * 只挂在点餐页（用户停留最久的入口页）；切走就清掉，回来由 onShow 重挂。
+   * 后台挂起时定时器不一定准点触发，所以 onShow 的 refreshCartBar 还要再判一次。
+   */
+  scheduleMidnight() {
+    this.clearMidnightTimer();
+    const now = new Date();
+    const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1);
+    this.midnightTimer = setTimeout(() => {
+      this.midnightTimer = null;
+      // refreshCartBar 里会作废过期购物车；init 会把日期推进到新的一天
+      this.refreshCartBar();
+      this.init();
+      this.scheduleMidnight();
+    }, next.getTime() - now.getTime());
+  },
+
+  clearMidnightTimer() {
+    if (this.midnightTimer) {
+      clearTimeout(this.midnightTimer);
+      this.midnightTimer = null;
+    }
   },
 
   init() {
@@ -77,7 +112,11 @@ Page({
         if (config) {
           this.applyConfig(config);
         }
-        const active = this.data.activeDate || (this.data.dates[0] && this.data.dates[0].date) || '';
+        // 保留用户当前选中的供餐日；跨过 0 点后它已经变成「今天」，
+        // 不再是可看的日期，落回「明天」（小程序后台挂起时定时器不一定准点，兜在这里）
+        const active = this.data.activeDate && this.data.activeDate > today
+          ? this.data.activeDate
+          : ((this.data.dates[0] && this.data.dates[0].date) || '');
         this.setData({ loading: false, activeDate: active });
         this.loadMenu(active);
         this.probeDayAfter(dayAfter, today, tomorrow);
@@ -175,7 +214,12 @@ Page({
       });
   },
 
-  /** 切换供餐日。后天只能看不能买，但仍要能看。 */
+  /**
+   * 切换供餐日。
+   *
+   * 后天只能看不能买，但仍要能看；切换日期只是换一份菜单看，
+   * 与车里的餐无关 —— 购物车只在跨 0 点过期（需求 4.6、D-36）。
+   */
   onSwitchDate(e) {
     const date = e.currentTarget.dataset.date;
     if (!date) {
@@ -183,23 +227,6 @@ Page({
     }
     // 从「全部菜单」切回来时，即使还是同一个供餐日也要生效
     if (!this.data.allActive && date === this.data.activeDate) {
-      return;
-    }
-    const cart = cartUtil.load();
-    if (cart.items.length && cart.serveDate && cart.serveDate !== date) {
-      wx.showModal({
-        title: '切换供餐日',
-        content: '购物车里是另一个供餐日的餐，切换后需要重新选，继续吗？',
-        success: (res) => {
-          if (!res.confirm) {
-            return;
-          }
-          cartUtil.clear();
-          this.refreshCartBar();
-          this.setData({ activeDate: date, allActive: false });
-          this.loadMenu(date);
-        },
-      });
       return;
     }
     this.setData({ activeDate: date, allActive: false });
@@ -292,7 +319,8 @@ Page({
 
   addToCart(line) {
     let cart = cartUtil.load();
-    if (cart.serveDate && cart.serveDate !== this.data.activeDate) {
+    // 跨 0 点后旧车已不可能提交，静默换成新车；切换日期不用清
+    if (cartUtil.isStale(cart)) {
       cart = cartUtil.empty();
     }
     const next = cartUtil.addLine(cart, line);
@@ -303,6 +331,7 @@ Page({
   },
 
   refreshCartBar() {
+    cartUtil.expireIfStale();
     const cart = cartUtil.load();
     this.setData({ cartCount: cartUtil.count(cart) });
   },

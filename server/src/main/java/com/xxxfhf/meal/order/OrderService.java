@@ -147,8 +147,12 @@ public class OrderService {
         if (serveDate == null) {
             serveDate = clock.tomorrow();
         }
-        // 只有明天可下单：后天的菜单只能看（需求 4.5）
-        if (!serveDate.equals(clock.tomorrow())) {
+        // 只有明天可下单：后天只能预览，今天 / 过去则是已经结束（需求 4.5、4.6）
+        LocalDate tomorrow = clock.tomorrow();
+        if (serveDate.isBefore(tomorrow)) {
+            throw BizException.conflict("该供餐日的下单已结束，请重新选择");
+        }
+        if (serveDate.isAfter(tomorrow)) {
             throw BizException.param("当前只能预订明天的餐，后天的菜单明天才开放下单");
         }
         if (!skipCutoff && clock.isCutoff(serveDate)) {

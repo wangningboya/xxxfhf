@@ -45,6 +45,13 @@ Page({
       wx.navigateBack();
       return;
     }
+    // 跨 0 点后车里是昨天的餐，服务端一定拒单，不如当场清掉退回购物车
+    if (cartUtil.isStale(cart)) {
+      cartUtil.clear();
+      wx.showToast({ title: '购物车已过期，请重新选择', icon: 'none' });
+      wx.navigateBack();
+      return;
+    }
 
     const lines = cart.items.map((item) => {
       const specDelta = (item.specDeltas || []).reduce((s, v) => s + Number(v || 0), 0);
@@ -80,13 +87,24 @@ Page({
     });
   },
 
-  /** 截单检测：过了截单点不能提交（判定以服务端为准，这里只做前置提示） */
+  /**
+   * 截单检测：过了截单点不能提交（判定以服务端为准，这里只做前置提示）。
+   *
+   * 无参请求 /menu —— 服务端按自己的「明天」返回。日期对不上说明跨天了，
+   * 车内餐已不可能下单：清车、提示、退回购物车。
+   */
   checkCutoff() {
     if (!this.data.serveDate) {
       return;
     }
-    request({ url: '/menu?serveDate=' + this.data.serveDate })
+    request({ url: '/menu' })
       .then((menu) => {
+        if (menu.serveDate !== this.data.serveDate) {
+          cartUtil.clear();
+          wx.showToast({ title: '购物车已过期，请重新选择', icon: 'none' });
+          wx.navigateBack();
+          return;
+        }
         this.setData({ cutoff: !!menu.cutoff });
         this.recalc();
       })

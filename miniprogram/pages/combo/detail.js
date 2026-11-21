@@ -208,7 +208,8 @@ Page({
 
     const item = this.data.item;
     let cart = cartUtil.load();
-    if (cart.serveDate && cart.serveDate !== this.data.serveDate) {
+    // 只有跨 0 点才算过期；本页的 serveDate 只是这盒饭属于哪天，不用来清车
+    if (cartUtil.isStale(cart)) {
       cart = cartUtil.empty();
     }
     const next = cartUtil.addLine(cart, {

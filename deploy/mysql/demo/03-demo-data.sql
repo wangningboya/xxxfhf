@@ -128,9 +128,9 @@ VALUES
 -- 区域（配送片区）—— 按 uk_region_name 幂等，不清空：已有地址通过 region_id 引用它
 -- -----------------------------------------------------------------------------
 INSERT INTO `region` (`name`, `remark`, `sort`, `status`) VALUES
-    ('幸福小区', '东门进，找 3 栋集中放货架', 1, 'enabled'),
-    ('阳光花园', '南门保安亭自取',           2, 'enabled'),
-    ('科技园 A 座', '前台代收，报取餐码',     3, 'enabled')
+    ('南部商务区', '南部商务区', 1, 'enabled'),
+    ('姜山医院', '姜山医院',           2, 'enabled'),
+    ('天一附近', '天一附近',     3, 'enabled')
 ON DUPLICATE KEY UPDATE `name` = `name`;
 
 SET @combo_a = (SELECT `id` FROM `combo` WHERE `name` = 'A 餐' LIMIT 1);

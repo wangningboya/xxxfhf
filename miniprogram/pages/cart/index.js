@@ -18,6 +18,7 @@ Page({
   },
 
   refresh() {
+    const expired = cartUtil.expireIfStale();
     const cart = cartUtil.load();
     const lines = cart.items.map((item) => {
       const specDelta = (item.specDeltas || []).reduce((s, v) => s + Number(v || 0), 0);
@@ -40,10 +41,18 @@ Page({
       count: cartUtil.count(cart),
       amountText: yuan(cartUtil.goodsAmount(cart)),
     });
+    if (expired) {
+      wx.showToast({ title: '购物车已过期，请重新选择', icon: 'none' });
+    }
     this.checkCutoff();
   },
 
-  /** 截单检测：过了截单点车内餐品自动失效（判定以服务端为准，这里只做提示） */
+  /**
+   * 截单检测：过了截单点车内餐品自动失效（判定以服务端为准，这里只做提示）。
+   *
+   * 无参请求 /menu —— 服务端按自己的「明天」返回。顺带复核车里的日期：
+   * 对不上说明已经跨天，这车不可能下单了，当场清掉。
+   */
   checkCutoff() {
     if (!this.data.serveDate || !this.data.lines.length) {
       if (this.data.cutoff) {
@@ -51,8 +60,14 @@ Page({
       }
       return;
     }
-    request({ url: '/menu?serveDate=' + this.data.serveDate })
+    request({ url: '/menu' })
       .then((menu) => {
+        if (menu.serveDate !== this.data.serveDate) {
+          cartUtil.clear();
+          this.refresh();
+          wx.showToast({ title: '购物车已过期，请重新选择', icon: 'none' });
+          return;
+        }
         this.setData({ cutoff: !!menu.cutoff });
       })
       .catch(() => {
