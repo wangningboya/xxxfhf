@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -69,17 +70,113 @@ public class AddressService {
     }
 
     /**
+     * 用户端「我的地址」列表：实体字段 + 服务端算好的可用性（N-44）。
+     *
+     * <p>为什么可用性要服务端算：能不能下单取决于三处（审核状态 / 地址启用 / 区域启用）。
+     * 这三个判断原先散落在地址列表页、确认订单页和下单接口里各写一遍，
+     * 改一处漏一处就会出现「页面能点、提交被打回」。现在只有一个实现点（见 {@link #usabilityOf}），
+     * 前端只负责把 `usable = false` 的置灰、把 `unusableReason` 显示出来。
+     */
+    public List<AddressView> listViewsByUser(Long userId) {
+        List<Address> addresses = listByUser(userId);
+        Map<Long, String> regionStatuses = regionService.statusesOf(
+                addresses.stream().map(Address::getRegionId).toList());
+        List<AddressView> views = new ArrayList<>(addresses.size());
+        for (Address address : addresses) {
+            views.add(viewOf(address, regionStatusOf(regionStatuses, address.getRegionId())));
+        }
+        return views;
+    }
+
+    private static AddressView viewOf(Address address, String regionStatus) {
+        Usability usability = usabilityOf(address, regionStatus);
+        boolean enabled = isEnabled(address);
+        // 编辑入口只对「两侧都启用」的地址开放。停用的地址让用户改没有意义，
+        // 更糟的是他能把区域换掉来绕过停用（D-34）；待确认 / 已驳回仍可改，那是审核流程的一部分
+        boolean editable = enabled && "enabled".equals(regionStatus);
+        return new AddressView(address.getId(), address.getRegionId(), address.getRegionName(),
+                address.getContactName(), address.getPhone(), address.getDetail(), address.getTag(),
+                address.getSource(), address.getStatus(), address.getRejectReason(),
+                enabled, address.getDisabledReason(), regionStatus,
+                usability.usable(), usability.label(), editable);
+    }
+
+    private static String regionStatusOf(Map<Long, String> statuses, Long regionId) {
+        // 查不到当作启用：区域被物理删除后遗留的地址不该让整页列表报错，可用性另有兜底
+        String status = statuses.get(regionId);
+        return status == null ? "enabled" : status;
+    }
+
+    /**
+     * 一条地址能不能用于下单，以及不能时的文案。
+     *
+     * <p>顺序固定：**审核状态 → 地址启用 → 区域启用**。先审核是因为它决定「这条地址算不算数」，
+     * 一个还没通过的地址连停用与否都谈不上；区域放最后是因为它是最外层的开关，
+     * 商家停用区域时看到的原因应该是「区域已停用」，而不是底下每条的各自原因。
+     *
+     * @param regionStatus 该地址所属区域的状态，由调用方批量查好传进来（避免逐条查库）
+     */
+    public static Usability usabilityOf(Address address, String regionStatus) {
+        if (!"active".equals(address.getStatus())) {
+            if ("rejected".equals(address.getStatus())) {
+                String reason = trimToNull(address.getRejectReason());
+                return new Usability(false,
+                        reason == null ? "已驳回" : "已驳回：" + reason,
+                        "该地址已被驳回，请修改或重新添加");
+            }
+            return new Usability(false, "待商家确认", "该地址还在等待商家确认，暂时不能用于下单");
+        }
+        if (!isEnabled(address)) {
+            String reason = trimToNull(address.getDisabledReason());
+            return new Usability(false,
+                    reason == null ? "已停用" : "已停用：" + reason,
+                    "该地址已被商家停用，暂时不能用于下单");
+        }
+        if ("disabled".equals(regionStatus)) {
+            return new Usability(false, "所属区域已停用", "该地址所在区域已停用，暂时不能配送到该区域");
+        }
+        return new Usability(true, null, null);
+    }
+
+    /** 库里默认 1，Java 侧可能是 null（老数据 / 未回填），一律当作启用 */
+    private static boolean isEnabled(Address address) {
+        return !Boolean.FALSE.equals(address.getEnabled());
+    }
+
+    /**
+     * 下单前的地址校验（N-44）：存在性、归属照旧硬校验，可用性可被 {@code force} 跳过。
+     *
+     * @param force 只有代客下单传 true —— 商家在电话里已经和顾客确认过地址，
+     *              拦死等于否定线下判断。它只跳过可用性，
+     *              「地址不存在」「不是本人的地址」这类仍然拒
+     */
+    public AddressCheck requireUsableForOrder(Long addressId, Long userId, boolean force) {
+        Address address = require(addressId);
+        if (userId != null && !userId.equals(address.getUserId())) {
+            throw BizException.forbidden("只能使用自己的收货地址");
+        }
+        Map<Long, String> statuses = regionService.statusesOf(
+                Collections.singletonList(address.getRegionId()));
+        Usability usability = usabilityOf(address, regionStatusOf(statuses, address.getRegionId()));
+        if (!usability.usable() && !force) {
+            throw BizException.conflict(usability.message());
+        }
+        return new AddressCheck(address, usability);
+    }
+
+    /**
      * 商家端地址队列（跨用户），默认看待确认。
      *
      * 为什么不再以「选用户」为入口：工作台那个「待确认地址」数字本来就是全库口径，
      * 点进来却落在一个必须先选人的空页面上，等于让人自己去猜该看谁。地址审核天然是队列。
      *
      * @param status   active / pending / rejected，空则全部
+     * @param enabled  1 只看启用 / 0 只看停用 / 空则全部（N-44）
      * @param userId   只看某个用户的（原来的用法，现在降级成筛选条件）
      * @param keyword  联系人 / 手机号 / 详细地址模糊匹配
      */
-    public PageResult<AddressRow> page(String status, Long userId, Long regionId, String keyword,
-                                       int page, int pageSize) {
+    public PageResult<AddressRow> page(String status, Integer enabled, Long userId, Long regionId,
+                                       String keyword, int page, int pageSize) {
         String kw = keyword == null ? "" : keyword.trim();
         // 待确认队列要「先来的先审」，所以正序；其余页签看最近发生的，倒序。
         // 片段是常量，不含用户输入。
@@ -91,6 +188,7 @@ public class AddressService {
         Page<Address> pager = new Page<>(Math.max(page, 1), Math.min(Math.max(pageSize, 1), 100));
         IPage<Address> result = addressMapper.selectPage(pager, Wrappers.<Address>lambdaQuery()
                 .eq(status != null && !status.isBlank(), Address::getStatus, status)
+                .eq(enabled != null, Address::getEnabled, enabled)
                 .eq(userId != null, Address::getUserId, userId)
                 .eq(regionId != null, Address::getRegionId, regionId)
                 .and(!kw.isEmpty(), w -> w.like(Address::getContactName, kw)
@@ -99,9 +197,12 @@ public class AddressService {
                 .last(orderBy));
 
         Map<Long, User> users = usersOf(result.getRecords());
+        Map<Long, String> regionStatuses = regionService.statusesOf(
+                result.getRecords().stream().map(Address::getRegionId).toList());
         List<AddressRow> rows = new ArrayList<>(result.getRecords().size());
         for (Address address : result.getRecords()) {
             User user = users.get(address.getUserId());
+            String regionStatus = regionStatusOf(regionStatuses, address.getRegionId());
             rows.add(new AddressRow(address.getId(), address.getUserId(),
                     user == null ? null : user.getNickName(),
                     // 账号手机号只做「这个地址是谁的」参考，给掩码；
@@ -111,7 +212,9 @@ public class AddressService {
                     address.getRegionId(), address.getRegionName(), address.getContactName(),
                     address.getPhone(), address.getDetail(), address.getTag(),
                     address.getSource(), address.getStatus(), address.getRejectReason(),
-                    address.getCreatedAt()));
+                    address.getCreatedAt(),
+                    isEnabled(address), address.getDisabledReason(), regionStatus,
+                    usabilityOf(address, regionStatus).usable()));
         }
         return new PageResult<>(rows, result.getTotal(), result.getCurrent(), result.getSize());
     }
@@ -138,6 +241,10 @@ public class AddressService {
         Address address = cmd.id() == null ? new Address() : require(cmd.id());
         if (address.getId() != null && !cmd.userId().equals(address.getUserId())) {
             throw BizException.param("不能把地址改到其他用户名下");
+        }
+        if (address.getId() == null) {
+            // 新建的地址一律启用；停用是商家对既有地址的处置，不是新建时的选项
+            address.setEnabled(true);
         }
         address.setUserId(cmd.userId());
         fill(address, cmd, cmd.userId());
@@ -170,10 +277,23 @@ public class AddressService {
         Address address;
         if (creating) {
             address = new Address();
+            address.setEnabled(true);
         } else {
             address = require(cmd.id());
             if (!userId.equals(address.getUserId())) {
                 throw BizException.forbidden("只能修改自己的地址");
+            }
+            // 停用的地址不给用户改（D-34）。只在前端把编辑入口藏起来是不够的：
+            // 改 URL 传一个 id 就能提交，而「把地址换到别的区域」正好绕开区域停用。
+            // 但待确认 / 已驳回仍然放行 —— 驳回后用户必须能改完重新提交，那是审核流程本身
+            if (!isEnabled(address)) {
+                throw BizException.conflict("该地址已被商家停用，暂时不能修改");
+            }
+            String regionStatus = regionStatusOf(
+                    regionService.statusesOf(Collections.singletonList(address.getRegionId())),
+                    address.getRegionId());
+            if ("disabled".equals(regionStatus)) {
+                throw BizException.conflict("该地址所在区域已停用，暂时不能修改");
             }
         }
         address.setUserId(userId);
@@ -259,6 +379,43 @@ public class AddressService {
         auditService.record(AuditActions.TABLE_ADDRESS, addressId, action,
                 verb + "：" + describe(address)
                         + ("rejected".equals(target) ? "｜原因：" + trimmed : ""));
+        return address;
+    }
+
+    /**
+     * 地址启用 / 停用（N-44）。与审核状态正交：不动 `status`，只开关 {@code enabled}。
+     *
+     * <p>**不校验区域状态**：区域停用时照样允许商家先处置地址，否则「区域因装修停一周」
+     * 期间商家什么都不能整理，只能等区域恢复。
+     *
+     * <p>启用时把停用原因一起清掉。`updateById` 会跳过 null 字段，
+     * 所以必须用一次条件更新同时写 `enabled` 与 `disabled_reason`，
+     * 否则上次的原因会挂在一条已启用的地址上 —— 用户端就会看到「已停用：装修」却又能下单。
+     *
+     * @param reason 停用原因，可选填，≤200 字；启用时忽略
+     */
+    @Transactional
+    public Address updateEnabled(Long addressId, boolean enabled, String reason) {
+        Address address = require(addressId);
+        String trimmed = trimToNull(reason);
+        if (trimmed != null && trimmed.length() > 200) {
+            throw BizException.param("停用原因最多 200 字");
+        }
+        String target = enabled ? null : trimmed;
+
+        addressMapper.update(null, AuditHelper.stamp(Wrappers.<Address>lambdaUpdate()
+                .set(Address::getEnabled, enabled)
+                .set(Address::getDisabledReason, target)
+                .eq(Address::getId, addressId)));
+
+        address.setEnabled(enabled);
+        address.setDisabledReason(target);
+        log.info("地址启用状态变更 id={} enabled={} 原因={}", addressId, enabled, target);
+
+        String action = enabled ? AuditActions.ADDRESS_ENABLE : AuditActions.ADDRESS_DISABLE;
+        String verb = enabled ? "启用地址" : "停用地址";
+        auditService.record(AuditActions.TABLE_ADDRESS, addressId, action,
+                verb + "：" + describe(address) + (target == null ? "" : "｜原因：" + target));
         return address;
     }
 
@@ -358,16 +515,51 @@ public class AddressService {
     }
 
     /**
-     * 地址队列行：地址本体 + 归属账号。
+     * 地址队列行：地址本体 + 归属账号 + 可用性判定结果。
      *
      * 不直接把实体塞进响应：表格要看「这是谁提的」，而实体上没有昵称；
      * 同时审计四列对前端隐藏，提交时间只能由这里显式带出来。
+     *
+     * @param enabled        地址自身的启用状态（N-44）
+     * @param disabledReason 停用原因，启用时为 null
+     * @param regionStatus   所属区域状态；区域停用时这里为 disabled，而 enabled 可能仍是 true
+     * @param usable         三个条件相乘后的结论，前端直接用它决定标签颜色，不再自己拼判断
      */
     public record AddressRow(Long id, Long userId, String userName, String userPhone,
                              String userAuditStatus, Long regionId, String regionName,
                              String contactName, String phone, String detail, String tag,
                              String source, String status, String rejectReason,
-                             LocalDateTime createdAt) {
+                             LocalDateTime createdAt,
+                             boolean enabled, String disabledReason, String regionStatus,
+                             boolean usable) {
+    }
+
+    /**
+     * 用户端地址视图：实体字段 + 服务端算好的可用性（N-44）。
+     *
+     * @param usable         能不能用于下单
+     * @param unusableReason 不能时的原因，可用时为 null。如「已停用：装修」「所属区域已停用」
+     * @param editable       能不能改：地址停用或区域停用都不许改（D-34），
+     *                       待确认 / 已驳回可以改（改了回 pending 等商家重新确认）
+     */
+    public record AddressView(Long id, Long regionId, String regionName, String contactName,
+                              String phone, String detail, String tag, String source,
+                              String status, String rejectReason, boolean enabled,
+                              String disabledReason, String regionStatus, boolean usable,
+                              String unusableReason, boolean editable) {
+    }
+
+    /**
+     * 可用性判定结果。
+     *
+     * @param label   给用户看的一句话，直接显示在地址卡片上；可用时为 null
+     * @param message 不能下单时抛出去的 409 文案；可用时为 null
+     */
+    public record Usability(boolean usable, String label, String message) {
+    }
+
+    /** 下单前校验结果：地址本体 + 判定结论（force 放行时 usable 仍为 false，调用方据此留痕） */
+    public record AddressCheck(Address address, Usability usability) {
     }
 
     /**

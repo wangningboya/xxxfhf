@@ -35,11 +35,11 @@ public class RegionController {
         return ApiResponse.ok(regionService.listEnabled());
     }
 
-    /** 商家端：全部区域。 */
+    /** 商家端：全部区域，带各区域下的地址数（区域管理页展示 + 停用前的影响面提示）。 */
     @GetMapping("/admin/region/list")
     @RequirePerm(Perms.REGION_MANAGE)
-    public ApiResponse<List<Region>> listForAdmin() {
-        return ApiResponse.ok(regionService.listAll());
+    public ApiResponse<List<RegionService.RegionView>> listForAdmin() {
+        return ApiResponse.ok(regionService.listAllView());
     }
 
     @PostMapping("/admin/region/save")

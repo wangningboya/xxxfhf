@@ -34,10 +34,20 @@
         v-model="filterRegionId"
         clearable
         placeholder="按区域筛选"
-        style="width: 160px"
+        style="width: 180px"
         @change="reload"
       >
-        <el-option v-for="region in regions" :key="region.id" :label="region.name" :value="region.id" />
+        <el-option
+          v-for="region in regions"
+          :key="region.id"
+          :label="regionLabel(region)"
+          :value="region.id"
+        />
+      </el-select>
+      <el-select v-model="filterEnabled" style="width: 130px" @change="reload">
+        <el-option label="全部" value="" />
+        <el-option label="仅启用" :value="1" />
+        <el-option label="仅停用" :value="0" />
       </el-select>
       <el-input
         v-model="keyword"
@@ -56,6 +66,8 @@
 
     <div class="hint">
       待确认按提交时间正序排（先来的先审）。通过后地址立刻可用于下单；驳回必须写原因，用户端会原样显示。
+      <br />
+      区域停用后，该区域下的地址一律不可用于下单（地址本身的状态不用改，区域恢复启用即自动恢复）；地址也能单独停用，但两者互不干扰。
     </div>
 
     <el-table v-loading="loading" :data="rows" border size="small" style="width: 100%">
@@ -102,7 +114,26 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="220" fixed="right">
+      <!-- 审核状态 × 地址启用 × 区域状态，三者相乘才是「能不能下单」的口径 -->
+      <el-table-column label="可下单" width="150">
+        <template #default="{ row }">
+          <el-tag :type="row.usable ? 'success' : 'info'" size="small">
+            {{ row.usable ? '可用' : '不可用' }}
+          </el-tag>
+          <div v-if="!row.usable" class="unusable-reason">{{ unusableText(row) }}</div>
+        </template>
+      </el-table-column>
+      <el-table-column label="启用状态" width="130">
+        <template #default="{ row }">
+          <el-tag :type="row.enabled ? 'success' : 'danger'" size="small" effect="plain">
+            {{ row.enabled ? '启用' : '停用' }}
+          </el-tag>
+          <div v-if="!row.enabled && row.disabledReason" class="unusable-reason">
+            {{ row.disabledReason }}
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="280" fixed="right">
         <template #default="{ row }">
           <el-button link type="primary" @click="openForm(row)">编辑</el-button>
           <el-button v-if="row.status !== 'active'" link type="success" @click="setStatus(row, 'active')">
@@ -114,6 +145,8 @@
           <el-button v-if="row.status === 'active'" link type="warning" @click="setStatus(row, 'pending')">
             收回
           </el-button>
+          <el-button v-if="row.enabled" link type="warning" @click="onDisable(row)">停用</el-button>
+          <el-button v-else link type="success" @click="onEnable(row)">启用</el-button>
           <el-button link type="danger" plain @click="onDelete(row)">删除</el-button>
         </template>
       </el-table-column>
@@ -157,9 +190,16 @@
         </el-form-item>
         <el-form-item label="区域" required>
           <el-select v-model="form.regionId" placeholder="选择区域" style="width: 100%">
-            <el-option v-for="region in regions" :key="region.id" :label="region.name" :value="region.id" />
+            <el-option
+              v-for="region in formRegionOptions"
+              :key="region.id"
+              :label="regionLabel(region)"
+              :value="region.id"
+            />
           </el-select>
-          <div class="muted">区域由「区域管理」维护，停用的区域不在此列出</div>
+          <div class="muted">
+            区域由「区域管理」维护，停用的区域不能新增地址（改门牌仍可保存）；筛选项里能看到已停用的区域，是为了把受影响的地址筛出来。
+          </div>
         </el-form-item>
         <el-form-item label="联系人" required>
           <el-input v-model="form.contactName" maxlength="20" />
@@ -186,7 +226,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { useDictStore } from '../../stores/dict';
 import http from '../../api';
@@ -198,6 +238,7 @@ const dict = useDictStore();
 const status = ref('pending');
 const filterUserId = ref('');
 const filterRegionId = ref('');
+const filterEnabled = ref('');
 const keyword = ref('');
 
 const rows = ref([]);
@@ -209,12 +250,34 @@ const pendingCount = ref(0);
 
 const regions = ref([]);
 
+/** 区域筛选用全量（含停用），新增/编辑的选项另算 —— 停用区域不能再挂新地址 */
+const formRegionOptions = computed(() =>
+  regions.value.filter((region) => region.status !== 'disabled' || region.id === form.value.regionId)
+);
+
+function regionLabel(region) {
+  const suffix = region.status === 'disabled' ? '（已停用）' : '';
+  const count = typeof region.addressCount === 'number' ? '（' + region.addressCount + ' 个地址）' : '';
+  return region.name + suffix + count;
+}
+
+function loadRegions() {
+  // 用后台接口取全量区域：用户端的 /region/list 只返回启用中的，停用区域筛不出来
+  http
+    .get('/admin/region/list')
+    .then((list) => {
+      regions.value = list || [];
+    })
+    .catch(() => {});
+}
+
 function load() {
   loading.value = true;
   http
     .get('/admin/address/list', {
       params: {
         status: status.value || undefined,
+        enabled: filterEnabled.value === '' ? undefined : filterEnabled.value,
         userId: filterUserId.value || undefined,
         regionId: filterRegionId.value || undefined,
         keyword: keyword.value || undefined,
@@ -240,6 +303,7 @@ function reload() {
 function onReset() {
   filterUserId.value = '';
   filterRegionId.value = '';
+  filterEnabled.value = '';
   keyword.value = '';
   reload();
 }
@@ -318,7 +382,7 @@ function openForm(row) {
       id: '',
       userId: filterUserId.value || '',
       userName: '',
-      regionId: regions.value.length ? regions.value[0].id : '',
+      regionId: regions.value.length ? formRegionOptions.value[0]?.id || '' : '',
       contactName: '',
       phone: '',
       detail: '',
@@ -379,6 +443,56 @@ function statusLabel(value) {
 
 function statusTag(value) {
   return { active: 'success', pending: 'warning', rejected: 'danger' }[value] || 'info';
+}
+
+/** 与后端 AddressService.usabilityOf 同序：审核状态 → 地址启用 → 区域停用 */
+function unusableText(row) {
+  if (row.status === 'pending') return '待商家确认';
+  if (row.status === 'rejected') return row.rejectReason ? '已驳回：' + row.rejectReason : '已驳回';
+  if (!row.enabled) return row.disabledReason ? '已停用：' + row.disabledReason : '已停用';
+  if (row.regionStatus === 'disabled') return '所属区域已停用';
+  return '不可用';
+}
+
+/* ==================== 地址启用 / 停用 ==================== */
+
+function setEnabled(row, enabled, reason) {
+  http
+    .post('/admin/address/enabled', { addressId: row.id, enabled, reason: reason || null })
+    .then(() => {
+      ElMessage.success(enabled ? '已启用' : '已停用');
+      load();
+      loadPendingCount();
+    })
+    .catch(() => {});
+}
+
+/**
+ * 停用原因可以不填 —— 但填了用户端会原样看到，比只显示「已停用」更能解释清楚。
+ */
+function onDisable(row) {
+  ElMessageBox.prompt(
+    '停用后该地址不能再用于新配送单（已下的订单不受影响），用户端会显示这句原因。可以不填。',
+    '停用地址',
+    {
+      confirmButtonText: '停用',
+      cancelButtonText: '取消',
+      inputType: 'textarea',
+      inputPlaceholder: '如：地址已拆迁 / 用户要求暂停配送',
+      inputValidator: (value) => ((value || '').trim().length > 200 ? '最多 200 字' : true),
+    }
+  )
+    .then(({ value }) => setEnabled(row, false, (value || '').trim()))
+    .catch(() => {});
+}
+
+function onEnable(row) {
+  ElMessageBox.confirm(
+    '启用后该地址恢复可用。如果它所属的区域仍是停用状态，则依然不能下单。确定启用？',
+    '启用地址'
+  )
+    .then(() => setEnabled(row, true))
+    .catch(() => {});
 }
 
 function formatTime(value) {
@@ -444,12 +558,7 @@ onMounted(() => {
   load();
   loadPendingCount();
   searchFilterUsers('');
-  http
-    .get('/region/list')
-    .then((list) => {
-      regions.value = list || [];
-    })
-    .catch(() => {});
+  loadRegions();
 });
 </script>
 
@@ -468,5 +577,13 @@ onMounted(() => {
 /* 未审核标记跟手机号同一行，不占额外高度 */
 .audit-tag {
   margin-left: 4px;
+}
+
+/* 不可用的原因跟在标签下面，跟驳回原因同一套观感 */
+.unusable-reason {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #8792a2;
+  line-height: 1.4;
 }
 </style>

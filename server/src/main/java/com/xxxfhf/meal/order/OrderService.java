@@ -105,26 +105,29 @@ public class OrderService {
     @Transactional
     public OrderView create(Long userId, CreateCommand cmd) {
         accessGuard.requireApproved(userId);
-        return doCreate(userId, cmd, false);
+        return doCreate(userId, cmd, false, false);
     }
 
     /**
      * 代客下单（F-H06）：商家替用户下单。
      *
-     * 与自助下单的区别只有两处：
+     * 与自助下单的区别只有三处：
      * 1. **不看截单时间** —— 顾客微信上临时说「给我来一份」，往往已经过了截单点，
      *    这恰恰是代客下单最常见的场景；截单是给顾客自助下单设的闸，不该把商家也挡在外面。
      * 2. 发起人换成操作人，但目标用户必须已通过审核，否则等于商家从后门绕过自己的审核。
+     * 3. **可以强制下单**（{@code force}，N-44）—— 地址已停用或所在区域已停用时仍然放行。
+     *    商家在电话里已经和顾客确认过送哪，拦死等于用系统规则否定线下判断；
+     *    放行会在时间轴留一条「商家强制下单：<原因>」，事后能复盘。
      *
      * 停业、限量、菜单发布状态一概照旧校验 —— 这几条是「有没有得卖」，与谁来下单无关。
      */
     @Transactional
-    public OrderView createForUser(Long targetUserId, CreateCommand cmd) {
+    public OrderView createForUser(Long targetUserId, CreateCommand cmd, boolean force) {
         accessGuard.requireApproved(targetUserId);
-        return doCreate(targetUserId, cmd, true);
+        return doCreate(targetUserId, cmd, true, force);
     }
 
-    private OrderView doCreate(Long userId, CreateCommand cmd, boolean skipCutoff) {
+    private OrderView doCreate(Long userId, CreateCommand cmd, boolean skipCutoff, boolean force) {
         String requestId = trimToNull(cmd.requestId());
         if (requestId != null && requestId.length() > 64) {
             throw BizException.param("请求号过长");
@@ -162,17 +165,21 @@ public class OrderService {
         RegionSnapshot regionSnapshot = null;
         Long regionId = null;
         String pickupSlot = null;
+        /** 强制下单时的原因，用于时间轴留痕；正常下单为 null */
+        String forcedReason = null;
 
         if ("delivery".equals(deliveryType)) {
             if (cmd.addressId() == null) {
                 throw BizException.param("配送单必须选择收货地址");
             }
-            Address address = addressService.require(cmd.addressId());
-            if (!userId.equals(address.getUserId())) {
-                throw BizException.forbidden("只能使用自己的收货地址");
-            }
-            if (!"active".equals(address.getStatus())) {
-                throw BizException.conflict("该地址还在等待商家确认，暂时不能用于下单");
+            // 地址能不能用只看这一处（可用性口径见技术文档 4.17）：
+            // 审核状态 × 地址启用 × 区域启用，三者在 AddressService 里相乘
+            AddressService.AddressCheck check =
+                    addressService.requireUsableForOrder(cmd.addressId(), userId, force);
+            Address address = check.address();
+            if (!check.usability().usable()) {
+                // 能走到这里只可能是 force = 真（否则上面已经抛了），记下来是为了留痕
+                forcedReason = check.usability().label();
             }
             regionId = address.getRegionId();
             regionSnapshot = new RegionSnapshot(address.getRegionId(), address.getRegionName());
@@ -224,9 +231,12 @@ public class OrderService {
 
         insertWithRetry(order, serveDate);
         // 时间轴第一条。代客下单（商家替用户下）时操作人自动记成商家、来源记 admin ——
-        // 留痕要记「谁点的」，不是「订单归谁」
+        // 留痕要记「谁点的」，不是「订单归谁」。
+        // 强制下单（地址不可用仍然放行）额外记一条备注，事后能看出这单没走常规校验
+        String createRemark = forcedReason == null ? null
+                : truncate("商家强制下单：" + forcedReason, OrderStatusLogService.MAX_REMARK);
         statusLogService.record(order.getId(), OrderLogActions.ORDER_CREATE, null,
-                OrderStatus.PENDING_ACCEPT, null, now);
+                OrderStatus.PENDING_ACCEPT, createRemark, now);
 
         log.info("创建订单 orderNo={} userId={} serveDate={} 金额={}分",
                 order.getOrderNo(), userId, serveDate, order.getTotalAmount());

@@ -58,3 +58,101 @@
 .bottom-bar .btn {
   flex: 1;
 }
+
+/* ==================== 区域下的地址抽屉 ==================== */
+
+.drawer-mask {
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 90;
+}
+
+.drawer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 76vh;
+  background: #ffffff;
+  border-radius: 24rpx 24rpx 0 0;
+  padding: 28rpx 24rpx 40rpx;
+  box-sizing: border-box;
+  z-index: 91;
+  display: flex;
+  flex-direction: column;
+}
+
+.drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.drawer-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.drawer-close {
+  font-size: 26rpx;
+  color: #8a8a8a;
+  padding: 8rpx 12rpx;
+}
+
+.drawer-hint {
+  margin-top: 12rpx;
+  font-size: 22rpx;
+  line-height: 1.6;
+  color: #8a8a8a;
+}
+
+.drawer-body {
+  margin-top: 16rpx;
+  flex: 1;
+  max-height: 56vh;
+}
+
+.addr-row {
+  display: flex;
+  align-items: flex-start;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid #f0f1f3;
+}
+
+.addr-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.addr-name {
+  font-size: 28rpx;
+  color: #1a1a1a;
+}
+
+.addr-phone {
+  margin-left: 12rpx;
+  font-size: 24rpx;
+  color: #8a8a8a;
+}
+
+.addr-detail {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: #4a4a4a;
+  line-height: 1.5;
+}
+
+.addr-tags {
+  margin-top: 10rpx;
+}
+
+.addr-off {
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  color: #a86b00;
+}

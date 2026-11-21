@@ -1,6 +1,7 @@
 const app = getApp();
 const { request } = require('../../utils/request');
 const dict = require('../../utils/dict');
+const { unusableText, enabledText } = require('../../utils/address');
 
 /**
  * 地址三态：待确认→通过 / 驳回，驳回必须给原因（用户端会原样显示）。
@@ -178,6 +179,8 @@ Page({
           addresses: (list || []).map((item) => ({
             ...item,
             statusText: addressStatusText(item.status),
+            enabledText: enabledText(item),
+            unusableText: unusableText(item),
           })),
         })
       )
@@ -224,9 +227,14 @@ Page({
     if (!address) {
       return;
     }
-    let index = this.data.regions.findIndex((r) => r.id === address.regionId);
+    // 选择器只列启用中的区域；地址所在区域被停用时它不在列表里，
+    // 这里把原区域补进去（标注已停用），否则 findIndex 落到 0 会把区域改错
+    const regions = this.data.regions.slice();
+    let index = regions.findIndex((r) => r.id === address.regionId);
     if (index < 0) {
+      regions.unshift({ id: address.regionId, name: (address.regionName || '原区域') + '（已停用）' });
       index = 0;
+      this.setData({ regions });
     }
     this.setData({
       form: {
@@ -343,6 +351,61 @@ Page({
     })
       .then(() => {
         wx.showToast({ title: status === 'active' ? '已通过' : '已更新', icon: 'success' });
+        this.loadAddresses(this.data.selectedUser.userId);
+      })
+      .catch((err) => app.toastError(err));
+  },
+
+  /**
+   * 地址启用 / 停用（N-44）。
+   *
+   * 与「审核状态」是两件事：停用不改 status，用户重填地址也不会把它冲掉；
+   * 停用也不抵消区域状态 —— 区域停用时这条地址照样不能下单。
+   */
+  onToggleAddressEnabled(e) {
+    const address = this.data.addresses[e.currentTarget.dataset.index];
+    if (!address) {
+      return;
+    }
+    if (!address.enabled) {
+      wx.showModal({
+        title: '启用地址',
+        content: '启用后该地址恢复可用。如果它所属的区域仍是停用状态，则依然不能下单。确定启用？',
+        success: (res) => {
+          if (res.confirm) {
+            this.postAddressEnabled(address.id, true);
+          }
+        },
+      });
+      return;
+    }
+    wx.showModal({
+      title: '停用地址',
+      content: '停用后该地址不能再用于新配送单（已下的订单按快照不受影响）。停用原因可填，用户端会显示。',
+      editable: true,
+      placeholderText: '如：地址已拆迁 / 用户要求暂停配送（可不填）',
+      success: (res) => {
+        if (!res.confirm) {
+          return;
+        }
+        const reason = (res.content || '').trim();
+        if (reason.length > 200) {
+          wx.showToast({ title: '停用原因最多 200 字', icon: 'none' });
+          return;
+        }
+        this.postAddressEnabled(address.id, false, reason);
+      },
+    });
+  },
+
+  postAddressEnabled(addressId, enabled, reason) {
+    request({
+      url: '/admin/address/enabled',
+      method: 'POST',
+      data: { addressId, enabled, reason: reason || null },
+    })
+      .then(() => {
+        wx.showToast({ title: enabled ? '已启用' : '已停用', icon: 'success' });
         this.loadAddresses(this.data.selectedUser.userId);
       })
       .catch((err) => app.toastError(err));

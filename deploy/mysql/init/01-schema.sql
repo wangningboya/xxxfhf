@@ -79,6 +79,10 @@ CREATE TABLE IF NOT EXISTS `address` (
     `source`       VARCHAR(16)  NOT NULL DEFAULT 'user' COMMENT 'merchant/user',
     `status`       VARCHAR(16)  NOT NULL DEFAULT 'active' COMMENT 'active 可用 / pending 待确认 / rejected 已驳回',
     `reject_reason` VARCHAR(200)          DEFAULT NULL COMMENT '驳回原因，status=rejected 时有值',
+    -- 启用状态与审核状态 status 正交（N-44）：商家可以单独停用一条已通过的地址，
+    -- 区域停用则不写这里（派生判定，见技术文档 4.17）。
+    `enabled`      TINYINT(1)   NOT NULL DEFAULT 1 COMMENT '启用状态：1 启用 / 0 停用',
+    `disabled_reason` VARCHAR(200)        DEFAULT NULL COMMENT '停用原因，enabled=0 时可能非空',
     -- 审计四列（N-27）。pending 队列要按提交时间先来先审，所以 created_at 同时是业务字段。
     -- created_by / updated_by 存操作人 user_id；无登录态的定时任务写 0（系统）。
     `created_at`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间（用户提交时刻）',

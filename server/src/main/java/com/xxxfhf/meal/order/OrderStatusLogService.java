@@ -34,7 +34,7 @@ public class OrderStatusLogService {
     private static final Logger log = LoggerFactory.getLogger(OrderStatusLogService.class);
 
     /** 与 order_status_log.remark 的列宽一致，超了会在 MySQL 严格模式下直接报错 */
-    private static final int MAX_REMARK = 200;
+    public static final int MAX_REMARK = 200;
 
     private final OrderStatusLogMapper logMapper;
     private final OrderMapper orderMapper;

@@ -47,6 +47,21 @@ public class Address extends AuditEntity {
     /** 驳回原因，仅 status = rejected 时有值，会展示给用户 */
     private String rejectReason;
 
+    /**
+     * 启用状态，默认启用。
+     *
+     * <p>与 {@link #status} **正交**：status 管「商家审没审过」，这一列管「商家让不让用」。
+     * 商家可以停用一条已经审过的地址（比如那栋楼装修送不进去），也可以在任何时候启用回来。
+     * 两者的区别在用户端看得很清楚：驳回要用户改地址重新提交，停用不需要改任何内容。
+     *
+     * <p>区域停用**不写这一列**（区域停用时地址表一行都不动），可用性是判定时相乘出来的，
+     * 见 {@code AddressService#usability}。
+     */
+    private Boolean enabled;
+
+    /** 停用原因，仅 enabled = false 时可能非空，会展示给用户 */
+    private String disabledReason;
+
     /* ---------------- getters / setters ---------------- */
 
     public Long getId() {
@@ -135,5 +150,21 @@ public class Address extends AuditEntity {
 
     public void setRejectReason(String rejectReason) {
         this.rejectReason = rejectReason;
+    }
+
+    public Boolean getEnabled() {
+        return enabled;
+    }
+
+    public void setEnabled(Boolean enabled) {
+        this.enabled = enabled;
+    }
+
+    public String getDisabledReason() {
+        return disabledReason;
+    }
+
+    public void setDisabledReason(String disabledReason) {
+        this.disabledReason = disabledReason;
     }
 }

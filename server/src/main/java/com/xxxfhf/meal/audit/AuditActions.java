@@ -33,6 +33,10 @@ public final class AuditActions {
     public static final String ADDRESS_REJECT = "address.reject";
     public static final String ADDRESS_REVOKE = "address.revoke";
     public static final String ADDRESS_DELETE = "address.delete";
+    /** 停用地址：不影响审核状态，只让它不可用于下单（N-44，见需求 4.7） */
+    public static final String ADDRESS_DISABLE = "address.disable";
+    /** 启用地址：连同停用原因一起清空 */
+    public static final String ADDRESS_ENABLE = "address.enable";
 
     /* ---------------- 用户 ---------------- */
 
@@ -64,6 +68,8 @@ public final class AuditActions {
             new Action(ADDRESS_REJECT, "驳回地址", TABLE_ADDRESS),
             new Action(ADDRESS_REVOKE, "收回地址", TABLE_ADDRESS),
             new Action(ADDRESS_DELETE, "删除地址", TABLE_ADDRESS),
+            new Action(ADDRESS_DISABLE, "停用地址", TABLE_ADDRESS),
+            new Action(ADDRESS_ENABLE, "启用地址", TABLE_ADDRESS),
             new Action(USER_APPROVE, "用户通过", TABLE_USER),
             new Action(USER_REJECT, "驳回用户", TABLE_USER),
             new Action(USER_DISABLE, "停用用户", TABLE_USER),

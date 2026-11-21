@@ -103,13 +103,20 @@ Page({
     }
     return request({ url: '/address/mine' })
       .then((list) => {
-        const active = (list || []).filter((a) => a.status === 'active');
+        const all = list || [];
+        // 能不能用由服务端判定（审核状态 × 地址启用 × 区域启用），页面不再自己拼接判断
+        const usable = all.filter((a) => a.usable);
         let address = null;
         if (picked) {
-          address = (list || []).find((a) => a.id === picked) || null;
+          const found = all.find((a) => a.id === picked);
+          if (found && found.usable) {
+            address = found;
+          } else if (found && found.unusableReason) {
+            wx.showToast({ title: found.unusableReason, icon: 'none' });
+          }
         }
-        if (!address && active.length) {
-          address = active[0];
+        if (!address && usable.length) {
+          address = usable[0];
         }
         this.setData({ address });
         this.recalc();

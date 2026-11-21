@@ -156,6 +156,9 @@ public class OrderAdminController {
      *
      * 与自助下单的区别是**不看截单时间** —— 顾客临时微信说要一份往往已经过了截单点；
      * 停业、份数上限、菜单发布状态照旧校验，目标用户必须已通过审核。
+     *
+     * {@code force=true} 时地址不可用也放行（N-44）：商家二次确认后仍要下这一单，
+     * 时间轴会记一条「商家强制下单：<原因>」。
      */
     @PostMapping("/proxy")
     @RequirePerm(Perms.ORDER_ACCEPT)
@@ -163,7 +166,8 @@ public class OrderAdminController {
         return ApiResponse.ok(orderService.createForUser(request.userId(),
                 new OrderService.CreateCommand(request.serveDate(), request.deliveryType(),
                         request.addressId(), request.pickupSlot(), request.remark(),
-                        request.items(), null)));
+                        request.items(), null),
+                Boolean.TRUE.equals(request.force())));
     }
 
     public record AcceptRequest(
@@ -172,6 +176,8 @@ public class OrderAdminController {
 
     /**
      * @param userId 替谁下单。必须是已通过审核的群成员
+     * @param force  地址不可用时是否强制下单（默认 false 返回 409）。只跳过地址可用性，
+     *               「地址不存在」「不是该用户的地址」仍然拒
      */
     public record ProxyRequest(
             @NotNull(message = "请选择下单用户") Long userId,
@@ -180,7 +186,8 @@ public class OrderAdminController {
             Long addressId,
             String pickupSlot,
             String remark,
-            @NotEmpty(message = "请选择盒饭") List<OrderService.ItemInput> items) {
+            @NotEmpty(message = "请选择盒饭") List<OrderService.ItemInput> items,
+            Boolean force) {
     }
 
     public record RejectRequest(

@@ -9,12 +9,13 @@
   <view class="group" wx:for="{{groups}}" wx:key="name" wx:for-item="group">
     <view class="group-name">{{group.name}}</view>
     <view
-      class="addr"
+      class="addr {{addr.usable ? '' : 'addr-off'}}"
       wx:for="{{group.items}}"
       wx:key="id"
       wx:for-item="addr"
       data-id="{{addr.id}}"
-      data-status="{{addr.status}}"
+      data-usable="{{addr.usable}}"
+      data-reason="{{addr.unusableReason}}"
       bindtap="onPick"
     >
       <view class="addr-main">
@@ -24,13 +25,11 @@
           <text class="tag" wx:if="{{addr.tag}}">{{addr.tag}}</text>
         </view>
         <view class="addr-line2">{{addr.regionName}} {{addr.detail}}</view>
-        <view class="addr-pending" wx:if="{{addr.status === 'pending'}}">待商家确认，暂不能下单用</view>
-        <!-- 驳回要把原因原样给用户：他才知道该改哪一段，而不是反复提交同一条 -->
-        <view class="addr-reject" wx:if="{{addr.status === 'rejected'}}">
-          商家驳回：{{addr.rejectReason || '请修改后重新提交'}}
-        </view>
+        <!-- 原因由服务端按「审核 → 地址停用 → 区域停用」算好，前端只负责显示 -->
+        <view class="addr-off-reason" wx:if="{{!addr.usable}}">{{addr.unusableReason}}</view>
       </view>
-      <view class="addr-edit" data-id="{{addr.id}}" catchtap="onEdit">编辑</view>
+      <!-- 停用 / 区域停用时不开放编辑：否则用户能把地址换到别的区域绕过停用 -->
+      <view class="addr-edit" wx:if="{{addr.editable}}" data-id="{{addr.id}}" catchtap="onEdit">编辑</view>
     </view>
   </view>
 

@@ -17,6 +17,8 @@ Page({
     /** 编辑已有地址时提示「保存后要重新等商家确认」 */
     isEdit: false,
     pendingTip: false,
+    /** 地址或所属区域已停用：只读，不给保存（入口在列表页已经藏了，这里是兜底） */
+    readonly: false,
   },
 
   onLoad(options) {
@@ -44,8 +46,9 @@ Page({
       editId ? request({ url: '/address/mine' }) : Promise.resolve([]),
     ])
       .then(([regions, list]) => {
-        this.setData({ regions: regions || [] });
+        const enabledRegions = regions || [];
         if (!editId) {
+          this.setData({ regions: enabledRegions });
           return;
         }
         const addr = (list || []).find((a) => a.id === editId);
@@ -53,15 +56,24 @@ Page({
           wx.showToast({ title: '地址不存在', icon: 'none' });
           return;
         }
-        const index = (regions || []).findIndex((r) => r.id === addr.regionId);
+        // /region/list 只给启用中的区域。地址所属区域被停用时必须把它补进选择器，
+        // 否则 index 是 -1，保存直接报「请选择区域」——这是既有缺陷，本轮一并修
+        const options = enabledRegions.slice();
+        if (!options.some((r) => r.id === addr.regionId)) {
+          options.unshift({ id: addr.regionId, name: (addr.regionName || '原区域') + '（已停用）' });
+        }
+        const index = options.findIndex((r) => r.id === addr.regionId);
         this.setData({
+          regions: options,
           regionIndex: index,
-          regionName: addr.regionName || '',
+          regionName: index >= 0 ? options[index].name : addr.regionName || '',
           contactName: addr.contactName || '',
           phone: addr.phone || '',
           detail: addr.detail || '',
           tag: addr.tag || '',
           pendingTip: addr.status !== 'active',
+          // 服务端在 AddressView 里已算好：两侧都启用才可编辑
+          readonly: addr.editable === false,
         });
       })
       .catch((err) => {
@@ -100,6 +112,11 @@ Page({
 
   onSave() {
     if (this.data.saving) {
+      return;
+    }
+    // 兜底：停用地址 / 停用区域下的地址，服务端也会拒；这里先给出人话提示
+    if (this.data.readonly) {
+      wx.showToast({ title: '该地址已停用，请联系商家处理', icon: 'none' });
       return;
     }
     // 兜底：从缓存页或历史页面栈进来时，仍然不让待审核用户写入

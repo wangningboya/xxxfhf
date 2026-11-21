@@ -40,13 +40,17 @@
       <view wx:for="{{addresses}}" wx:key="id" wx:for-item="addr" wx:for-index="addrIndex" class="addr">
         <view class="addr-top">
           <text class="addr-region">{{addr.regionName}}</text>
-          <text class="addr-status {{addr.status === 'active' ? 'addr-on' : (addr.status === 'rejected' ? 'addr-off' : '')}}">{{addr.statusText}}</text>
+          <view class="addr-tags">
+            <text class="addr-status {{addr.status === 'active' ? 'addr-on' : (addr.status === 'rejected' ? 'addr-off' : '')}}">{{addr.statusText}}</text>
+            <text class="addr-status {{addr.enabled ? 'addr-on' : 'addr-off'}}">{{addr.enabledText}}</text>
+          </view>
         </view>
         <view class="addr-detail">{{addr.contactName}} {{addr.phone}}</view>
         <view class="muted">{{addr.detail}}</view>
         <view class="addr-reject" wx:if="{{addr.status === 'rejected' && addr.rejectReason}}">
           驳回原因：{{addr.rejectReason}}
         </view>
+        <view class="addr-unusable" wx:if="{{addr.unusableText}}">不可下单：{{addr.unusableText}}</view>
         <view class="addr-ops">
           <text class="op" data-index="{{addrIndex}}" bindtap="onEditAddress">编辑</text>
           <text
@@ -75,6 +79,7 @@
           >
             驳回
           </text>
+          <text class="op" data-index="{{addrIndex}}" bindtap="onToggleAddressEnabled">{{addr.enabled ? '停用' : '启用'}}</text>
           <text class="op op-danger" data-index="{{addrIndex}}" bindtap="onDeleteAddress">删除</text>
         </view>
       </view>

@@ -135,3 +135,9 @@ page {
   background: #e6e6e6;
   color: #a8a8a8;
 }
+
+/* 停用导致的只读提示：跟「保存后要重新确认」区分开，用冷色而不是橙色 */
+.tip-warn {
+  color: #6b7280;
+  background: #f2f3f5;
+}

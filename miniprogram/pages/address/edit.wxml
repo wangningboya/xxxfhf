@@ -1,5 +1,6 @@
 <view class="page">
-  <view class="tip" wx:if="{{pendingTip || isEdit}}">修改后需要商家重新确认才能用于下单</view>
+  <view class="tip tip-warn" wx:if="{{readonly}}">该地址已停用或所在区域已停用，不能再修改；需要恢复请联系商家</view>
+  <view class="tip" wx:elif="{{pendingTip || isEdit}}">修改后需要商家重新确认才能用于下单</view>
 
   <view class="card">
     <picker

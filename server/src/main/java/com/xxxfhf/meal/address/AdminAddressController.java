@@ -33,17 +33,22 @@ public class AdminAddressController {
      *
      * userId 从必填改为可选：进页面就该看到待办，而不是先被要求选一个人。
      * 想「只看某个人的地址」时把它当筛选条件传进来，行为与原来的 listByUser 一致。
+     *
+     * enabled 用于「只看已停用的地址」（N-44）：传 0 只看停用、传 1 只看启用、不传全部。
+     * 区域管理页的地址抽屉也走这个接口，只多带一个 regionId。
      */
     @GetMapping("/list")
     @RequirePerm(Perms.USER_ADDRESS)
     public ApiResponse<PageResult<AddressService.AddressRow>> list(
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) Integer enabled,
             @RequestParam(required = false) Long userId,
             @RequestParam(required = false) Long regionId,
             @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
-        return ApiResponse.ok(addressService.page(status, userId, regionId, keyword, page, pageSize));
+        return ApiResponse.ok(
+                addressService.page(status, enabled, userId, regionId, keyword, page, pageSize));
     }
 
     @PostMapping("/save")
@@ -65,11 +70,30 @@ public class AdminAddressController {
                 addressService.updateStatus(request.addressId(), request.status(), request.reason()));
     }
 
+    /**
+     * 地址启用 / 停用（N-44）。与审核状态正交：不动 pending / active / rejected。
+     *
+     * 不校验区域状态 —— 区域停用时商家仍要能整理地址，否则只能等区域恢复。
+     * 停用原因可选填（≤200 字），用户端会看到「已停用：装修」这样的说明。
+     */
+    @PostMapping("/enabled")
+    @RequirePerm(Perms.USER_ADDRESS)
+    public ApiResponse<Address> updateEnabled(@Valid @RequestBody EnabledRequest request) {
+        return ApiResponse.ok(
+                addressService.updateEnabled(request.addressId(), request.enabled(), request.reason()));
+    }
+
     @PostMapping("/delete")
     @RequirePerm(Perms.USER_ADDRESS)
     public ApiResponse<Void> delete(@Valid @RequestBody IdRequest request) {
         addressService.delete(request.addressId());
         return ApiResponse.ok();
+    }
+
+    public record EnabledRequest(
+            @NotNull(message = "缺少地址 ID") Long addressId,
+            @NotNull(message = "缺少启用状态") Boolean enabled,
+            @Size(max = 200, message = "停用原因最多 200 字") String reason) {
     }
 
     public record StatusRequest(

@@ -32,10 +32,15 @@ public class AddressController {
         this.accessGuard = accessGuard;
     }
 
-    /** 我的地址。含待确认的，前端按 status 区分展示（待确认的不能选来下单）。 */
+    /**
+     * 我的地址。含待确认 / 已驳回 / 已停用的，每条带 `usable` 与 `unusableReason`。
+     *
+     * <p>v1.49 起不再返回实体：能不能用于下单由服务端算好一并下发（见技术文档 4.17），
+     * 前端只管把不可用的置灰、把原因显示出来。
+     */
     @GetMapping("/mine")
-    public ApiResponse<List<Address>> mine() {
-        return ApiResponse.ok(addressService.listByUser(UserContext.userId()));
+    public ApiResponse<List<AddressService.AddressView>> mine() {
+        return ApiResponse.ok(addressService.listViewsByUser(UserContext.userId()));
     }
 
     /** 新增 / 修改我的地址，提交后状态为待商家确认。待审核用户不能写。 */

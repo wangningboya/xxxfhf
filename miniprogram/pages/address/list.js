@@ -47,12 +47,12 @@ Page({
     if (this.data.mode !== 'select') {
       return;
     }
-    const id = e.currentTarget.dataset.id;
-    const status = e.currentTarget.dataset.status;
-    if (status !== 'active') {
-      wx.showToast({ title: '该地址还在等商家确认', icon: 'none' });
+    const { usable, reason } = e.currentTarget.dataset;
+    if (usable === false || usable === 'false') {
+      wx.showToast({ title: reason || '该地址暂时不能用于下单', icon: 'none' });
       return;
     }
+    const id = e.currentTarget.dataset.id;
     wx.setStorageSync(SELECTED_ADDRESS_KEY, id);
     wx.navigateBack();
   },

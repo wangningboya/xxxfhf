@@ -102,6 +102,24 @@ page {
   color: #d93026;
 }
 
+/* 不可用的地址置灰保留：藏起来用户只会重新录一条一模一样的 */
+.addr-off {
+  background: #f2f3f5;
+}
+
+.addr-off .contact,
+.addr-off .phone,
+.addr-off .addr-line2 {
+  color: #9a9a9a;
+}
+
+.addr-off-reason {
+  margin-top: 10rpx;
+  font-size: 22rpx;
+  line-height: 1.5;
+  color: #a86b00;
+}
+
 .addr-edit {
   font-size: 24rpx;
   color: #8a8a8a;

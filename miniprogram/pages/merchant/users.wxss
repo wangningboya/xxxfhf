@@ -41,6 +41,15 @@
   margin-bottom: 8rpx;
 }
 
+.addr-tags {
+  display: flex;
+  align-items: center;
+}
+
+.addr-tags .addr-status {
+  margin-left: 16rpx;
+}
+
 .addr-region {
   font-size: 26rpx;
   color: #d97600;
@@ -67,6 +76,14 @@
   font-size: 24rpx;
   line-height: 1.5;
   color: #d93026;
+}
+
+/* 地址不能下单的原因：可能是待确认、已驳回、地址停用，也可能是所属区域停用（N-44） */
+.addr-unusable {
+  margin-top: 6rpx;
+  font-size: 24rpx;
+  line-height: 1.5;
+  color: #a86b00;
 }
 
 .addr-detail {
