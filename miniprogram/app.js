@@ -1,6 +1,7 @@
 const { request, setToken, getToken, toastError } = require('./utils/request');
 const { getGroupEncrypted } = require('./utils/group-entry');
 const dict = require('./utils/dict');
+const privacy = require('./utils/privacy');
 
 /** 微信登录拿不到 code 时的统一文案：两种情况对用户是同一件事 */
 const LOGIN_FAILED = '微信登录失败，请重新进入小程序';
@@ -63,6 +64,7 @@ App({
   },
 
   onLaunch() {
+    this.registerPrivacyListener();
     this.ensureLogin()
       .then(() => {
         // 字典与登录无关（接口不鉴权），但排在登录后发，少一次并发首屏请求
@@ -72,6 +74,62 @@ App({
         // 启动期登录失败不阻塞渲染，页面会再试一次并给出提示
         dict.load();
       });
+  },
+
+  /**
+   * 注册微信侧隐私授权监听（整改 P0-06）。
+   *
+   * 微信的授权状态和本地的 `meal_privacy_consent` 是两套东西：
+   * 只存本地 → 用户点了「同意」，微信仍然认为没同意，
+   * 于是 `type="nickname"` 拿不到昵称、`wx.chooseMedia` 直接 fail。
+   *
+   * 全局只能注册一次，且必须在 onLaunch 里 —— 注册得晚，用户这一下点下去就没接住了。
+   * 回调里不自己弹 UI，统一交给 utils/privacy.js（它知道当前哪个页面的弹窗还活着）。
+   */
+  registerPrivacyListener() {
+    if (typeof wx.onNeedPrivacyAuthorization !== 'function') {
+      // 老版本基础库没有这个接口：微信会走自己的默认交互，不算致命
+      console.warn('[隐私] 当前基础库不支持 onNeedPrivacyAuthorization');
+      return;
+    }
+    wx.onNeedPrivacyAuthorization((resolve) => {
+      privacy.onWechatAuthNeeded(resolve);
+    });
+    this.logPrivacyState();
+  },
+
+  /**
+   * 开发版/体验版启动时打印一次微信侧的隐私配置（正式版不打，避免污染日志）。
+   *
+   * 用途：判断「弹窗没出现」到底是哪一种情况——
+   * - privacyContractName 为空：后台隐私指引没生效，微信不会发起任何授权，怎么点都不会弹；
+   * - needAuthorization=false 且合同名有值：用户已授权过，或该接口本来不设门槛；
+   * - needAuthorization=true：微信确实要授权，此时点相册/位置类接口应能触发弹窗。
+   */
+  logPrivacyState() {
+    if (typeof wx.getPrivacySetting !== 'function') {
+      return;
+    }
+    let envVersion = 'unknown';
+    try {
+      const info = wx.getAccountInfoSync();
+      envVersion = (info && info.miniProgram && info.miniProgram.envVersion) || 'unknown';
+    } catch (e) {
+      // 拿不到版本就当未知，继续打日志：宁可多打一行，也别把排查信息吞掉
+    }
+    if (envVersion !== 'develop' && envVersion !== 'trial') {
+      return;
+    }
+    wx.getPrivacySetting({
+      success: (res) => {
+        console.info('[隐私诊断] 微信侧配置', {
+          是否还需授权: res.needAuthorization,
+          隐私合同名: res.privacyContractName || '(空)',
+          环境: envVersion,
+        });
+      },
+      fail: (err) => console.warn('[隐私诊断] getPrivacySetting 调用失败', err),
+    });
   },
 
   /**

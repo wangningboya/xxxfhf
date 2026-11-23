@@ -17,7 +17,19 @@
 
     <view class="pm-actions">
       <view class="pm-btn pm-ghost" bindtap="onDisagree">暂不</view>
-      <view class="pm-btn" bindtap="onAgree">同意并继续</view>
+      <!--
+        同意按钮用 open-type="agreePrivacyAuthorization"：用户点它时微信直接完成授权，
+        这是官方给的「能确保授权生效」的形态；bindtap 兜底本地闸门（手填手机号/地址那类，
+        没有微信侧授权请求，官方按钮不会触发任何微信行为，仍需自己关闭弹窗）。
+        两条路径都收敛到 privacy.agree()，内部有 answered 幂等保护，不会重复回传。
+      -->
+      <button
+        id="privacy-agree-btn"
+        class="pm-btn pm-agree"
+        open-type="agreePrivacyAuthorization"
+        bindagreeprivacyauthorization="onAgree"
+        bindtap="onAgree"
+      >同意并继续</button>
     </view>
   </view>
 </view>

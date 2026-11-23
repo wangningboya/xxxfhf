@@ -67,3 +67,15 @@
   background: #f0f1f3;
   color: #6b6b6b;
 }
+
+/* 同意按钮是 <button>（需要 open-type），这里抹掉原生按钮的底色、边框与内边距 */
+.pm-agree {
+  margin: 0;
+  padding: 0;
+  border: none;
+  font-weight: 400;
+}
+
+.pm-agree::after {
+  border: none;
+}

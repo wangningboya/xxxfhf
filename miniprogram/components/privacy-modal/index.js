@@ -24,10 +24,16 @@ Component({
    * 页面从后台/其它页返回时重新注册。
    * 页面实例在栈里不会销毁，只靠 attached 的话，返回后 modal 仍指向已经卸载的那个实例，
    * 会导致「弹窗永远不出现、收集动作永远被拒」。
+   *
+   * hide 时必须注销：否则跳到一个没挂本组件的页面后，微信发来授权请求仍会把
+   * resolve 交给一个不可见的弹窗，用户看不到任何提示、接口也一直等不到答复。
    */
   pageLifetimes: {
     show() {
       privacy.registerModal(this);
+    },
+    hide() {
+      privacy.unregisterModal(this);
     },
   },
 

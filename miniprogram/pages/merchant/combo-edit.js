@@ -156,6 +156,24 @@ Page({
           },
         });
       },
+      /**
+       * 相册是微信的隐私接口：用户没同意隐私政策、或后台没声明「相册」时，
+       * 这里会失败。原来没有 fail 回调，用户点「上传封面」界面毫无反应，
+       * 看起来像按钮坏了 —— 必须给一句明确的提示。
+       */
+      fail: (err) => {
+        const msg = (err && err.errMsg) || '';
+        if (msg.indexOf('cancel') > -1) {
+          // 用户自己关掉了选择器，不是错误，不打扰
+          return;
+        }
+        console.warn('[上传封面] chooseMedia 失败', err);
+        wx.showToast({
+          title: '无法打开相册，请先同意隐私授权后重试',
+          icon: 'none',
+          duration: 2500,
+        });
+      },
     });
   },
 

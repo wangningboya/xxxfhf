@@ -68,4 +68,7 @@
   <view class="bottom-bar">
     <view class="btn" bindtap="onSave">{{saving ? '保存中…' : '保存盒饭'}}</view>
   </view>
+
+  <!-- 相册是微信隐私接口：上传封面时微信可能发起授权请求，本页必须有弹窗接住它 -->
+  <privacy-modal id="privacyModal" />
 </view>

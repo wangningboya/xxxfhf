@@ -160,6 +160,9 @@ Page({
       desc = me.rejectReason || '请联系群管理员了解原因。';
     }
 
+    // 浮层从「不显示」变成「显示」的那一次，才算首次露头
+    const firstShow = !this.data.needNickName && !me.nickName;
+
     this.setData({
       auditStatus: status,
       rejectReason: me.rejectReason || '',
@@ -169,6 +172,36 @@ Page({
       // 微信已不返回真实昵称，只能靠用户自己填一次；没填就弹浮层
       needNickName: !me.nickName,
     });
+
+    if (firstShow) {
+      this.promptNickPrivacy();
+    }
+  },
+
+  /**
+   * 昵称浮层露出时同步给出隐私提示（P0-04 v1.10，方案 A）。
+   *
+   * 为什么提前到这一刻：原来的顺序是「点输入框 → 点选微信昵称 → 点保存 → 才被告知要同意」，
+   * 用户会觉得填完才被拦，而且告知晚于收集。挪到浮层出现时，先告知、后填写。
+   *
+   * 只主动弹一次：`nickPrivacyPrompted` 是页面实例级标记，用户点过「暂不」后不再反复打扰
+   * （P0-05 的口径）。保存时 `onSaveNickName` 里那道闸门保留，负责「不漏收集」。
+   */
+  promptNickPrivacy() {
+    if (this.nickPrivacyPrompted) {
+      return;
+    }
+    this.nickPrivacyPrompted = true;
+    if (privacy.hasAgreed()) {
+      return;
+    }
+    // P0-05：拒绝后 7 天内不在「浮层露出」这个时机主动弹，避免反复打扰。
+    // 用户自己点「保存」时 onSaveNickName() 另有闸门，漏不掉告知，只是不在人家没动作时凑上去。
+    if (privacy.declinedRecently()) {
+      return;
+    }
+    // 不需要 then：这里没有后续动作，用户答完该填还是填，保存时会再校验一次
+    privacy.ensureAgreed();
   },
 
   applyConfig(config) {

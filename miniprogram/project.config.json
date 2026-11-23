@@ -35,6 +35,7 @@
   },
   "compileType": "miniprogram",
   "appid": "wx9b4dc7e1a055988f",
+  "__usePrivacyCheck__": true,
   "projectname": "meal-order",
   "condition": {},
   "simulatorPluginLibVersion": {},

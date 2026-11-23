@@ -1,3 +1,6 @@
 {
-  "navigationBarTitleText": "盒饭编辑"
+  "navigationBarTitleText": "盒饭编辑",
+  "usingComponents": {
+    "privacy-modal": "/components/privacy-modal/index"
+  }
 }
