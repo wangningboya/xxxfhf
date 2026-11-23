@@ -58,6 +58,22 @@ public class AdminAddressController {
     }
 
     /**
+     * 地址页专用的用户搜索：筛选下拉与「代客新增」的归属用户下拉共用这一个接口。
+     *
+     * <p>customer 与 merchant 都出。「指定为商家」是就地升级（D-26），
+     * 升级后的人不在 /admin/user/list 的群成员列表里，
+     * 但他的地址、订单都还挂在同一条记录上，地址维护必须照样能选到他。
+     */
+    @GetMapping("/users")
+    @RequirePerm(Perms.USER_ADDRESS)
+    public ApiResponse<PageResult<AddressService.UserOption>> users(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int pageSize) {
+        return ApiResponse.ok(addressService.pageUsers(keyword, page, pageSize));
+    }
+
+    /**
      * 审核用户提交的地址：pending → active 通过 / rejected 驳回（必须给原因）/ 收回为 pending。
      *
      * 驳回而不是删除：删掉之后用户端地址凭空消失，他不知道发生了什么，

@@ -333,8 +333,10 @@ const formUserLoading = ref(false);
 
 function fetchUsers(kw, target, loadingRef) {
   loadingRef.value = true;
+  // 地址页专用搜索接口：customer 与 merchant 都出。/admin/user/list 只出群成员，
+  // 被指定为商家的用户在那份列表里消失了，但他的地址还挂在同一条记录上，必须照样能选到
   http
-    .get('/admin/user/list', { params: { keyword: kw || undefined, page: 1, pageSize: 20 } })
+    .get('/admin/address/users', { params: { keyword: kw || undefined, page: 1, pageSize: 20 } })
     .then((result) => {
       target.value = (result && result.list) || [];
     })
@@ -356,7 +358,7 @@ function searchFormUsers(kw) {
  * 新增时带出归属用户的昵称与手机号 —— 这两项都是「跟人走」的，换人就整体换掉，
  * 不沿用上一个用户的残留。
  *
- * 手机号不能直接用下拉里的值：`/admin/user/list` 下发的账号手机号是掩码
+ * 手机号不能直接用下拉里的值：用户搜索接口下发的账号手机号是掩码
  * （138****1234），填进 maxlength=11 的输入框会被截断，保存时也过不了 11 位校验。
  * 所以有号时再走一次「查看完整手机号」接口（user.phone.view，一次一个用户、
  * 每次写一条操作记录）拿明文；没号就不发请求，保持留空。
@@ -369,6 +371,11 @@ function fillFromUser(user) {
   form.value.phone = '';
   // 掩码非空 = 该用户绑了手机号；没绑就不用去要明文，省一次请求和一条操作记录
   if (!user.phone) {
+    return;
+  }
+  // 商家账号不去查明文：user.phone.view 接口只认 customer（requireCustomer），
+  // 对 merchant 发请求必然报「只能操作群成员账号」，还会经全局拦截器弹错误提示
+  if (user.userType === 'merchant') {
     return;
   }
   const userId = user.userId;

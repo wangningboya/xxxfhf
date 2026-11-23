@@ -232,6 +232,31 @@ public class AddressService {
         return map;
     }
 
+    /**
+     * 地址页专用的用户搜索（筛选下拉与代客新增共用）：customer 与 merchant 都能搜到。
+     *
+     * <p>为什么不用 /admin/user/list：那份列表只出群成员（user_type = customer）。
+     * 「指定为商家」是就地升级（D-26），同一行记录的类型改成 merchant 后，
+     * 这个人就从群成员列表里消失了 —— 但他的地址、订单、openid 都还挂在同一条记录上，
+     * 地址维护理应照常选得到他。
+     *
+     * <p>不过滤审核状态：被停用 / 驳回过的用户，名下既有地址仍要在列表里筛得到。
+     */
+    public PageResult<UserOption> pageUsers(String keyword, int page, int pageSize) {
+        String kw = keyword == null ? "" : keyword.trim();
+        Page<User> pager = new Page<>(Math.max(page, 1), Math.min(Math.max(pageSize, 1), 100));
+        IPage<User> result = userMapper.selectPage(pager, Wrappers.<User>lambdaQuery()
+                .and(!kw.isEmpty(), w -> w.like(User::getNickName, kw).or().like(User::getPhone, kw))
+                .last("ORDER BY created_at DESC"));
+
+        List<UserOption> rows = new ArrayList<>(result.getRecords().size());
+        for (User user : result.getRecords()) {
+            rows.add(new UserOption(user.getId(), user.getNickName(),
+                    MaskUtil.phone(user.getPhone()), user.getUserType()));
+        }
+        return new PageResult<>(rows, result.getTotal(), result.getCurrent(), result.getSize());
+    }
+
     /** 商家录入 / 修改：直接可用。 */
     @Transactional
     public Address saveByMerchant(AddressCommand cmd) {
@@ -512,6 +537,16 @@ public class AddressService {
             text.append('）');
         }
         return text.toString();
+    }
+
+    /**
+     * 地址页用户搜索行：下拉展示（昵称 / 掩码手机号）+ 归属回填所需的最小字段。
+     *
+     * @param userType customer / merchant。前端据此决定要不要去查完整手机号 ——
+     *                 手机号明文接口（user.phone.view）只认 customer，
+     *                 对 merchant 发请求必然 400，还会经全局拦截器弹出错误提示
+     */
+    public record UserOption(Long userId, String nickName, String phone, String userType) {
     }
 
     /**
