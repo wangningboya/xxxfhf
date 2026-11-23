@@ -63,10 +63,37 @@ page {
   letter-spacing: 12rpx;
 }
 
+.row-address {
+  max-width: 66%;
+  text-align: right;
+  line-height: 1.5;
+}
+
 .row-amount {
   font-size: 34rpx;
   font-weight: 600;
   color: #e8442e;
+}
+
+.call-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 20rpx;
+  padding: 18rpx 24rpx;
+  background: #fff7ea;
+  border-radius: 12rpx;
+}
+
+.call-text {
+  font-size: 26rpx;
+  color: #a86b00;
+}
+
+.call-btn {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #ff9f1c;
 }
 
 .qr-card {

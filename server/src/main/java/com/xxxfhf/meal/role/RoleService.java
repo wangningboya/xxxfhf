@@ -3,6 +3,9 @@ package com.xxxfhf.meal.role;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.xxxfhf.meal.auth.Perms;
 import com.xxxfhf.meal.auth.UserContext;
+import com.xxxfhf.meal.audit.AuditActions;
+import com.xxxfhf.meal.audit.AuditHelper;
+import com.xxxfhf.meal.audit.AuditService;
 import com.xxxfhf.meal.common.BizException;
 import com.xxxfhf.meal.user.User;
 import com.xxxfhf.meal.user.UserMapper;
@@ -61,10 +64,13 @@ public class RoleService {
 
     private final RoleMapper roleMapper;
     private final UserMapper userMapper;
+    /** 角色与授权留痕（需求 4.19 / F-J13）：权限是被放大或被削减的，事后必须查得到是谁动的 */
+    private final AuditService auditService;
 
-    public RoleService(RoleMapper roleMapper, UserMapper userMapper) {
+    public RoleService(RoleMapper roleMapper, UserMapper userMapper, AuditService auditService) {
         this.roleMapper = roleMapper;
         this.userMapper = userMapper;
+        this.auditService = auditService;
     }
 
     /* ---------------- 权限项 ---------------- */
@@ -162,6 +168,12 @@ public class RoleService {
         log.info("保存角色 operator={} roleId={} name={} builtin={} 权限数={}",
                 operatorId, role.getId(), role.getName(), role.isBuiltin(),
                 role.getPermissions() == null ? 0 : role.getPermissions().size());
+        auditService.record(AuditActions.TABLE_ROLE, role.getId(),
+                creating ? AuditActions.ROLE_CREATE : AuditActions.ROLE_UPDATE,
+                (creating ? "新增角色：" : "修改角色：") + role.getName() + "｜权限 "
+                        + (role.getPermissions() == null ? 0 : role.getPermissions().size()) + " 项"
+                        + (role.isBuiltin() ? "（内置角色，只改名称）" : ""),
+                operatorId, AuditHelper.source());
         return new RoleView(role.getId(), role.getName(), role.isBuiltin(),
                 role.getPermissions() == null ? List.of() : role.getPermissions(), 0, role.getCreatedAt());
     }
@@ -189,6 +201,8 @@ public class RoleService {
 
         roleMapper.deleteById(id);
         log.info("删除角色 operator={} roleId={} name={}", operatorId, id, role.getName());
+        auditService.record(AuditActions.TABLE_ROLE, id, AuditActions.ROLE_DELETE,
+                "删除角色：" + role.getName(), operatorId, AuditHelper.source());
     }
 
     /* ---------------- 账号与角色绑定 ---------------- */
@@ -259,6 +273,9 @@ public class RoleService {
         userMapper.updateById(user);
         log.info("分配角色 operator={} userId={} username={} roles={}",
                 operatorId, userId, user.getUsername(), cleaned);
+        auditService.record(AuditActions.TABLE_ROLE, userId, AuditActions.ROLE_ASSIGN,
+                "给账号「" + user.getUsername() + "」分配角色：" + roleNames(cleaned),
+                operatorId, AuditHelper.source());
         return accounts().stream()
                 .filter(row -> row.userId().equals(userId))
                 .findFirst()
@@ -286,11 +303,24 @@ public class RoleService {
                 .set(User::getLoginFailCount, 0)
                 .set(User::getLockUntil, null));
         log.info("解除登录锁定 operator={} userId={} username={}", operatorId, userId, user.getUsername());
+        auditService.record(AuditActions.TABLE_ROLE, userId, AuditActions.ROLE_UNLOCK,
+                "解除账号「" + user.getUsername() + "」的登录锁定",
+                operatorId, AuditHelper.source());
 
         return accounts().stream()
                 .filter(row -> row.userId().equals(userId))
                 .findFirst()
                 .orElseThrow(() -> BizException.notFound("账号不存在"));
+    }
+
+    /** 角色名拼接，操作记录摘要里写 id 等于没写 */
+    private String roleNames(List<Long> ids) {
+        List<String> names = new ArrayList<>(ids.size());
+        for (Long id : ids) {
+            Role role = roleMapper.selectById(id);
+            names.add(role == null ? String.valueOf(id) : role.getName());
+        }
+        return String.join("、", names);
     }
 
     /* ---------------- 内部 ---------------- */

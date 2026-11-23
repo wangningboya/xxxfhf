@@ -1,6 +1,8 @@
 package com.xxxfhf.meal.goods;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.xxxfhf.meal.audit.AuditActions;
+import com.xxxfhf.meal.audit.AuditService;
 import com.xxxfhf.meal.common.BizException;
 import com.xxxfhf.meal.order.OrderUsageQuery;
 import org.slf4j.Logger;
@@ -41,13 +43,17 @@ public class ComboService {
      * 谁注入它都不会成环。
      */
     private final OrderUsageQuery orderUsageQuery;
+    /** 商品变更留痕（需求 4.19 / F-J13）：盒饭是售卖层，改价与改组成都会被用户直接看到 */
+    private final AuditService auditService;
 
     public ComboService(ComboMapper comboMapper, DishMapper dishMapper,
-                        SpecGroupMapper specGroupMapper, OrderUsageQuery orderUsageQuery) {
+                        SpecGroupMapper specGroupMapper, OrderUsageQuery orderUsageQuery,
+                        AuditService auditService) {
         this.comboMapper = comboMapper;
         this.dishMapper = dishMapper;
         this.specGroupMapper = specGroupMapper;
         this.orderUsageQuery = orderUsageQuery;
+        this.auditService = auditService;
     }
 
     /** 盒饭列表（商家端）：上下架的都要看得到，否则没法重新上架。 */
@@ -113,6 +119,10 @@ public class ComboService {
             comboMapper.updateById(combo);
             log.info("编辑盒饭 id={} name={} price={}分", combo.getId(), name, price);
         }
+        auditService.record(AuditActions.TABLE_COMBO, combo.getId(),
+                creating ? AuditActions.COMBO_CREATE : AuditActions.COMBO_UPDATE,
+                (creating ? "新增盒饭：" : "修改盒饭：") + name + "｜价格 " + price
+                        + " 分，菜品 " + dishes.size() + " 项，规格组 " + specGroupIds.size() + " 个");
         return combo;
     }
 
@@ -126,6 +136,8 @@ public class ComboService {
         combo.setStatus(status);
         comboMapper.updateById(combo);
         log.info("盒饭状态变更 id={} -> {}", id, status);
+        auditService.record(AuditActions.TABLE_COMBO, id, AuditActions.COMBO_STATUS,
+                "盒饭「" + combo.getName() + "」" + (GoodsStatus.ON.equals(status) ? "上架" : "下架"));
         return combo;
     }
 
@@ -144,6 +156,8 @@ public class ComboService {
         }
         comboMapper.deleteById(id);
         log.info("删除盒饭 id={} name={}", id, combo.getName());
+        auditService.record(AuditActions.TABLE_COMBO, id, AuditActions.COMBO_DELETE,
+                "删除盒饭：" + combo.getName());
     }
 
     public Combo require(Long id) {

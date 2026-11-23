@@ -205,6 +205,8 @@ CREATE TABLE IF NOT EXISTS `order` (
     `paid_at`          DATETIME             DEFAULT NULL COMMENT '商家确认收款时间',
     `refunded_at`      DATETIME             DEFAULT NULL COMMENT '退款完成时间',
     `refund_operator`  BIGINT               DEFAULT NULL COMMENT '标记退款的操作人，防重复退；系统操作写 0',
+    `refund_amount`    INT                  DEFAULT NULL COMMENT '实际退款金额（分）；为空表示 v3.49 之前的历史单，按 total_amount 对待',
+    `refund_remark`    VARCHAR(200)         DEFAULT NULL COMMENT '退款备注：退到哪个账户、为什么少退',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_order_no` (`order_no`),
     UNIQUE KEY `uk_order_request` (`request_id`),

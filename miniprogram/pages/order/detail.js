@@ -16,6 +16,9 @@ Page({
     busy: false,
     /** 订单流转节点：只含订单本身的状态变化，不含推送投递记录 */
     timeline: [],
+    /** 自取点与商家电话（全局配置，留空不渲染） */
+    shopAddress: '',
+    shopPhone: '',
   },
 
   onLoad(options) {
@@ -30,6 +33,15 @@ Page({
     if (!this.data.orderId) {
       return;
     }
+    app.loadConfig().then((config) => {
+      if (!config) {
+        return;
+      }
+      this.setData({
+        shopAddress: config.shopAddress || '',
+        shopPhone: config.shopPhone || '',
+      });
+    });
     request({ url: '/order/detail?orderId=' + this.data.orderId })
       .then((order) => {
         const lines = (order.items || []).map((item) => ({
@@ -122,14 +134,20 @@ Page({
   },
 
   /**
-   * 取消。
+   * 取消 / 申请取消。
    *
-   * 截单前是「直接取消」，截单后只是「提交申请」—— 文案必须区分，
+   * 三档（需求 4.9）：待接单随时直接取消；已接单在截单前也能直接取消；
+   * 已接单且已过截单只能提交申请，等商家批 —— 文案必须区分，
    * 否则用户以为取消了，商家那边其实还在备菜。
    */
   onCancel() {
+    const order = this.data.order || {};
+    const applyOnly = order.status === 'accepted' && order.cutoff;
     wx.showModal({
-      title: '取消订单',
+      title: applyOnly ? '申请取消' : '取消订单',
+      content: applyOnly
+        ? '已过截单时间，需要商家同意才能取消，份数在同意后释放。'
+        : '取消后份数会立即释放，确定取消吗？',
       editable: true,
       placeholderText: '取消原因（可不填）',
       success: (res) => {
@@ -165,5 +183,20 @@ Page({
 
   onCopyOrderNo() {
     wx.setClipboardData({ data: this.data.order.orderNo });
+  },
+
+  /** 拨商家电话：要收款账号、改地址、取消沟通都靠它 */
+  onCallShop() {
+    const phone = this.data.shopPhone;
+    if (!phone) {
+      return;
+    }
+    wx.makePhoneCall({ phoneNumber: phone, fail: () => {} });
+  },
+
+  onCopyAddress() {
+    if (this.data.shopAddress) {
+      wx.setClipboardData({ data: this.data.shopAddress });
+    }
   },
 });

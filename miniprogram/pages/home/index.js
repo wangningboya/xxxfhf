@@ -7,6 +7,9 @@ Page({
     loading: true,
     shopName: '本店',
     shopNotice: '',
+    /** 自取点与商家电话：都是可选配置，留空时前端不渲染对应行 */
+    shopAddress: '',
+    shopPhone: '',
     serveTimeText: '',
     cutoffTime: '',
     /** 首页只看次日菜单的营业状态，与点餐页同源（需求 4.5） */
@@ -52,6 +55,8 @@ Page({
         this.setData({
           shopName: config.shopName || '本店',
           shopNotice: config.shopNotice || '',
+          shopAddress: config.shopAddress || '',
+          shopPhone: config.shopPhone || '',
           serveTimeText: config.serveTimeText || '',
           cutoffTime: config.cutoffTime || '',
         });
@@ -123,5 +128,28 @@ Page({
   /** 下单统一在点餐 Tab，首页不加购 */
   onStartOrder() {
     wx.switchTab({ url: '/pages/index/index' });
+  },
+
+  /** 拨打电话：转账要收款账号、地址与取消都要找商家，小程序里必须有这个入口 */
+  onCallShop() {
+    const phone = this.data.shopPhone;
+    if (!phone) {
+      return;
+    }
+    wx.makePhoneCall({
+      phoneNumber: phone,
+      fail: () => {
+        // 用户取消拨号也会走 fail，不打扰
+      },
+    });
+  },
+
+  /** 长按复制取餐点地址，方便粘到导航或发给家人 */
+  onCopyAddress() {
+    const address = this.data.shopAddress;
+    if (!address) {
+      return;
+    }
+    wx.setClipboardData({ data: address });
   },
 });

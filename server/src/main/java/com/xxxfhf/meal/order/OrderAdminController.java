@@ -44,6 +44,7 @@ public class OrderAdminController {
      *
      * @param cancelRequested 传 true 只返回「用户已提交取消申请、等待处理」的单。
      *                        商家漏处理是这条链路最容易出的事，所以要能一键筛出来
+     * @param payStatus       收款状态（v1.53）：工作台「待核对收款」「待退款」两个待办点进来时按它筛
      */
     @GetMapping("/list")
     @RequirePerm({Perms.ORDER_VIEW, Perms.ORDER_ACCEPT})
@@ -52,10 +53,11 @@ public class OrderAdminController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Boolean cancelRequested,
+            @RequestParam(required = false) String payStatus,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
-        return ApiResponse.ok(PageResult.of(
-                orderAdminService.list(serveDate, status, keyword, cancelRequested, page, pageSize)));
+        return ApiResponse.ok(PageResult.of(orderAdminService.list(
+                serveDate, status, keyword, cancelRequested, payStatus, page, pageSize)));
     }
 
     @GetMapping("/detail")
@@ -105,6 +107,20 @@ public class OrderAdminController {
                 UserContext.userId(), request.orderId(), request.reason()));
     }
 
+    /**
+     * 批量拒单（v1.53 / F-J11）：整批共用一条原因。
+     *
+     * <p>逐单走 {@code reject} 同一条路径，状态已变的单收进 {@code skipped}，
+     * 整批全部跳过也不报错 —— 由前端把 {@code skipped} 原样展示，商家自己决定要不要重试。
+     */
+    @PostMapping("/reject-batch")
+    @RequirePerm(Perms.ORDER_ACCEPT)
+    public ApiResponse<OrderAdminService.RejectResult> rejectBatch(
+            @Valid @RequestBody RejectBatchRequest request) {
+        return ApiResponse.ok(orderAdminService.rejectBatch(
+                UserContext.userId(), request.orderIds(), request.reason()));
+    }
+
     /** 推进状态：accepted → ready → completed。自取与配送共用 ready，只是文案不同。 */
     @PostMapping("/advance")
     @RequirePerm(Perms.ORDER_ACCEPT)
@@ -134,11 +150,17 @@ public class OrderAdminController {
         };
     }
 
-    /** 标记退款完成（待退款 → 已退款），记录操作人与时间。 */
+    /**
+     * 标记退款完成（待退款 → 已退款），记录操作人与时间。
+     *
+     * <p>v1.53 起必须带 {@code refundAmount}（前端弹窗默认填全额，商家可改成实际退的）。
+     * 不带时按订单合计处理，兼容还没更新的旧版小程序。
+     */
     @PostMapping("/refund")
     @RequirePerm(Perms.ORDER_PAYMENT)
-    public ApiResponse<OrderService.OrderView> refund(@Valid @RequestBody IdRequest request) {
-        return ApiResponse.ok(orderAdminService.refund(UserContext.userId(), request.orderId()));
+    public ApiResponse<OrderService.OrderView> refund(@Valid @RequestBody RefundRequest request) {
+        return ApiResponse.ok(orderAdminService.refund(UserContext.userId(), request.orderId(),
+                request.refundAmount(), request.refundRemark()));
     }
 
     /** 审批用户的取消申请。 */
@@ -193,6 +215,22 @@ public class OrderAdminController {
     public record RejectRequest(
             @NotNull(message = "缺少订单 ID") Long orderId,
             @NotBlank(message = "拒单必须填写原因") String reason) {
+    }
+
+    /** @param reason 整批共用的一条原因，必填 */
+    public record RejectBatchRequest(
+            @NotEmpty(message = "请选择要拒单的订单") List<Long> orderIds,
+            @NotBlank(message = "拒单必须填写原因") String reason) {
+    }
+
+    /**
+     * @param refundAmount 实际退款金额（分）。为空按订单合计；须 &gt;0 且 ≤ 合计
+     * @param refundRemark 退款备注（选填，≤200）
+     */
+    public record RefundRequest(
+            @NotNull(message = "缺少订单 ID") Long orderId,
+            Integer refundAmount,
+            String refundRemark) {
     }
 
     public record AdvanceRequest(

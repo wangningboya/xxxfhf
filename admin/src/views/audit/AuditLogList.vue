@@ -1,9 +1,14 @@
 <template>
   <div class="page-card">
     <div class="toolbar">
-      <el-select v-model="tableName" clearable placeholder="全部对象" style="width: 120px" @change="onTableChange">
-        <el-option label="地址" value="address" />
-        <el-option label="用户" value="user" />
+      <!-- 对象类型由服务端下发的动作清单派生（v1.53 扩到 10 类），不再在这里硬编码 -->
+      <el-select v-model="tableName" clearable placeholder="全部对象" style="width: 130px" @change="onTableChange">
+        <el-option
+          v-for="item in tableOptions"
+          :key="item.value"
+          :label="item.label"
+          :value="item.value"
+        />
       </el-select>
       <el-select v-model="action" clearable placeholder="全部动作" style="width: 160px" @change="reload">
         <el-option v-for="item in actionOptions" :key="item.code" :label="item.label" :value="item.code" />
@@ -105,6 +110,22 @@ const allActions = ref([]);
 const actionOptions = computed(() =>
   tableName.value ? allActions.value.filter((item) => item.tableName === tableName.value) : allActions.value
 );
+
+/**
+ * 对象类型下拉：从动作清单里去重派生。
+ *
+ * 不硬编码的原因很直接 —— 清单已经从「地址 / 用户」长到 10 类，
+ * 硬编码那一份必然落后（v1.53 之前就已经漏了邀请码）。
+ */
+const tableOptions = computed(() => {
+  const map = new Map();
+  allActions.value.forEach((item) => {
+    if (item.tableName && !map.has(item.tableName)) {
+      map.set(item.tableName, item.tableNameLabel || item.tableName);
+    }
+  });
+  return Array.from(map, ([value, label]) => ({ value, label }));
+});
 
 function load() {
   loading.value = true;

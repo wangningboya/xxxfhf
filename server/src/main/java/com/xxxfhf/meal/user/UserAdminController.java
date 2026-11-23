@@ -94,6 +94,19 @@ public class UserAdminController {
         return ApiResponse.ok();
     }
 
+    /**
+     * 重置商家账号密码（v1.53 / `F-J12`）。挂 user.audit：能管账号的人才能改口令。
+     *
+     * <p>明文只在请求体里存在一次，服务端算完 BCrypt 就丢；响应不带任何密码信息。
+     */
+    @PostMapping("/password")
+    @RequirePerm(Perms.USER_AUDIT)
+    public ApiResponse<Void> resetPassword(@Valid @RequestBody PasswordRequest request) {
+        userAuditService.resetMerchantPassword(UserContext.userId(),
+                request.userId(), request.password());
+        return ApiResponse.ok();
+    }
+
     /** 角色下拉选项（仅 id + 名称）。挂 user.audit：能指定商家的人不一定能管角色。 */
     @GetMapping("/role-options")
     @RequirePerm(Perms.USER_AUDIT)
@@ -140,6 +153,12 @@ public class UserAdminController {
             @NotNull(message = "缺少用户 ID") Long userId,
             @NotBlank(message = "请输入手机号")
             @Size(max = 20, message = "手机号过长") String phone) {
+    }
+
+    public record PasswordRequest(
+            @NotNull(message = "缺少用户 ID") Long userId,
+            @NotBlank(message = "请输入新密码")
+            @Size(min = 6, max = 64, message = "登录密码长度须在 6 ~ 64 位之间") String password) {
     }
 
     public record PromoteRequest(

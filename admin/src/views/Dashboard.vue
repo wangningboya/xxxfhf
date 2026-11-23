@@ -9,7 +9,7 @@
         :clearable="false"
         @change="load"
       />
-      <span class="hint">待办数字不限供餐日（含往期漏单），当日数据按所选供餐日统计</span>
+      <span class="hint">待办数字不限供餐日（含往期漏单，资金两项同理），当日数据按所选供餐日统计</span>
       <div class="toolbar-right">
         <el-button :loading="loading" @click="load">刷新</el-button>
       </div>
@@ -104,6 +104,22 @@ const todoCards = computed(() => [
     value: data.value.pendingAddress ?? 0,
     desc: '未确认的地址用户选不到',
     to: '/address',
+  },
+  // 资金类两项（v1.53 / F-J09）：与上面四项同口径不限供餐日 ——
+  // 钱的事不能只看今天，上个月少核对一笔，账就永远差一笔
+  {
+    key: 'check',
+    label: '待核对收款',
+    value: data.value.pendingCheck ?? 0,
+    desc: '用户说付了，等你核对到账',
+    to: '/order?payStatus=claimed',
+  },
+  {
+    key: 'refund',
+    label: '待退款',
+    value: data.value.pendingRefund ?? 0,
+    desc: '钱已收到但要退，还没退完',
+    to: '/order?payStatus=refunding',
   },
 ]);
 

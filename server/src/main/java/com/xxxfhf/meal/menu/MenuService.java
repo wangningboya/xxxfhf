@@ -1,6 +1,8 @@
 package com.xxxfhf.meal.menu;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.xxxfhf.meal.audit.AuditActions;
+import com.xxxfhf.meal.audit.AuditService;
 import com.xxxfhf.meal.common.BizException;
 import com.xxxfhf.meal.config.ConfigKey;
 import com.xxxfhf.meal.config.ConfigService;
@@ -40,15 +42,26 @@ public class MenuService {
     private final SpecGroupMapper specGroupMapper;
     private final ServeDateClock clock;
     private final ConfigService configService;
+    /** 菜单变更留痕（需求 4.19 / F-J13）：一处改动会同时影响用户看到的菜单与可售份数 */
+    private final AuditService auditService;
 
     public MenuService(DailyMenuMapper menuMapper, ComboService comboService,
                        SpecGroupMapper specGroupMapper, ServeDateClock clock,
-                       ConfigService configService) {
+                       ConfigService configService, AuditService auditService) {
         this.menuMapper = menuMapper;
         this.comboService = comboService;
         this.specGroupMapper = specGroupMapper;
         this.clock = clock;
         this.configService = configService;
+        this.auditService = auditService;
+    }
+
+    /**
+     * 菜单没有「一行代表一天」的主键，用供餐日的 {@code yyyyMMdd} 当 {@code record_id}：
+     * 操作记录页按对象 ID 搜 {@code 20261124} 就能把这一天的保存 / 发布 / 撤下全捞出来。
+     */
+    private static long dateKey(LocalDate date) {
+        return date.getYear() * 10000L + date.getMonthValue() * 100L + date.getDayOfMonth();
     }
 
     /* ==================== 用户端 ==================== */
@@ -189,6 +202,8 @@ public class MenuService {
         }
 
         log.info("保存每日菜单 serveDate={} 盒饭数={}", date, keep.size());
+        auditService.record(AuditActions.TABLE_MENU, dateKey(date), AuditActions.MENU_SAVE,
+                "保存 " + date + " 菜单：盒饭 " + keep.size() + " 个");
     }
 
     /**
@@ -217,6 +232,9 @@ public class MenuService {
             menuMapper.updateById(menu);
         }
         log.info("菜单 {} serveDate={} 盒饭数={}", published ? "发布" : "撤下", date, menus.size());
+        auditService.record(AuditActions.TABLE_MENU, dateKey(date),
+                published ? AuditActions.MENU_PUBLISH : AuditActions.MENU_CLOSE,
+                (published ? "发布 " : "撤下 ") + date + " 菜单：盒饭 " + menus.size() + " 个");
     }
 
     /** 复制上一份：找出该日期之前最近的一份菜单，返回它的盒饭与限量，供前端预填。 */

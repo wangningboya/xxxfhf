@@ -134,8 +134,7 @@ page {
 .sum-total {
   margin-top: 12rpx;
   padding-top: 20rpx;
-  border-top: 1rpx solid #f2f3f5;
-  font-size: 28rpx;
+  border-top: 1rpx solid #f2f3f5;  font-size: 28rpx;
   color: #1a1a1a;
 }
 
@@ -260,4 +259,14 @@ page {
   font-size: 24rpx;
   line-height: 1.5;
   color: #888888;
+}
+
+/* 自取点地址：允许换行，长地址不挤成一行 */
+.addr {
+  line-height: 1.5;
+}
+
+/* 可点击的「联系商家」行 */
+.sum-link text:last-child {
+  color: #ff9f1c;
 }

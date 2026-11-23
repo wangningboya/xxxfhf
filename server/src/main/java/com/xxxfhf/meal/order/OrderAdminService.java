@@ -73,6 +73,17 @@ public class OrderAdminService {
      */
     public IPage<AdminOrderRow> list(String serveDateRaw, String status, String keyword,
                                      Boolean cancelRequested, int page, int pageSize) {
+        return list(serveDateRaw, status, keyword, cancelRequested, null, page, pageSize);
+    }
+
+    /**
+     * @param payStatus 收款状态（v1.53）：工作台「待核对收款」「待退款」两个待办点进来时
+     *                  就按这个筛。传空为不限 —— 与 {@code cancelRequested} 一样，
+     *                  用工单事实筛比让商家自己在列表里找可靠
+     */
+    public IPage<AdminOrderRow> list(String serveDateRaw, String status, String keyword,
+                                     Boolean cancelRequested, String payStatus,
+                                     int page, int pageSize) {
         LocalDate serveDate = DateParam.parse(serveDateRaw, "供餐日期");
         Page<Order> pager = new Page<>(Math.max(page, 1), Math.min(Math.max(pageSize, 1), 100));
 
@@ -94,6 +105,7 @@ public class OrderAdminService {
         IPage<Order> result = orderMapper.selectPage(pager, Wrappers.<Order>lambdaQuery()
                 .eq(serveDate != null, Order::getServeDate, serveDate)
                 .eq(status != null && !status.isBlank(), Order::getStatus, status)
+                .eq(payStatus != null && !payStatus.isBlank(), Order::getPayStatus, payStatus)
                 .eq(Boolean.TRUE.equals(cancelRequested), Order::getCancelRequested, true)
                 .in(!matchedUserIds.isEmpty(), Order::getUserId, matchedUserIds)
                 .last("ORDER BY stock_released DESC, "
@@ -198,6 +210,46 @@ public class OrderAdminService {
     }
 
     /**
+     * 批量拒单（v1.53 / 需求 4.11 / F-J11）：整批共用一条原因。
+     *
+     * 为什么共用一条：批量拒的典型场景是「明天停业」「主菜缺料」，整批本来就是同一个理由；
+     * 逐单填一遍等于把最痛的那一步留着。个别单要不同理由，单独拒即可。
+     *
+     * 逐单走 {@link #reject} 同一条路径（释放份数 → 转待退款 → 通知 → 记流转），
+     * 不另写一套 —— 两条路径迟早会分叉，而分叉的那一次就是份数没释放的那一次。
+     * 状态已变 / 不存在的单收进 {@code skipped}，不影响其余单。
+     */
+    @Transactional
+    public RejectResult rejectBatch(Long operatorId, List<Long> orderIds, String reason) {
+        if (orderIds == null || orderIds.isEmpty()) {
+            throw BizException.param("请选择要拒单的订单");
+        }
+        if (orderIds.size() > MAX_BATCH_ACCEPT) {
+            throw BizException.param("一次最多拒 " + MAX_BATCH_ACCEPT + " 单");
+        }
+        // 原因先校验：整批共用，没有「这一单不缺原因、那一单缺」的说法
+        String trimmed = requireReason(reason);
+
+        List<String> rejected = new ArrayList<>();
+        List<String> skipped = new ArrayList<>();
+        for (Long orderId : orderIds) {
+            Order order = orderId == null ? null : orderMapper.selectById(orderId);
+            String orderNo = order == null ? String.valueOf(orderId) : order.getOrderNo();
+            try {
+                reject(operatorId, orderId, trimmed);
+                rejected.add(orderNo);
+            } catch (BizException e) {
+                // 单笔失败不牵连整批：早上一批十几单里有一单状态不对，不该让整批都拒不了
+                skipped.add(orderNo + "：" + e.getMessage());
+            }
+        }
+
+        log.info("批量拒单 操作人={} 成功={} 跳过={} 原因={}",
+                operatorId, rejected.size(), skipped.size(), trimmed);
+        return new RejectResult(rejected, skipped);
+    }
+
+    /**
      * 推进状态。没有「制作中」：已接单 → 出餐（ready）→ 已完成。
      *
      * 取送方式不改变路径，只改变 ready 那一格的叫法与通知：自取叫「待取餐」要发取餐码，
@@ -218,6 +270,11 @@ public class OrderAdminService {
                     + "）不能推进到「" + OrderStatus.label(target, order.getDeliveryType()) + "」"
                     + (next == null ? "" : "，下一步只能是「"
                     + OrderStatus.label(next, order.getDeliveryType()) + "」"));
+        }
+        // 申请中禁用【出餐】：申请只产生于「已接单 + 已过截单」，此时若一边审批取消
+        // 一边把餐做出去，商家就白做一份（需求 4.9 取消申请中）
+        if (transition == OrderTransition.READY && Boolean.TRUE.equals(order.getCancelRequested())) {
+            throw BizException.conflict("用户已申请取消，请先同意或驳回，再推进出餐");
         }
         // 未到供餐日也放行：商家常要提前把「出餐 → 完成」点一遍串流程。
         // 不拦，只留一条警告 —— 事后翻日志能看出这单是提前操作的。
@@ -464,25 +521,59 @@ public class OrderAdminService {
      *
      * 条件更新带 `pay_status='refunding'`，重复点第二次会失败 ——
      * 这就是「防重复退」的落地方式，同时留下操作人与时间。
+     *
+     * <p><b>为什么必须记金额（v1.53 / 需求 4.10 / `F-F06`）</b>：线下退款天然会有部分退
+     * （少送一份、扣掉已经发生的配送费）。只标「已退款」而不记金额，账面上「这单退了」
+     * 和「退了 12 块」是两回事，月底对不上账时没有任何依据。
+     *
+     * @param refundAmount 实际退款金额（分）。为 null 时按订单合计（兼容没带金额的旧版小程序）；
+     *                     须 &gt;0 且 ≤ 订单合计 —— 退得比收得多不是「大方」，是错账
+     * @param remark       退款备注（选填，≤200）：退到哪个账户、为什么少退
      */
     @Transactional
-    public OrderService.OrderView refund(Long operatorId, Long orderId) {
+    public OrderService.OrderView refund(Long operatorId, Long orderId,
+                                         Integer refundAmount, String remark) {
         Order order = orderService.require(orderId);
+        int total = order.getTotalAmount() == null ? 0 : order.getTotalAmount();
+        int amount = refundAmount == null ? total : refundAmount;
+        if (amount <= 0) {
+            throw BizException.param("退款金额必须大于 0");
+        }
+        if (total > 0 && amount > total) {
+            throw BizException.param("退款金额不能超过订单合计（" + total + " 分）");
+        }
+        String trimmedRemark = remark == null || remark.isBlank() ? null : remark.trim();
+        if (trimmedRemark != null && trimmedRemark.length() > 200) {
+            throw BizException.param("退款备注最多 200 字");
+        }
+
         LocalDateTime now = LocalDateTime.now();
         int affected = orderMapper.update(null, Wrappers.<Order>lambdaUpdate()
                 .set(Order::getPayStatus, PayStatus.REFUNDED)
                 .set(Order::getRefundedAt, now)
                 .set(Order::getRefundOperator, operatorId)
+                .set(Order::getRefundAmount, amount)
+                .set(Order::getRefundRemark, trimmedRemark)
                 .eq(Order::getId, orderId)
                 .eq(Order::getPayStatus, PayStatus.REFUNDING));
         if (affected == 0) {
             throw BizException.conflict("只有「待退款」可以标记退款，当前状态是「"
                     + PayStatus.label(order.getPayStatus()) + "」");
         }
-        log.info("标记退款完成 orderNo={} 操作人={}", order.getOrderNo(), operatorId);
+        log.info("标记退款完成 orderNo={} 操作人={} 金额={}分 备注={}",
+                order.getOrderNo(), operatorId, amount, trimmedRemark);
         statusLogService.record(orderId, OrderLogActions.PAY_REFUND,
-                PayStatus.REFUNDING, PayStatus.REFUNDED, null, now);
+                PayStatus.REFUNDING, PayStatus.REFUNDED,
+                "退款 " + yuanText(amount) + (trimmedRemark == null ? "" : "｜" + trimmedRemark),
+                now);
+        // 钱退回去了必须让用户知道（只落站内消息，不占订阅消息额度，见 NotifyService.MESSAGE_ONLY）
+        notifyService.refunded(orderService.require(orderId));
         return orderService.toView(orderService.require(orderId));
+    }
+
+    /** 分转「12.50 元」，只用于给用户看的文案；对账一律用分 */
+    private static String yuanText(int cent) {
+        return String.format("%.2f 元", cent / 100.0);
     }
 
     /* ==================== 取消申请审批 ==================== */
@@ -579,6 +670,10 @@ public class OrderAdminService {
         if (approve) {
             // 同意了就等于这单没了，商家要及时知道，别再排进备菜
             notifyService.cancelled(handledOrder);
+        } else {
+            // 驳回必须告诉用户：他申请完一直在等结果，不通知等于让他反复刷页面。
+            // 只落站内消息，不占订阅消息额度（见 NotifyService.MESSAGE_ONLY）
+            notifyService.cancelRequestRejected(handledOrder);
         }
         return orderService.toView(handledOrder);
     }
@@ -640,6 +735,10 @@ public class OrderAdminService {
      * @param skipped  跳过的原因（某一单状态不对不该拖垮整批）
      * @param warnings 成功但有风险提示的单（份数曾被超时释放）
      */
+    /** @param skipped 形如「单号：原因」，直接展示给商家，不必再翻译一遍 */
+    public record RejectResult(List<String> rejected, List<String> skipped) {
+    }
+
     public record AcceptResult(List<String> accepted, List<String> skipped, List<String> warnings) {
     }
 }

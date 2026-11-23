@@ -1,6 +1,8 @@
 package com.xxxfhf.meal.dict;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.xxxfhf.meal.audit.AuditActions;
+import com.xxxfhf.meal.audit.AuditService;
 import com.xxxfhf.meal.common.BizException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,13 +48,17 @@ public class DictService {
 
     private final DictTypeMapper typeMapper;
     private final DictItemMapper itemMapper;
+    /** 字典变更留痕（需求 4.19 / F-J13）：支付方式这类字典直接被订单引用，改错会牵连历史单的展示 */
+    private final AuditService auditService;
 
     /** typeCode -> (itemValue -> item)，整块替换，避免读一半被写穿 */
     private volatile Map<String, Map<String, DictItem>> cache;
 
-    public DictService(DictTypeMapper typeMapper, DictItemMapper itemMapper) {
+    public DictService(DictTypeMapper typeMapper, DictItemMapper itemMapper,
+                       AuditService auditService) {
         this.typeMapper = typeMapper;
         this.itemMapper = itemMapper;
+        this.auditService = auditService;
     }
 
     /* ==================== 读：给业务代码用 ==================== */
@@ -197,6 +203,8 @@ public class DictService {
             exists.setRemark(trimToNull(cmd.remark()));
             typeMapper.updateById(exists);
             evict();
+            auditService.record(AuditActions.TABLE_DICT, 0L, AuditActions.DICT_TYPE_SAVE,
+                    "修改字典类型：" + code + "（" + exists.getTypeName() + "，内置类型只改名称与备注）");
             return TypeView.of(exists, countItems(code));
         }
         DictType entity = exists == null ? new DictType() : exists;
@@ -211,6 +219,9 @@ public class DictService {
         }
         evict();
         log.info("字典类型保存 code={} 新建={}", code, exists == null);
+        auditService.record(AuditActions.TABLE_DICT, 0L, AuditActions.DICT_TYPE_SAVE,
+                (exists == null ? "新增字典类型：" : "修改字典类型：")
+                        + code + "（" + entity.getTypeName() + "）");
         return TypeView.of(entity, countItems(code));
     }
 
@@ -227,6 +238,8 @@ public class DictService {
         typeMapper.deleteById(typeCode);
         evict();
         log.info("字典类型删除 code={}", typeCode);
+        auditService.record(AuditActions.TABLE_DICT, 0L, AuditActions.DICT_TYPE_DELETE,
+                "删除字典类型：" + typeCode + "（" + type.getTypeName() + "），连同其下全部字典项");
     }
 
     /**
@@ -271,6 +284,8 @@ public class DictService {
             itemMapper.insert(entity);
             evict();
             log.info("字典项新增 type={} value={}", typeCode, value);
+            auditService.record(AuditActions.TABLE_DICT, entity.getId(), AuditActions.DICT_ITEM_SAVE,
+                    "新增字典项：" + typeCode + " / " + value + "（" + entity.getItemLabel() + "）");
             return ItemView.of(entity);
         }
 
@@ -290,6 +305,9 @@ public class DictService {
         itemMapper.updateById(exists);
         evict();
         log.info("字典项修改 id={} type={} value={}", exists.getId(), typeCode, value);
+        auditService.record(AuditActions.TABLE_DICT, exists.getId(), AuditActions.DICT_ITEM_SAVE,
+                "修改字典项：" + typeCode + " / " + value + "（" + exists.getItemLabel()
+                        + "，" + statusLabel(exists.getStatus()) + "）");
         return ItemView.of(exists);
     }
 
@@ -305,6 +323,9 @@ public class DictService {
         itemMapper.deleteById(id);
         evict();
         log.info("字典项删除 id={} type={} value={}", id, item.getTypeCode(), item.getItemValue());
+        auditService.record(AuditActions.TABLE_DICT, id, AuditActions.DICT_ITEM_DELETE,
+                "删除字典项：" + item.getTypeCode() + " / " + item.getItemValue()
+                        + "（" + item.getItemLabel() + "）");
     }
 
     /** 单独改启停，列表里点开关用，省一次整表单提交。 */
@@ -317,12 +338,20 @@ public class DictService {
         item.setStatus(normalizeStatus(status));
         itemMapper.updateById(item);
         evict();
+        auditService.record(AuditActions.TABLE_DICT, id, AuditActions.DICT_ITEM_STATUS,
+                "字典项「" + item.getItemLabel() + "」（" + item.getTypeCode() + " / "
+                        + item.getItemValue() + "）" + statusLabel(item.getStatus()));
         return ItemView.of(item);
     }
 
     private int countItems(String typeCode) {
         return Math.toIntExact(itemMapper.selectCount(Wrappers.<DictItem>lambdaQuery()
                 .eq(DictItem::getTypeCode, typeCode)));
+    }
+
+    /** 启停的中文名，摘要里写 active / disabled 等于没写 */
+    private static String statusLabel(String status) {
+        return "disabled".equals(status) ? "停用" : "启用";
     }
 
     private static String normalizeStatus(String status) {

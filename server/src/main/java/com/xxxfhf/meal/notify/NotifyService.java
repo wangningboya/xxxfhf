@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 订阅消息推送。
@@ -47,6 +48,16 @@ import java.util.Map;
 public class NotifyService {
 
     private static final Logger log = LoggerFactory.getLogger(NotifyService.class);
+
+    /**
+     * 只落站内消息、不发微信订阅消息的类型。
+     *
+     * <p>用户侧一次性订阅一次最多授权 3 个模板，接单 / 拒单 / 出餐（配送单是「已出餐配送」）
+     * 已经占满，第 4 条发不出去。这四类都不影响「今天吃什么」，进小程序能看到即可。
+     */
+    private static final Set<NotifyType> MESSAGE_ONLY = Set.of(
+            NotifyType.COMPLETED, NotifyType.CANCEL_REJECTED,
+            NotifyType.REFUNDED, NotifyType.STOCK_RELEASED);
 
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     /** 温馨提示里的短日期：thing 类型只有 20 字，年份省掉。 */
@@ -122,6 +133,33 @@ public class NotifyService {
         fire(NotifyType.CANCELLED, order);
     }
 
+    /* ---------- 只落站内消息的三类（v1.53 / F-I04），不占订阅消息额度 ---------- */
+
+    /**
+     * 取消申请被驳回 → 用户。
+     *
+     * <p>必须带原因：用户申请取消后一直在等结果，只告诉他「没通过」等于让他再问一遍。
+     * 原因从 {@code order.cancelRequest.remark} 取（商家驳回时填的那句话）。
+     */
+    public void cancelRequestRejected(Order order) {
+        fire(NotifyType.CANCEL_REJECTED, order);
+    }
+
+    /**
+     * 退款完成 → 用户。
+     *
+     * <p>{@code order} 必须传**退款后重新查出来的**对象：金额与备注写在那两列上，
+     * 传入退款前的旧对象会让消息里的金额永远显示 0。
+     */
+    public void refunded(Order order) {
+        fire(NotifyType.REFUNDED, order);
+    }
+
+    /** 份数因超时未申报支付方式被释放 → 用户（订单还在，但份可能已经被别人买走） */
+    public void stockReleased(Order order) {
+        fire(NotifyType.STOCK_RELEASED, order);
+    }
+
     /* ==================== 内部 ==================== */
 
     /**
@@ -165,11 +203,10 @@ public class NotifyService {
         // 顺序也重要 —— 放在最前面，后面任何一步抛异常都不影响它已经落库。
         recordMessage(type, order);
 
-        // 「已完成」到此为止，不往下走推送：用户侧一次性订阅一次最多授权 3 个模板，
-        // 接单 / 拒单 / 出餐（配送单是「已出餐配送」）已经占满，这条发不出去。
-        // 放在这里而不是调用方，是为了让 OrderAdminService 只表达「订单结束了」，
-        // 也避免在时间轴上写一条注定失败的 event.notify_fail。
-        if (type == NotifyType.COMPLETED) {
+        // 只落站内消息的类型到此为止，不往下走推送（原因见 MESSAGE_ONLY）。
+        // 判断放在这里而不是调用方，是为了让 OrderAdminService 只表达「订单结束了」
+        // 「退款完成了」，也避免在时间轴上写一条注定失败的 event.notify_fail。
+        if (MESSAGE_ONLY.contains(type)) {
             return;
         }
 
@@ -256,6 +293,9 @@ public class NotifyService {
             case COMPLETED -> "delivery".equals(order.getDeliveryType()) ? "订单已送达" : "已取餐";
             case CANCEL_REQUEST -> "用户申请取消";
             case CANCELLED -> "订单已取消";
+            case CANCEL_REJECTED -> "取消申请未通过";
+            case REFUNDED -> "退款已完成";
+            case STOCK_RELEASED -> "份数已释放";
         };
     }
 
@@ -267,7 +307,10 @@ public class NotifyService {
             case REJECTED -> "原因：" + textOr(order.getRejectReason(), "商家未填写");
             case READY -> {
                 String slot = nvl(order.getPickupSlot());
-                yield "取餐码 " + textOr(order.getPickupCode(), "-") + (slot.isEmpty() ? "" : "，" + slot);
+                String addr = configService.get(ConfigKey.SHOP_ADDRESS, "");
+                yield "取餐码 " + textOr(order.getPickupCode(), "-")
+                        + (slot.isEmpty() ? "" : "，" + slot)
+                        + (addr.isEmpty() ? "" : "，取餐点：" + addr);
             }
             case DELIVERED -> {
                 String day = order.getServeDate() == null
@@ -292,6 +335,24 @@ public class NotifyService {
                 String reason = nvl(order.getRejectReason());
                 yield "订单 " + nvl(order.getOrderNo()) + (reason.isEmpty() ? "已取消" : "，原因：" + reason);
             }
+            case CANCEL_REJECTED -> {
+                String reason = order.getCancelRequest() == null
+                        ? "" : nvl(order.getCancelRequest().remark());
+                yield "订单 " + nvl(order.getOrderNo()) + " 的取消申请未通过"
+                        + (reason.isEmpty() ? "" : "，原因：" + reason)
+                        + "，订单继续按原计划供应";
+            }
+            case REFUNDED -> {
+                // 历史单可能没有 refund_amount（v3.49 之前），回退订单合计
+                Integer amount = order.getRefundAmount() == null
+                        ? order.getTotalAmount() : order.getRefundAmount();
+                String note = nvl(order.getRefundRemark());
+                yield "已退款 " + yuan(amount) + " 元，已原路退回"
+                        + (note.isEmpty() ? "" : "，备注：" + note);
+            }
+            case STOCK_RELEASED ->
+                    "订单 " + nvl(order.getOrderNo())
+                            + " 仍是待接单，但份数已因超时未申报支付方式被释放，请尽快付款或重新下单";
         };
     }
 
@@ -367,9 +428,11 @@ public class NotifyService {
      * serveDate 供餐日 / pickupCode 取餐码 / pickupSlot 取餐时段 / deliveryType 取送方式
      * status 状态文案 / reason 拒单原因 / nickname 下单人昵称 / remark 备注 / time 当前时间
      * serveTip 接单温馨提示（一句话，带 MM-dd）/ serveInfo 取送方式 + 时段或份数
+     * shopAddress 店铺地址（自取点）/ shopPhone 商家电话 / pickupAddress 自取点（配送单为空）
      */
     private Map<String, String> buildVars(Order order) {
         Map<String, String> vars = new LinkedHashMap<>();
+        boolean delivery = "delivery".equals(order.getDeliveryType());
         vars.put("shopName", configService.get(ConfigKey.SHOP_NAME, "本店"));
         vars.put("orderNo", nvl(order.getOrderNo()));
         vars.put("summary", summaryOf(order));
@@ -378,7 +441,7 @@ public class NotifyService {
         vars.put("serveDate", order.getServeDate() == null ? "" : order.getServeDate().toString());
         vars.put("pickupCode", nvl(order.getPickupCode()));
         vars.put("pickupSlot", nvl(order.getPickupSlot()));
-        vars.put("deliveryType", "delivery".equals(order.getDeliveryType()) ? "配送" : "自取");
+        vars.put("deliveryType", delivery ? "配送" : "自取");
         vars.put("status", order.getStatus() == null ? "" : order.getStatus());
         vars.put("reason", nvl(order.getRejectReason()));
         // 用户申请取消时填的原因，商家据此判断要不要同意
@@ -387,10 +450,14 @@ public class NotifyService {
         vars.put("remark", nvl(order.getRemark()));
         vars.put("time", LocalDateTime.now().format(TIME_FMT));
         vars.put("serveDateDay", serveDateDay(order.getServeDate()));
+        // 自取单的「可以取餐了」必须告诉用户去哪取；配送单没有取餐地点，填空避免模板出现「null」
+        String shopAddress = configService.get(ConfigKey.SHOP_ADDRESS, "");
+        vars.put("shopAddress", shopAddress);
+        vars.put("shopPhone", configService.get(ConfigKey.SHOP_PHONE, ""));
+        vars.put("pickupAddress", delivery ? "" : shopAddress);
 
         // 接单通知的「温馨提示 / 订单信息」专用：配送单没有取餐时段，直接填 pickupSlot 会出现「-」，
         // 所以按取送方式给不同文案，两个字段都保持在 20 字以内。
-        boolean delivery = "delivery".equals(order.getDeliveryType());
         vars.put("serveTip", serveTipOf(order));
         String slot = nvl(order.getPickupSlot());
         vars.put("serveInfo", delivery

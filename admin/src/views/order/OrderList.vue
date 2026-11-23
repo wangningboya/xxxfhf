@@ -18,6 +18,20 @@
           :value="item.value"
         />
       </el-select>
+      <el-select
+        v-model="payStatus"
+        placeholder="全部收款状态"
+        clearable
+        style="width: 150px"
+        @change="reload"
+      >
+        <el-option
+          v-for="item in payStatusOptions"
+          :key="item.value"
+          :label="item.label"
+          :value="item.value"
+        />
+      </el-select>
       <el-input
         v-model="keyword"
         placeholder="昵称或手机号"
@@ -38,6 +52,17 @@
           @click="onBatchAccept"
         >
           批量接单（{{ selected.length }}）
+        </el-button>
+        <!-- 批量拒单（v1.53 / F-J11）：整批共用一条原因，逐单走单笔拒单同一条路径 -->
+        <el-button
+          v-if="auth.has('order.accept')"
+          type="danger"
+          plain
+          :disabled="selected.length === 0"
+          :loading="rejecting"
+          @click="openBatchReject"
+        >
+          批量拒单（{{ selected.length }}）
         </el-button>
       </div>
     </div>
@@ -71,6 +96,13 @@
               （{{ item.specs.map((s) => s.optionName).join('/') }}）
             </span>
           </div>
+        </template>
+      </el-table-column>
+      <el-table-column label="备注" min-width="150">
+        <template #default="{ row }">
+          <!-- 整单备注要传到后厨与配送，列表里就该看得见，而不是点进详情才知道 -->
+          <span v-if="row.order.remark" class="remark-text">{{ row.order.remark }}</span>
+          <span v-else class="muted">—</span>
         </template>
       </el-table-column>
       <el-table-column label="取餐方式" width="110">
@@ -147,6 +179,12 @@
           <el-descriptions-item label="订单状态">{{ detail.order.statusLabel }}</el-descriptions-item>
           <el-descriptions-item label="收款状态">{{ detail.order.payStatusLabel }}</el-descriptions-item>
           <el-descriptions-item label="收款方式">{{ detail.order.payMethodLabel || '未申报' }}</el-descriptions-item>
+          <el-descriptions-item v-if="detail.order.payStatus === 'refunded'" label="实际退款" :span="2">
+            ¥{{ yuan(detail.order.refundAmount ?? detail.order.totalAmount) }}
+            <span v-if="detail.order.refundRemark" class="remark-text">
+              备注：{{ detail.order.refundRemark }}
+            </span>
+          </el-descriptions-item>
           <el-descriptions-item label="取餐码">{{ detail.order.pickupCode || '—' }}</el-descriptions-item>
           <el-descriptions-item label="取餐时段">{{ detail.order.pickupSlot || '—' }}</el-descriptions-item>
           <el-descriptions-item label="取餐方式" :span="2">
@@ -255,10 +293,16 @@
             v-if="nextStatus(detail.order.status) && auth.has('order.accept')"
             type="primary"
             plain
+            :disabled="detail.order.cancelRequested && nextStatus(detail.order.status) === 'ready'"
             @click="onAdvance(detail)"
           >
             {{ nextLabel(detail.order.status, detail.order.deliveryType) }}
           </el-button>
+          <!-- 申请中不能出餐：先批或驳，否则等于一边审批取消一边把餐做出去 -->
+          <span
+            v-if="detail.order.cancelRequested && nextStatus(detail.order.status) === 'ready'"
+            class="muted"
+          >用户已申请取消，请先同意或驳回再出餐</span>
           <el-button
             v-if="detail.order.payStatus !== 'paid' && detail.order.payStatus !== 'refunded' && auth.has('order.payment')"
             type="success"
@@ -291,6 +335,58 @@
         </div>
       </div>
     </el-drawer>
+
+    <!-- 批量拒单：一条原因给整批。典型场景是「明天停业」「主菜缺料」，逐单填一遍等于把最痛的那一步留着 -->
+    <el-dialog v-model="rejectDialog" title="批量拒单" width="440px">
+      <div class="pay-tip">
+        将对选中的 {{ selected.length }} 单填写同一条拒单原因，顾客在订单详情里会看到这句话。
+        拒单会释放份数；已收钱的单同时转入「待退款」。
+      </div>
+      <el-input
+        v-model="rejectReason"
+        type="textarea"
+        :rows="3"
+        maxlength="200"
+        show-word-limit
+        placeholder="如：明天店面停业，无法供应"
+      />
+      <template #footer>
+        <el-button @click="rejectDialog = false">取消</el-button>
+        <el-button type="danger" :loading="rejecting" @click="submitBatchReject">确定拒单</el-button>
+      </template>
+    </el-dialog>
+
+    <!--
+      退款金额与备注（需求 4.10 / F-F06）。
+      金额默认带出订单合计、可改成实际退的 —— 线下退款天然会有部分退（少送一份、扣掉已发生的配送费），
+      只标「已退款」不记金额，月底对账没有任何依据。
+    -->
+    <el-dialog v-model="refundDialog" title="标记已退款" width="420px">
+      <div class="pay-tip">
+        实际退给顾客多少钱？默认是订单合计 ¥{{ yuan(refundTotal) }}，部分退款请改成实际金额。
+      </div>
+      <el-form label-width="88px">
+        <el-form-item label="退款金额">
+          <el-input v-model="refundAmount" placeholder="元">
+            <template #append>元</template>
+          </el-input>
+        </el-form-item>
+        <el-form-item label="退款备注">
+          <el-input
+            v-model="refundRemark"
+            type="textarea"
+            :rows="2"
+            maxlength="200"
+            show-word-limit
+            placeholder="选填：退到哪个账户、为什么少退"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="refundDialog = false">取消</el-button>
+        <el-button type="primary" :loading="refunding" @click="submitRefund">确认已退款</el-button>
+      </template>
+    </el-dialog>
 
     <!--
       确认收款前选一次收款方式（需求 4.10 / N-33）。
@@ -365,6 +461,8 @@ function today() {
 
 const serveDate = ref(tomorrow());
 const status = ref('');
+/** 收款状态筛选（v1.53）：工作台「待核对收款 / 待退款」两个待办点进来时带参数落在这里 */
+const payStatus = ref('');
 const keyword = ref('');
 /** 只看有取消申请的单：勾上时不限供餐日，专门用来捞漏处理的退订 */
 const cancelOnly = ref(false);
@@ -387,12 +485,37 @@ const paySubmitting = ref(false);
 /** 用户申报过的方式；空串表示没申报（现金单用户不点按钮就是这种） */
 const userClaimedMethod = ref('');
 
+/** 批量拒单：整批共用一条原因 */
+const rejectDialog = ref(false);
+const rejectReason = ref('');
+const rejecting = ref(false);
+
+/** 退款：金额默认订单合计（单位元，输入框里给人看的是元，提交时换成分） */
+const refundDialog = ref(false);
+const refundTargetId = ref(null);
+const refundTotal = ref(0);
+const refundAmount = ref('');
+const refundRemark = ref('');
+const refunding = ref(false);
+
 /** 字典没加载出来时的兜底：初始三项，与服务端 PayMethod 常量一致 */
 const PAY_METHOD_FALLBACK = [
   { value: 'wechat', label: '微信' },
   { value: 'alipay', label: '支付宝' },
   { value: 'cash', label: '现金' },
 ];
+
+/** 收款状态兜底：与服务端 PayStatus 常量一致，字典加载后以字典为准 */
+const PAY_STATUS_FALLBACK = [
+  { value: 'unpaid', label: '未收款' },
+  { value: 'claimed', label: '用户声称已付款' },
+  { value: 'paid', label: '已确认收款' },
+  { value: 'refunding', label: '待退款' },
+  { value: 'refunded', label: '已退款' },
+];
+
+/** 收款状态选项：字典优先，商家改了显示名这里跟着变 */
+const payStatusOptions = computed(() => dict.options('pay_status', PAY_STATUS_FALLBACK));
 
 /** 收款方式选项：商家可在「数据字典」里增删改，前端不写死，停用的项不会再出现 */
 const payMethodOptions = computed(() => dict.options('pay_method', PAY_METHOD_FALLBACK));
@@ -433,10 +556,11 @@ function load() {
   http
     .get('/admin/order/list', {
       params: {
-        // 只看取消申请时不限供餐日：漏处理的那条往往就是往期的，
-        // 带着「明天」这个默认日期去筛，等于把要找回的单先排除掉了
-        serveDate: cancelOnly.value ? undefined : serveDate.value,
+        // 只看取消申请、或按收款状态筛时都不限供餐日：漏处理的退订、没核对的钱
+        // 往往就在往期，带着「明天」这个默认日期去筛等于先把要处理的那批排除掉了
+        serveDate: cancelOnly.value || payStatus.value ? undefined : serveDate.value,
         status: status.value || undefined,
+        payStatus: payStatus.value || undefined,
         keyword: keyword.value || undefined,
         cancelRequested: cancelOnly.value ? true : undefined,
         page: page.value,
@@ -676,14 +800,20 @@ function onPayment(row, action) {
     payDialog.value = true;
     return;
   }
-  const labelMap = { revert: '回退收款', refund: '标记已退款' };
+  // 退款要填金额与备注，单独走弹窗（P1-7）：金额默认全额，可改成实际退的
+  if (action === 'refund') {
+    refundTargetId.value = row.order.orderId;
+    refundTotal.value = row.order.totalAmount || 0;
+    refundAmount.value = ((Number(row.order.totalAmount) || 0) / 100).toFixed(2);
+    refundRemark.value = '';
+    refundDialog.value = true;
+    return;
+  }
+  const labelMap = { revert: '回退收款' };
   ElMessageBox.confirm('确定' + labelMap[action] + '？', labelMap[action])
     .then(() => {
-      // 回退走 payment 接口靠 action 区分；退款是独立接口
-      const request =
-        action === 'refund'
-          ? http.post('/admin/order/refund', { orderId: row.order.orderId })
-          : http.post('/admin/order/payment', { orderId: row.order.orderId, action });
+      // 回退走 payment 接口靠 action 区分（退款已在上面分流到弹窗）
+      const request = http.post('/admin/order/payment', { orderId: row.order.orderId, action });
       request
         .then(() => {
           ElMessage.success('已' + labelMap[action]);
@@ -692,6 +822,83 @@ function onPayment(row, action) {
         .catch(() => {});
     })
     .catch(() => {});
+}
+
+/** 打开批量拒单弹窗；没选单时按钮本身是禁用的，这里再兜一次 */
+function openBatchReject() {
+  if (selected.value.length === 0) {
+    ElMessage.warning('请先勾选要拒单的订单');
+    return;
+  }
+  rejectReason.value = '';
+  rejectDialog.value = true;
+}
+
+/**
+ * 提交批量拒单。
+ *
+ * 服务端逐单走单笔拒单同一条路径，状态已变的单会跳过并列出来 ——
+ * 这里把跳过的原因原样展示，商家自己决定要不要重试。
+ */
+function submitBatchReject() {
+  const reason = (rejectReason.value || '').trim();
+  if (!reason) {
+    ElMessage.warning('请填写拒单原因');
+    return;
+  }
+  const orderIds = selected.value.map((row) => row.order.orderId);
+  rejecting.value = true;
+  http
+    .post('/admin/order/reject-batch', { orderIds, reason })
+    .then((result) => {
+      const done = (result.rejected || []).length;
+      const skipped = result.skipped || [];
+      ElMessage.success('已拒单 ' + done + ' 单' + (skipped.length ? '，跳过 ' + skipped.length + ' 单' : ''));
+      if (skipped.length) {
+        ElMessageBox.alert(skipped.join('\n'), '这些单没处理', { type: 'warning' })
+          .catch(() => {});
+      }
+      rejectDialog.value = false;
+      // 用 reload 而不是 load：被拒的单已经不在待接单里，留着旧的勾选会让「已选 N 单」挂在那儿
+      reload();
+    })
+    .catch(() => {})
+    .finally(() => {
+      rejecting.value = false;
+    });
+}
+
+/**
+ * 提交退款。金额按元填写，提交时换回分 —— 服务端只认分，让小数进库是对不上账的根源。
+ * 上限校验前端先挡一道，服务端同样校验（绕不过去）。
+ */
+function submitRefund() {
+  const yuanValue = Number(refundAmount.value);
+  if (!Number.isFinite(yuanValue) || yuanValue <= 0) {
+    ElMessage.warning('退款金额必须大于 0');
+    return;
+  }
+  const cent = Math.round(yuanValue * 100);
+  if (refundTotal.value > 0 && cent > refundTotal.value) {
+    ElMessage.warning('退款金额不能超过订单合计 ¥' + yuan(refundTotal.value));
+    return;
+  }
+  refunding.value = true;
+  http
+    .post('/admin/order/refund', {
+      orderId: refundTargetId.value,
+      refundAmount: cent,
+      refundRemark: (refundRemark.value || '').trim() || null,
+    })
+    .then(() => {
+      ElMessage.success('已标记退款');
+      refundDialog.value = false;
+      refreshDetail();
+    })
+    .catch(() => {})
+    .finally(() => {
+      refunding.value = false;
+    });
 }
 
 /** 确认收款：带方式提交，缺值前端先拦一道（服务端同样校验，绕不过去） */
@@ -753,6 +960,10 @@ onMounted(() => {
   if (route.query.cancelRequested === '1') {
     cancelOnly.value = true;
   }
+  // 从工作台「待核对收款 / 待退款」点进来：按收款状态筛，且不限供餐日
+  if (route.query.payStatus) {
+    payStatus.value = String(route.query.payStatus);
+  }
   load();
   // 从消息通知点进来：直接打开那一单，不要求它在当前筛选结果里
   if (route.query.orderId) {
@@ -767,6 +978,12 @@ onMounted(() => {
   font-size: 16px;
   letter-spacing: 2px;
   color: #c2410c;
+}
+
+/* 备注：给它一点存在感，别混在普通单元格里被划过去 */
+.remark-text {
+  color: #a86b00;
+  word-break: break-all;
 }
 
 .sums {

@@ -520,27 +520,30 @@ public class OrderService {
      * 取消 / 申请取消。
      *
      * 三档，按需求 4.9「取消规则」实现：
-     * - 截单前 + 待接单 → 直接取消，释放份数
-     * - 截单后 + 待接单 → 只能提交申请，等商家批
-     * - 其余（已接单及之后）→ 拒绝，引导联系商家
+     * - 待接单（不论截单前后）→ 直接取消，释放份数：商家还没接，餐没开始做
+     * - 已接单 + 未过截单 → 直接取消，释放份数（商家提前在截单前接单的情况）
+     * - 已接单 + 已过截单 → 只能提交申请，等商家批
+     * - 出餐及之后 → 拒绝，引导联系商家
      */
     @Transactional
     public OrderView cancel(Long userId, Long orderId, String reason) {
         Order order = requireOwned(orderId, userId);
-        // 能不能自己取消由转移表说了算；终态与「已接单及之后」对用户是两种不同的答复，
+        // 能不能自己取消由转移表说了算；终态、出餐后与「已过截单的已接单」是三种不同的答复，
         // 所以允许判定统一、文案仍然分开
         if (!OrderTransition.CANCEL_BY_USER.allows(order.getStatus())) {
             if (OrderStatus.isFinal(order.getStatus())) {
                 throw BizException.conflict("订单已" + OrderStatus.label(order.getStatus()) + "，不能再取消");
             }
-            throw BizException.conflict("商家已接单，无法自行取消，请联系商家处理");
+            throw BizException.conflict("餐已出餐，无法取消，请联系商家处理");
         }
 
         String trimmedReason = truncate(reason, 200);
         requireContentOk(userId, trimmedReason, "取消原因包含违规内容，请修改后再提交");
         boolean cutoff = clock.isCutoff(order.getServeDate());
+        // 待接单随时可取消；已接单要看截单点：没过截单直接取消，过了只能申请
+        boolean directCancel = OrderStatus.PENDING_ACCEPT.equals(order.getStatus()) || !cutoff;
 
-        if (!cutoff) {
+        if (directCancel) {
             // 截单前：直接取消。条件更新防并发（另一个入口可能同时拒单）
             LocalDateTime now = LocalDateTime.now();
             int affected = orderMapper.update(null, Wrappers.<Order>lambdaUpdate()
@@ -558,14 +561,15 @@ public class OrderService {
                     trimmedReason, now);
             releaseStock(order);
             moveToRefundingIfPaid(orderId);
-            log.info("用户取消订单 orderNo={}（截单前）", order.getOrderNo());
+            log.info("用户取消订单 orderNo={}（原状态 {}，截单{}）", order.getOrderNo(),
+                    order.getStatus(), cutoff ? "后" : "前");
             Order cancelled = require(orderId);
             // 通知商家，免得白做一份
             notifyService.cancelled(cancelled);
             return toView(cancelled);
         }
 
-        // 截单后：只能申请
+        // 已接单且已过截单：只能申请。待接单与截单前的已接单都在上面直接取消掉了
         if (Boolean.TRUE.equals(order.getCancelRequested())) {
             throw BizException.conflict("已提交取消申请，等待商家处理");
         }
@@ -654,8 +658,13 @@ public class OrderService {
         statusLogService.record(orderId, OrderLogActions.EVENT_STOCK_RELEASE, null, null,
                 "超时未付款，份数已释放", AuditHelper.SYSTEM, AuditHelper.SOURCE_TASK, now);
         log.info("超时未付款释放份数 orderNo={} serveDate={}", order.getOrderNo(), order.getServeDate());
+        // 份数被收走了必须让用户知道：订单还挂着待接单，他却不知道那份可能已经被别人买走。
+        // 只落站内消息、不发订阅消息（见 NotifyService.MESSAGE_ONLY）
+        notifyService.stockReleased(order);
         return true;
-    }    /* ==================== 内部 ==================== */
+    }
+
+    /* ==================== 内部 ==================== */
 
     Order require(Long orderId) {
         Order order = orderId == null ? null : orderMapper.selectById(orderId);
@@ -796,7 +805,14 @@ public class OrderService {
                 order.getRegionSnapshot(), maskedAddress(order.getAddressSnapshot()), order.getRemark(),
                 Boolean.TRUE.equals(order.getCancelRequested()), order.getCancelRequest(),
                 order.getRejectReason(), Boolean.TRUE.equals(order.getStockReleased()),
-                order.getCreatedAt(), order.getCancelRequestedAt());
+                order.getCreatedAt(), order.getCancelRequestedAt(),
+                // 是否已过截单：两端据此决定按钮叫「取消订单」还是「申请取消」。
+                // 由服务端算，前端不拿 serveDate + 配置自己拼——两处算法一旦不一致，
+                // 就会出现「按钮说能直接取消、提交却变成申请」。
+                order.getServeDate() != null && clock.isCutoff(order.getServeDate()),
+                // 实际退款额与备注（v1.53 / F-F06）：为空表示还没退或 v3.49 之前的历史单，
+                // 前端在「已退款」行上展示，其它状态不渲染
+                order.getRefundAmount(), order.getRefundRemark());
     }
 
     /* ==================== 入参 / 出参 ==================== */
@@ -841,7 +857,11 @@ public class OrderService {
                             RegionSnapshot region, AddressSnapshot address, String remark,
                             boolean cancelRequested, CancelRequest cancelRequest,
                             String rejectReason, boolean stockReleased,
-                            LocalDateTime createdAt, LocalDateTime cancelRequestedAt) {
+                            LocalDateTime createdAt, LocalDateTime cancelRequestedAt,
+                            /** 该供餐日是否已过截单：决定用户端按钮是「取消」还是「申请取消」 */
+                            boolean cutoff,
+                            /** 实际退款额（分）与退款备注：只在「已退款」时有值 */
+                            Integer refundAmount, String refundRemark) {
     }
 
     /** 供备菜统计等场景复用的明细行（避免各处再解一次 JSON）。 */

@@ -4,6 +4,7 @@ import com.xxxfhf.meal.auth.Perms;
 import com.xxxfhf.meal.auth.RequirePerm;
 import com.xxxfhf.meal.common.ApiResponse;
 import com.xxxfhf.meal.common.BizException;
+import com.xxxfhf.meal.common.PhoneValidator;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -26,6 +27,8 @@ public class ConfigController {
     private static final String[] PUBLIC_KEYS = {
             ConfigKey.SHOP_NAME,
             ConfigKey.SHOP_NOTICE,
+            ConfigKey.SHOP_ADDRESS,
+            ConfigKey.SHOP_PHONE,
             ConfigKey.SERVE_TIME_TEXT,
             ConfigKey.CUTOFF_TIME,
             ConfigKey.PICKUP_SLOTS,
@@ -70,6 +73,8 @@ public class ConfigController {
     @RequirePerm(Perms.CONFIG_MANAGE)
     public ApiResponse<Void> save(@RequestBody Map<String, String> values) {
         validateGroupOpenIds(values.get(ConfigKey.GROUP_OPEN_IDS));
+        // 门店电话留空表示不展示拨号入口；填了就必须是可拨的号，否则用户点下去是空号
+        PhoneValidator.requireShopPhone(values.get(ConfigKey.SHOP_PHONE));
         configService.setAll(values);
         return ApiResponse.ok();
     }

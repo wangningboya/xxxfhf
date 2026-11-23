@@ -64,12 +64,14 @@ class OrderTransitionTest {
     }
 
     @Test
-    @DisplayName("用户自助取消：只有截单前的待接单能走")
+    @DisplayName("用户自助取消：待接单与已接单都在这张转移里，出餐后不行")
     void cancelByUser() {
         assertThat(OrderTransition.CANCEL_BY_USER.allows(OrderStatus.PENDING_ACCEPT)).isTrue();
         assertThat(OrderTransition.CANCEL_BY_USER.target()).isEqualTo(OrderStatus.CANCELLED);
-        // 已接单及之后只能找商家，截单后只能提申请 —— 这两条都不在这张转移里
-        assertThat(OrderTransition.CANCEL_BY_USER.allows(OrderStatus.ACCEPTED)).isFalse();
+        // v3.48：已接单也允许取消。「截单后要不要改走申请」是业务判定，
+        // 依赖菜单里的截单时间配置，所以留在 OrderService.cancel 里做，不进状态机
+        assertThat(OrderTransition.CANCEL_BY_USER.allows(OrderStatus.ACCEPTED)).isTrue();
+        // 出餐之后餐已经做出来了，一律不受理
         assertThat(OrderTransition.CANCEL_BY_USER.allows(OrderStatus.READY)).isFalse();
         assertThat(OrderTransition.CANCEL_BY_USER.allows(OrderStatus.COMPLETED)).isFalse();
     }

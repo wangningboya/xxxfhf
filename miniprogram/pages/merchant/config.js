@@ -6,6 +6,8 @@ Page({
     config: {
       shopName: '',
       shopNotice: '',
+      shopAddress: '',
+      shopPhone: '',
       serveTimeText: '',
       cutoffTime: '',
       pickupSlots: '',
@@ -36,6 +38,8 @@ Page({
         const config = Object.assign({}, this.data.config, {
           shopName: all.shopName || '',
           shopNotice: all.shopNotice || '',
+          shopAddress: all.shopAddress || '',
+          shopPhone: all.shopPhone || '',
           serveTimeText: all.serveTimeText || '',
           cutoffTime: all.cutoffTime || '',
           pickupSlots: all.pickupSlots || '[]',
@@ -168,6 +172,12 @@ Page({
       wx.showToast({ title: '消息模板不是合法 JSON', icon: 'none' });
       return;
     }
+    // 与服务端 PhoneValidator.requireShopPhone 同源：留空表示不展示拨号入口
+    const shopPhone = (c.shopPhone || '').trim();
+    if (shopPhone && !/^(1[3-9]\d{9}|0\d{2,3}-?\d{7,8})$/.test(shopPhone)) {
+      wx.showToast({ title: '电话填手机号或带区号座机', icon: 'none' });
+      return;
+    }
 
     this.setData({ saving: true });
     request({
@@ -176,6 +186,8 @@ Page({
       data: {
         shopName: c.shopName,
         shopNotice: c.shopNotice,
+        shopAddress: (c.shopAddress || '').trim(),
+        shopPhone: shopPhone,
         serveTimeText: c.serveTimeText,
         cutoffTime: c.cutoffTime,
         pickupSlots: c.pickupSlots,

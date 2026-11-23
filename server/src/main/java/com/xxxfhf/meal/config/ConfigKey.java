@@ -21,6 +21,18 @@ public final class ConfigKey {
     public static final String DELIVERY_FEE = "deliveryFee";
     public static final String SHOP_NAME = "shopName";
     public static final String SHOP_NOTICE = "shopNotice";
+    /**
+     * 店铺地址（自取点）。自取单在下单成功页、订单详情与「可以取餐了」推送里展示。
+     * 留空表示商家还没填，前端不渲染该行，不显示「未设置」。
+     */
+    public static final String SHOP_ADDRESS = "shopAddress";
+    /**
+     * 商家联系电话。用户端首页与订单详情提供「拨打电话」。
+     *
+     * 前置需求里反复出现「转账请联系商家获取收款账号」「请联系商家添加地址」，
+     * 若小程序内没有拨号入口，这些话全都落不了地。
+     */
+    public static final String SHOP_PHONE = "shopPhone";
     /** 未付款订单释放份数的等待分钟数 */
     public static final String PREPAY_RELEASE_MINUTES = "prepayReleaseMinutes";
     /**

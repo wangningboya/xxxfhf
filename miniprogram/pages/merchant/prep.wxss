@@ -140,3 +140,8 @@
   color: #6a6a6a;
   line-height: 1.9;
 }
+
+.contact-remark {
+  display: block;
+  color: #a86b00;
+}

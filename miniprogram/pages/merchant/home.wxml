@@ -51,6 +51,15 @@
       <view class="stat-num {{pendingAddress > 0 ? 'stat-warn' : ''}}">{{pendingAddress}}</view>
       <view class="stat-label">待确认地址</view>
     </view>
+    <!-- 资金两项（v1.53）：钱的事不能只看今天，入口进去后不限供餐日 -->
+    <view class="stat" data-url="/pages/merchant/orders?payStatus=claimed" bindtap="onGo">
+      <view class="stat-num {{pendingCheck > 0 ? 'stat-warn' : ''}}">{{pendingCheck}}</view>
+      <view class="stat-label">待核对收款</view>
+    </view>
+    <view class="stat" data-url="/pages/merchant/orders?payStatus=refunding" bindtap="onGo">
+      <view class="stat-num {{pendingRefund > 0 ? 'stat-warn' : ''}}">{{pendingRefund}}</view>
+      <view class="stat-label">待退款</view>
+    </view>
     <view class="stat" data-url="/pages/merchant/menu" bindtap="onGo">
       <view class="stat-num">{{comboCount}}</view>
       <view class="stat-label">明日盒饭</view>

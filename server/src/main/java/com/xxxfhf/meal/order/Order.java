@@ -102,6 +102,11 @@ public class Order {
     /** 标记退款的操作人，防重复退 */
     private Long refundOperator;
 
+    /** 实际退款金额（分）。为 null 表示 v3.49 之前退的历史单，按 totalAmount 对待 */
+    private Integer refundAmount;
+    /** 退款备注：退到哪个账户、为什么少退 */
+    private String refundRemark;
+
     /* ---------------- getters / setters ---------------- */
 
     public Long getId() {
@@ -350,6 +355,22 @@ public class Order {
 
     public void setRefundedAt(LocalDateTime refundedAt) {
         this.refundedAt = refundedAt;
+    }
+
+    public Integer getRefundAmount() {
+        return refundAmount;
+    }
+
+    public void setRefundAmount(Integer refundAmount) {
+        this.refundAmount = refundAmount;
+    }
+
+    public String getRefundRemark() {
+        return refundRemark;
+    }
+
+    public void setRefundRemark(String refundRemark) {
+        this.refundRemark = refundRemark;
     }
 
     public Long getRefundOperator() {

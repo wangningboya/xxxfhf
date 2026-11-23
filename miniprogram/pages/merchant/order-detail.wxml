@@ -45,6 +45,13 @@
 
   <view class="card">
     <view class="row"><text class="row-label">收款状态</text><text class="row-value">{{order.payStatusLabel}}</text></view>
+    <!-- 实际退款额与备注：只标「已退款」不记金额，月底对账没有任何依据（P1-7） -->
+    <view class="row" wx:if="{{order.payStatus === 'refunded' && refundText}}">
+      <text class="row-label">实际退款</text><text class="row-value">¥{{refundText}}</text>
+    </view>
+    <view class="row" wx:if="{{order.payStatus === 'refunded' && order.refundRemark}}">
+      <text class="row-label">退款备注</text><text class="row-value">{{order.refundRemark}}</text>
+    </view>
     <view class="row"><text class="row-label">取送方式</text><text class="row-value">{{deliveryTypeText}}</text></view>
     <view class="row" wx:if="{{order.pickupSlot}}"><text class="row-label">取餐时段</text><text class="row-value">{{order.pickupSlot}}</text></view>
     <view class="row" wx:if="{{order.pickupCode}}"><text class="row-label">取餐码</text><text class="row-value code">{{order.pickupCode}}</text></view>
@@ -90,7 +97,11 @@
     >
       拒单
     </view>
-    <view class="btn" wx:if="{{nextStatus}}" bindtap="onAdvance">{{nextLabel}}</view>
+    <view class="btn" wx:if="{{nextStatus && !(nextStatus === 'ready' && order.cancelRequested)}}" bindtap="onAdvance">{{nextLabel}}</view>
+    <!-- 申请中不能出餐：先批或驳，否则等于一边审批取消一边把餐做出去 -->
+    <view class="btn btn-disabled" wx:if="{{nextStatus === 'ready' && order.cancelRequested}}" bindtap="onAdvanceWhenRequested">
+      先处理取消申请
+    </view>
 
     <view
       class="btn"

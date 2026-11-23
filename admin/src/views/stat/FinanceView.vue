@@ -45,6 +45,16 @@
       <el-table-column label="金额" width="100" align="right">
         <template #default="{ row }"><span class="price">¥{{ yuan(row.totalAmount) }}</span></template>
       </el-table-column>
+      <!-- 实际退款额（v1.53）：部分退款时它会小于合计，只有已退款的行有值 -->
+      <el-table-column label="实际退款" width="110" align="right">
+        <template #default="{ row }">
+          <template v-if="row.refundAmount > 0">
+            <span class="price">¥{{ yuan(row.refundAmount) }}</span>
+            <div v-if="row.refundRemark" class="muted refund-note">{{ row.refundRemark }}</div>
+          </template>
+          <span v-else class="muted">—</span>
+        </template>
+      </el-table-column>
     </el-table>
 
     <el-empty v-if="!detailLoading && detail.length === 0" description="点上方任意一栏查看对应订单" />
@@ -180,5 +190,12 @@ onMounted(() => {
   font-size: 11px;
   color: #b0b6bf;
   margin-top: 4px;
+}
+
+/* 退款备注：只在部分退款时出现，小字跟金额走 */
+.refund-note {
+  font-size: 12px;
+  line-height: 1.4;
+  word-break: break-all;
 }
 </style>

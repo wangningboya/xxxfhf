@@ -8,6 +8,12 @@
       <el-form-item label="店铺公告">
         <el-input v-model="form.shopNotice" type="textarea" :rows="2" maxlength="120" placeholder="首页滚动展示" />
       </el-form-item>
+      <el-form-item label="店铺地址（自取点）">
+        <el-input v-model="form.shopAddress" maxlength="120" placeholder="到店取餐的地址，下单成功页与自取订单详情展示" />
+      </el-form-item>
+      <el-form-item label="商家联系电话">
+        <el-input v-model="form.shopPhone" maxlength="20" placeholder="11 位手机号或带区号座机，用户可一键拨打；留空不显示" />
+      </el-form-item>
 
       <el-divider content-position="left">供餐与截单</el-divider>
       <el-form-item label="供餐时段">
@@ -95,6 +101,8 @@ const saving = ref(false);
 const form = ref({
   shopName: '',
   shopNotice: '',
+  shopAddress: '',
+  shopPhone: '',
   serveTimeText: '',
   prepayReleaseMinutes: 30,
   cancelRequestTimeoutHours: 2,
@@ -116,6 +124,8 @@ function load() {
       form.value = {
         shopName: data.shopName || '',
         shopNotice: data.shopNotice || '',
+        shopAddress: data.shopAddress || '',
+        shopPhone: data.shopPhone || '',
         serveTimeText: data.serveTimeText || '',
         prepayReleaseMinutes: Number(data.prepayReleaseMinutes || 30),
         cancelRequestTimeoutHours:
@@ -186,9 +196,18 @@ function onSave() {
     }
   }
 
+  // 联系电话与服务端 PhoneValidator.requireShopPhone 同源：留空表示不展示拨号入口
+  const shopPhone = (form.value.shopPhone || '').trim();
+  if (shopPhone && !/^(1[3-9]\d{9}|0\d{2,3}-?\d{7,8})$/.test(shopPhone)) {
+    ElMessage.error('联系电话请填 11 位手机号或带区号的座机（如 010-12345678）');
+    return;
+  }
+
   const payload = {
     shopName: form.value.shopName || '',
     shopNotice: form.value.shopNotice || '',
+    shopAddress: (form.value.shopAddress || '').trim(),
+    shopPhone,
     serveTimeText: form.value.serveTimeText || '',
     cutoffTime: cutoff.value || '21:00',
     pickupSlots: JSON.stringify(slots),

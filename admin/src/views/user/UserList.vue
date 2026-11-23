@@ -203,11 +203,13 @@
           <el-table-column label="创建时间" width="160">
             <template #default="{ row }">{{ fmtTime(row.createdAt) }}</template>
           </el-table-column>
-          <el-table-column label="操作" width="110" fixed="right">
+          <el-table-column label="操作" width="170" fixed="right">
             <template #default="{ row }">
-              <el-button v-if="auth.has('user.audit')" link type="primary" @click="openAssign(row)">
-                分配角色
-              </el-button>
+              <template v-if="auth.has('user.audit')">
+                <el-button link type="primary" @click="openAssign(row)">分配角色</el-button>
+                <!-- 改密：这套系统没有短信通道，忘了密码只能由有 user.audit 的人重置 -->
+                <el-button link type="primary" @click="openPassword(row)">改密</el-button>
+              </template>
               <span v-else class="muted">只读</span>
             </template>
           </el-table-column>
@@ -414,6 +416,43 @@
       <template #footer>
         <el-button @click="assignVisible = false">取消</el-button>
         <el-button type="primary" :loading="assignSaving" @click="onSubmitAssign">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!--
+      改密（P1-3 / F-J12）：新密码 + 确认新密码，6~64 位。
+      服务端 BCrypt 落库、明文不回显不记日志；改密同时解开该账号的登录锁定。
+    -->
+    <el-dialog v-model="passwordVisible" title="修改登录密码" width="440px">
+      <el-form label-width="96px">
+        <el-form-item label="账号">
+          <span>{{ passwordRow ? passwordRow.username + (passwordRow.displayName ? '（' + passwordRow.displayName + '）' : '') : '' }}</span>
+        </el-form-item>
+        <el-form-item label="新密码" required>
+          <el-input
+            v-model="passwordForm.password"
+            type="password"
+            show-password
+            maxlength="64"
+            placeholder="6 ~ 64 位"
+          />
+        </el-form-item>
+        <el-form-item label="确认新密码" required>
+          <el-input
+            v-model="passwordForm.confirm"
+            type="password"
+            show-password
+            maxlength="64"
+            placeholder="再输一次"
+          />
+        </el-form-item>
+      </el-form>
+      <div class="muted">
+        改完立即生效，请当面或单独告知该账号；改密会同时解除该账号的登录锁定。
+      </div>
+      <template #footer>
+        <el-button @click="passwordVisible = false">取消</el-button>
+        <el-button type="primary" :loading="passwordSaving" @click="onSubmitPassword">保存</el-button>
       </template>
     </el-dialog>
   </div>
@@ -942,6 +981,45 @@ function onSubmitAssign() {
     .catch(() => {})
     .finally(() => {
       assignSaving.value = false;
+    });
+}
+
+/* ---------------- 改密 ---------------- */
+
+const passwordVisible = ref(false);
+const passwordRow = ref(null);
+const passwordForm = ref({ password: '', confirm: '' });
+const passwordSaving = ref(false);
+
+function openPassword(row) {
+  passwordRow.value = row;
+  passwordForm.value = { password: '', confirm: '' };
+  passwordVisible.value = true;
+}
+
+function onSubmitPassword() {
+  const pwd = passwordForm.value.password || '';
+  if (pwd.length < 6 || pwd.length > 64) {
+    ElMessage.warning('密码长度须在 6 ~ 64 位之间');
+    return;
+  }
+  if (pwd !== passwordForm.value.confirm) {
+    ElMessage.warning('两次输入的密码不一致');
+    return;
+  }
+  passwordSaving.value = true;
+  http
+    .post('/admin/user/password', { userId: passwordRow.value.userId, password: pwd })
+    .then(() => {
+      ElMessage.success('已修改「' + (passwordRow.value.displayName || passwordRow.value.username) + '」的密码');
+      passwordVisible.value = false;
+      // 明文不在前端留任何痕迹
+      passwordForm.value = { password: '', confirm: '' };
+      loadMerchants();
+    })
+    .catch(() => {})
+    .finally(() => {
+      passwordSaving.value = false;
     });
 }
 

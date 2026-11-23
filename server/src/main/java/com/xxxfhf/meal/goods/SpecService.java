@@ -1,6 +1,8 @@
 package com.xxxfhf.meal.goods;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.xxxfhf.meal.audit.AuditActions;
+import com.xxxfhf.meal.audit.AuditService;
 import com.xxxfhf.meal.common.BizException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,10 +28,14 @@ public class SpecService {
 
     private final SpecGroupMapper specGroupMapper;
     private final ComboMapper comboMapper;
+    /** 规格组变更留痕（需求 4.19 / F-J13）：改差价会直接改用户看到的价，停用会连带解除引用 */
+    private final AuditService auditService;
 
-    public SpecService(SpecGroupMapper specGroupMapper, ComboMapper comboMapper) {
+    public SpecService(SpecGroupMapper specGroupMapper, ComboMapper comboMapper,
+                       AuditService auditService) {
         this.specGroupMapper = specGroupMapper;
         this.comboMapper = comboMapper;
+        this.auditService = auditService;
     }
 
     /** 全部规格组。停用的也返回，否则后台没法把它重新启用。 */
@@ -77,6 +83,11 @@ public class SpecService {
             specGroupMapper.updateById(group);
             log.info("编辑规格组 id={} name={}", group.getId(), name);
         }
+        auditService.record(AuditActions.TABLE_SPEC, group.getId(),
+                creating ? AuditActions.SPEC_CREATE : AuditActions.SPEC_UPDATE,
+                (creating ? "新增规格组：" : "修改规格组：") + name + "｜选项 "
+                        + group.getOptions().size() + " 个"
+                        + (Boolean.TRUE.equals(group.getRequired()) ? "，必选" : "，可选"));
         return group;
     }
 
@@ -91,8 +102,11 @@ public class SpecService {
         requireStatus(status);
         SpecGroup group = require(id);
 
+        // 解除引用后就查不到「原来有几个」了，先记下数量再动
+        int unbound = 0;
         if (GoodsStatus.DISABLED.equals(status)) {
             List<Combo> refs = combosReferencing(id);
+            unbound = refs.size();
             if (!refs.isEmpty() && !confirmUnbind) {
                 throw BizException.conflict("「" + group.getName() + "」正被 " + refs.size()
                         + " 个盒饭引用（" + preview(refs) + "）。停用会一并解除这些盒饭对该组的引用，"
@@ -111,6 +125,10 @@ public class SpecService {
         group.setStatus(status);
         specGroupMapper.updateById(group);
         log.info("规格组状态变更 id={} -> {}", id, status);
+        auditService.record(AuditActions.TABLE_SPEC, id, AuditActions.SPEC_STATUS,
+                "规格组「" + group.getName() + "」"
+                        + (GoodsStatus.DISABLED.equals(status) ? "停用" : "启用")
+                        + (unbound > 0 ? "，同时解除 " + unbound + " 个盒饭的引用" : ""));
         return group;
     }
 
@@ -133,6 +151,8 @@ public class SpecService {
         }
         specGroupMapper.deleteById(id);
         log.info("删除规格组 id={} name={}", id, group.getName());
+        auditService.record(AuditActions.TABLE_SPEC, id, AuditActions.SPEC_DELETE,
+                "删除规格组：" + group.getName());
     }
 
     public SpecGroup require(Long id) {

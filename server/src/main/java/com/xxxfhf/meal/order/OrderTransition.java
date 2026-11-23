@@ -48,9 +48,17 @@ public enum OrderTransition {
     PICKUP("核销", OrderLogActions.ORDER_PICKUP,
             Set.of(OrderStatus.READY), OrderStatus.COMPLETED),
 
-    /** 用户自助取消：只有截单前的待接单能走，截单后只能提交申请，已接单只能找商家。 */
+    /**
+     * 用户自助取消（需求 4.9 三档规则）。
+     *
+     * <p>允许的源状态是**待接单与已接单**：待接单不分割单时间，已接单则要再过一道截单判定 ——
+     * 截单前商家接了单但餐还没备料，直接取消；截单后料已备下去，只能提交申请等商家批
+     * （截单判定依赖菜单配置，属业务规则，留在 {@code OrderService.cancel}）。
+     *
+     * <p>出餐（ready）及之后一律不在列：餐已做好或已交付，系统不再接受任何取消。
+     */
     CANCEL_BY_USER("取消订单", OrderLogActions.ORDER_CANCEL,
-            Set.of(OrderStatus.PENDING_ACCEPT), OrderStatus.CANCELLED),
+            Set.of(OrderStatus.PENDING_ACCEPT, OrderStatus.ACCEPTED), OrderStatus.CANCELLED),
 
     /**
      * 商家（或超时任务）同意用户的取消申请。

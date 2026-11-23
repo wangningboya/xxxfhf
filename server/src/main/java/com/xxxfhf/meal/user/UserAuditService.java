@@ -349,6 +349,44 @@ public class UserAuditService {
                         + "｜角色 " + roles.size() + " 个（" + label(from) + " → 商家）");
     }
 
+    /**
+     * 重置商家账号密码（v1.53 / 需求 4.17 / `F-J12`）。
+     *
+     * <p>为什么由后台代改而不是「发验证码让他自己改」：这套系统没有短信通道，
+     * 商家忘了密码只能找店里有 `user.audit` 的人重置 —— 与其让他去翻数据库，不如给一个正经入口。
+     *
+     * <p><b>改密同时清锁定</b>：连续失败 3 次会锁 30 分钟（需求 4.1）。能改密码这件事本身就证明
+     * 本人回来了，改完还锁着等于「改了也进不去」。
+     *
+     * <p>明文不落库、不回显、不进日志也不进操作记录 —— 记录里只写「改了谁的密码」。
+     *
+     * @param rawPassword 新密码，6 ~ 64 位
+     */
+    @Transactional
+    public void resetMerchantPassword(Long operatorId, Long userId, String rawPassword) {
+        User user = userId == null ? null : userMapper.selectById(userId);
+        if (user == null) {
+            throw BizException.notFound("账号不存在");
+        }
+        if (!UserType.MERCHANT.equals(user.getUserType())) {
+            throw BizException.param("只有商家账号有后台密码，群成员走微信登录");
+        }
+        if (rawPassword == null || rawPassword.length() < 6 || rawPassword.length() > 64) {
+            throw BizException.param("登录密码长度须在 6 ~ 64 位之间");
+        }
+
+        userMapper.update(null, Wrappers.<User>lambdaUpdate()
+                .set(User::getPasswordHash, passwordService.hash(rawPassword))
+                .set(User::getLoginFailCount, 0)
+                .set(User::getLockUntil, null)
+                .eq(User::getId, userId));
+        log.info("重置商家密码 userId={} username={} 操作人={}", userId, user.getUsername(), operatorId);
+
+        auditService.record(AuditActions.TABLE_USER, userId, AuditActions.USER_PASSWORD,
+                "重置商家密码：后台账号 " + (user.getUsername() == null ? "" : user.getUsername())
+                        + "（改密同时解除登录锁定；密码内容不记录）");
+    }
+
     /** 角色入参清洗：去重保序、逐个确认存在。至少一个，否则升级完进后台白屏。 */
     private List<Long> requireRoles(List<Long> roleIds) {
         if (roleIds == null || roleIds.isEmpty()) {

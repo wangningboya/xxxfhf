@@ -10,6 +10,14 @@
       <input class="field-input" value="{{config.shopNotice}}" data-field="shopNotice" placeholder="首页滚动展示" placeholder-class="ph" bindinput="onInput" />
     </view>
     <view class="field">
+      <text class="field-label">自取点</text>
+      <input class="field-input" value="{{config.shopAddress}}" data-field="shopAddress" placeholder="到店取餐的地址，自取单会展示" placeholder-class="ph" bindinput="onInput" />
+    </view>
+    <view class="field">
+      <text class="field-label">联系电话</text>
+      <input class="field-input" value="{{config.shopPhone}}" data-field="shopPhone" type="text" placeholder="用户可一键拨打，留空则不显示" placeholder-class="ph" bindinput="onInput" />
+    </view>
+    <view class="field">
       <text class="field-label">供餐时段</text>
       <input class="field-input" value="{{config.serveTimeText}}" data-field="serveTimeText" placeholder="如 午饭前" placeholder-class="ph" bindinput="onInput" />
     </view>

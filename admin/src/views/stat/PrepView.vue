@@ -72,6 +72,14 @@
             </div>
           </template>
         </el-table-column>
+        <el-table-column label="备注" min-width="180">
+          <template #default="{ row }">
+            <div v-for="(contact, index) in row.contacts || []" :key="index" class="remark-text">
+              <template v-if="contact.remark">{{ contact.remark }}</template>
+            </div>
+            <span v-if="!(row.contacts || []).some((c) => c.remark)" class="muted">—</span>
+          </template>
+        </el-table-column>
       </el-table>
 
       <el-empty v-if="!loading && regionsWithPickup.length === 0" description="这一天还没有已接单的订单" />
@@ -135,3 +143,11 @@ onMounted(() => {
   load();
 });
 </script>
+
+<style scoped>
+/* 备注：分拣与装袋要照着做，给它一点存在感 */
+.remark-text {
+  color: #a86b00;
+  word-break: break-all;
+}
+</style>

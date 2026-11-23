@@ -54,6 +54,14 @@
       <text class="status-label">截单时间</text>
       <text class="status-value">前一天 {{cutoffTime}}</text>
     </view>
+    <view class="status-row" wx:if="{{shopAddress}}" bindlongpress="onCopyAddress">
+      <text class="status-label">自取点</text>
+      <text class="status-value status-address">{{shopAddress}}</text>
+    </view>
+    <view class="status-row" wx:if="{{shopPhone}}" bindtap="onCallShop">
+      <text class="status-label">联系商家</text>
+      <text class="status-value status-phone">{{shopPhone}} 拨号</text>
+    </view>
   </view>
 
   <view class="start-btn {{loading ? 'start-btn-disabled' : ''}}" bindtap="onStartOrder">
@@ -62,7 +70,8 @@
 
   <view class="tips">
     <view class="tips-line">· 下单统一在「点餐」页，明天午饭前配送到手或到店自取</view>
-    <view class="tips-line">· 明天截止前可自行取消，截单后请联系商家</view>
+    <view class="tips-line">· 未接单可自行取消；已接单在截单前也能自行取消，截单后需申请商家同意</view>
+    <view class="tips-line" wx:if="{{shopAddress}}">· 到店自取请到：{{shopAddress}}（长按可复制）</view>
   </view>
 
   <!-- 预留位：后续推销位叠在这里，本期不渲染任何内容 -->

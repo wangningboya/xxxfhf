@@ -27,12 +27,16 @@ public final class OrderQuery {
     public static final Set<String> PREPAY_RELEASABLE_PAY_STATUSES = Set.of(PayStatus.UNPAID);
 
     /**
-     * 取消申请自动同意只扫待接单：已接单的退订是另一回事，商家已经做了，必须人工判断。
+     * 取消申请自动同意扫「已接单」——按需求 4.9 三档规则，申请只可能产生于
+     * 「已接单 + 已过截单」（待接单随时可自行取消，不需要申请）。
+     *
+     * <p>仍保留待接单在集合里：v3.48 之前提交的老申请可能还挂在待接单上，
+     * 不扫它们等于让这些单永久占着份数。新申请不会再落到这个状态。
      *
      * <p>比 {@code OrderTransition.CANCEL_APPROVED.fromStatuses()} 窄，是刻意的：后者是「人点了同意」
      * 时允许的源状态，前者是「系统替人同意」时敢碰的源状态。
      */
-    public static final Set<String> CANCEL_SCAN_STATUSES = Set.of(OrderStatus.PENDING_ACCEPT);
+    public static final Set<String> CANCEL_SCAN_STATUSES = Set.of(OrderStatus.PENDING_ACCEPT, OrderStatus.ACCEPTED);
 
     /** 单次扫描上限：300 单/天的量级，200 条足够；设上限是防止某次积压把内存撑爆。 */
     public static final int SCAN_BATCH_LIMIT = 200;

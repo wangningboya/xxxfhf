@@ -159,6 +159,16 @@ page {
   color: #a86b00;
 }
 
+.status-address {
+  max-width: 66%;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.status-phone {
+  color: #ff9f1c;
+}
+
 /* ---------- 主按钮 ---------- */
 
 .start-btn {

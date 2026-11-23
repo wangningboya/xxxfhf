@@ -1,5 +1,7 @@
 package com.xxxfhf.meal.config;
 
+import com.xxxfhf.meal.audit.AuditActions;
+import com.xxxfhf.meal.audit.AuditService;
 import com.xxxfhf.meal.common.BizException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,6 +13,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * 系统配置读写。
@@ -25,10 +28,14 @@ public class ConfigService {
 
     private final ConfigMapper configMapper;
     private final ObjectMapper objectMapper;
+    /** 配置变更留痕（需求 4.19 / F-J13）。配置改动没有界面可回看，只有这里能查「谁把截单时间改了」 */
+    private final AuditService auditService;
 
-    public ConfigService(ConfigMapper configMapper, ObjectMapper objectMapper) {
+    public ConfigService(ConfigMapper configMapper, ObjectMapper objectMapper,
+                         AuditService auditService) {
         this.configMapper = configMapper;
         this.objectMapper = objectMapper;
+        this.auditService = auditService;
     }
 
     /* ---------------- 读 ---------------- */
@@ -105,9 +112,20 @@ public class ConfigService {
         if (key == null || key.isBlank()) {
             throw BizException.param("配置键不能为空");
         }
+        String newValue = value == null ? "" : value;
+        String oldValue = get(key);
+        write(key, newValue);
+        if (!Objects.equals(oldValue == null ? "" : oldValue, newValue)) {
+            auditService.record(AuditActions.TABLE_CONFIG, 0L, AuditActions.CONFIG_UPDATE,
+                    "修改配置：" + keyLabel(key) + " " + brief(oldValue) + " → " + brief(newValue));
+        }
+    }
+
+    /** 只落库不留痕，给 {@link #setAll} 批量写用（批量只在最后记一条汇总） */
+    private void write(String key, String value) {
         Config config = new Config();
         config.setConfigKey(key);
-        config.setConfigValue(value == null ? "" : value);
+        config.setConfigValue(value);
         // 存在则更新：updateById 会按主键 config_key 定位
         if (configMapper.selectById(key) == null) {
             configMapper.insert(config);
@@ -134,7 +152,40 @@ public class ConfigService {
         if (!unknown.isEmpty()) {
             throw BizException.param("不认识的配置项：" + String.join(", ", unknown));
         }
-        values.forEach(this::set);
+
+        // 后台配置页一次提交全部键，逐键写一条会刷出十几行流水；这里先比对新旧，
+        // 只把**真的变了**的键拼成一条，一个键都没变则不留痕（避免「点了保存」就出一条空记录）。
+        List<String> changes = new ArrayList<>();
+        for (Map.Entry<String, String> entry : values.entrySet()) {
+            String key = entry.getKey();
+            String newValue = entry.getValue() == null ? "" : entry.getValue();
+            String oldValue = get(key);
+            write(key, newValue);
+            if (!Objects.equals(oldValue == null ? "" : oldValue, newValue)) {
+                changes.add(keyLabel(key) + " " + brief(oldValue) + " → " + brief(newValue));
+            }
+        }
+        if (!changes.isEmpty()) {
+            auditService.record(AuditActions.TABLE_CONFIG, 0L, AuditActions.CONFIG_UPDATE,
+                    "修改配置：" + String.join("；", changes));
+        }
+    }
+
+    /** 配置键的中文名，用于操作记录摘要；未登记的原样返回，避免出现空白 */
+    public static String keyLabel(String key) {
+        return KEY_LABELS.getOrDefault(key, key);
+    }
+
+    /**
+     * 摘要里的值展示：空值写「空」，过长（群白名单这种 JSON 数组）截断 ——
+     * {@code audit_log.summary} 只有 500 字，一条白名单就能把它撑爆。
+     */
+    private static String brief(String value) {
+        if (value == null || value.isBlank()) {
+            return "空";
+        }
+        String text = value.trim();
+        return text.length() <= 40 ? text : text.substring(0, 40) + "…";
     }
 
     /**
@@ -153,6 +204,23 @@ public class ConfigService {
         }
     }
 
+    /** 配置键的中文名，顺序与 {@link #KNOWN_KEYS} 一致 */
+    private static final Map<String, String> KEY_LABELS = Map.ofEntries(
+            Map.entry(ConfigKey.CUTOFF_TIME, "截单时间"),
+            Map.entry(ConfigKey.SERVE_TIME_TEXT, "供餐时间"),
+            Map.entry(ConfigKey.PICKUP_SLOTS, "取餐时段"),
+            Map.entry(ConfigKey.DELIVERY_FEE, "配送费"),
+            Map.entry(ConfigKey.SHOP_NAME, "店铺名称"),
+            Map.entry(ConfigKey.SHOP_NOTICE, "店铺公告"),
+            Map.entry(ConfigKey.SHOP_ADDRESS, "店铺地址"),
+            Map.entry(ConfigKey.SHOP_PHONE, "商家联系电话"),
+            Map.entry(ConfigKey.PREPAY_RELEASE_MINUTES, "未申报释放分钟数"),
+            Map.entry(ConfigKey.CANCEL_REQUEST_TIMEOUT_HOURS, "取消申请超时小时数"),
+            Map.entry(ConfigKey.CLOSED_DATES, "停业日"),
+            Map.entry(ConfigKey.GROUP_OPEN_IDS, "群白名单"),
+            Map.entry(ConfigKey.SUBSCRIBE_TEMPLATES, "订阅消息模板")
+    );
+
     /** 已知配置项的完整清单，与建表初始数据保持一致。 */
     public static final List<String> KNOWN_KEYS = List.of(
             ConfigKey.CUTOFF_TIME,
@@ -161,6 +229,8 @@ public class ConfigService {
             ConfigKey.DELIVERY_FEE,
             ConfigKey.SHOP_NAME,
             ConfigKey.SHOP_NOTICE,
+            ConfigKey.SHOP_ADDRESS,
+            ConfigKey.SHOP_PHONE,
             ConfigKey.PREPAY_RELEASE_MINUTES,
             ConfigKey.CANCEL_REQUEST_TIMEOUT_HOURS,
             ConfigKey.CLOSED_DATES,

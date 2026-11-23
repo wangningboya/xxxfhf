@@ -10,6 +10,9 @@ Page({
     totalText: '0.00',
     claiming: false,
     claimed: false,
+    /** 自取点与商家电话：自取单必须告诉用户去哪取，电话用于要收款账号 */
+    shopAddress: '',
+    shopPhone: '',
   },
 
   onLoad(options) {
@@ -24,6 +27,16 @@ Page({
     if (!this.data.orderId) {
       return;
     }
+    // 自取点与电话取全局配置（已缓存则不发请求），与订单并行、失败不阻塞页面
+    app.loadConfig().then((config) => {
+      if (!config) {
+        return;
+      }
+      this.setData({
+        shopAddress: config.shopAddress || '',
+        shopPhone: config.shopPhone || '',
+      });
+    });
     request({ url: '/order/detail?orderId=' + this.data.orderId })
       .then((order) => {
         this.setData({
@@ -76,6 +89,20 @@ Page({
 
   onOpenOrder() {
     wx.redirectTo({ url: '/pages/order/detail?orderId=' + this.data.orderId });
+  },
+
+  onCallShop() {
+    const phone = this.data.shopPhone;
+    if (!phone) {
+      return;
+    }
+    wx.makePhoneCall({ phoneNumber: phone, fail: () => {} });
+  },
+
+  onCopyAddress() {
+    if (this.data.shopAddress) {
+      wx.setClipboardData({ data: this.data.shopAddress });
+    }
   },
 
   onBackToMenu() {

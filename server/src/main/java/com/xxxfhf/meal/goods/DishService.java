@@ -1,6 +1,8 @@
 package com.xxxfhf.meal.goods;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.xxxfhf.meal.audit.AuditActions;
+import com.xxxfhf.meal.audit.AuditService;
 import com.xxxfhf.meal.common.BizException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,10 +27,13 @@ public class DishService {
 
     private final DishMapper dishMapper;
     private final ComboMapper comboMapper;
+    /** 商品变更留痕（需求 4.19 / F-J13）：菜品是原料层，改一次会影响所有引用它的盒饭 */
+    private final AuditService auditService;
 
-    public DishService(DishMapper dishMapper, ComboMapper comboMapper) {
+    public DishService(DishMapper dishMapper, ComboMapper comboMapper, AuditService auditService) {
         this.dishMapper = dishMapper;
         this.comboMapper = comboMapper;
+        this.auditService = auditService;
     }
 
     /** 菜品列表。商家端用，停用的也要看得到（否则没法重新启用）。 */
@@ -74,6 +79,10 @@ public class DishService {
             dishMapper.updateById(dish);
             log.info("编辑菜品 id={} name={}", dish.getId(), name);
         }
+        auditService.record(AuditActions.TABLE_DISH, dish.getId(),
+                creating ? AuditActions.DISH_CREATE : AuditActions.DISH_UPDATE,
+                (creating ? "新增菜品：" : "修改菜品：") + name
+                        + (creating ? "" : "｜状态：" + GoodsStatus.label(dish.getStatus())));
         return dish;
     }
 
@@ -85,6 +94,8 @@ public class DishService {
         dish.setStatus(status);
         dishMapper.updateById(dish);
         log.info("菜品状态变更 id={} -> {}", id, status);
+        auditService.record(AuditActions.TABLE_DISH, id, AuditActions.DISH_STATUS,
+                "菜品「" + dish.getName() + "」" + GoodsStatus.label(status));
         return dish;
     }
 
@@ -99,6 +110,8 @@ public class DishService {
         }
         dishMapper.deleteById(id);
         log.info("删除菜品 id={} name={}", id, dish.getName());
+        auditService.record(AuditActions.TABLE_DISH, id, AuditActions.DISH_DELETE,
+                "删除菜品：" + dish.getName());
     }
 
     public Dish require(Long id) {

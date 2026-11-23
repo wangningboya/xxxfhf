@@ -32,8 +32,13 @@ Page({
     loading: false,
     accepting: false,
     acceptText: '接单',
+    /** 批量拒单（v1.53 / F-H12）：整批共用一条原因 */
+    rejecting: false,
+    rejectText: '拒单',
     /** 只看有退订申请的单。开启时请求不带供餐日，往期漏单也能捞到 */
     cancelOnly: false,
+    /** 收款状态筛选（v1.53）：工作台「待核对收款 / 待退款」点进来时带上 */
+    payStatus: '',
   },
 
   onLoad(options) {
@@ -41,6 +46,7 @@ Page({
       serveDate: options.serveDate || addDays(dateStr(), 1),
       status: options.status || '',
       cancelOnly: options.cancelOnly === '1',
+      payStatus: options.payStatus || '',
     });
   },
 
@@ -58,7 +64,15 @@ Page({
   },
 
   reload() {
-    this.setData({ list: [], page: 1, finished: false, selected: {}, selectedCount: 0, acceptText: '接单' });
+    this.setData({
+      list: [],
+      page: 1,
+      finished: false,
+      selected: {},
+      selectedCount: 0,
+      acceptText: '接单',
+      rejectText: '拒单',
+    });
     return this.load(1);
   },
 
@@ -71,12 +85,16 @@ Page({
       'page=' + page,
       'pageSize=' + this.data.pageSize,
     ];
-    // 只看退订时不带供餐日：要捞的是漏处理的单，往期的也得算进来
-    if (!this.data.cancelOnly) {
+    // 只看退订、或按收款状态筛时都不带供餐日：要捞的是漏处理的单 / 没核对的钱，
+    // 往期的也得算进来（带上「明天」等于先把要找的那批排除掉）
+    if (!this.data.cancelOnly && !this.data.payStatus) {
       query.unshift('serveDate=' + this.data.serveDate);
     }
     if (this.data.cancelOnly) {
       query.push('cancelRequested=true');
+    }
+    if (this.data.payStatus) {
+      query.push('payStatus=' + this.data.payStatus);
     }
     if (this.data.status) {
       query.push('status=' + this.data.status);
@@ -115,6 +133,8 @@ Page({
       userNickName: row.userNickName || '群成员',
       userPhone: row.userPhone || '',
       summary: (order.items || []).map((it) => it.name + '×' + it.qty).join('、'),
+      // 整单备注必须传到后厨与配送手上，列表里就摆出来（需求 4.11 / 4.14）
+      remark: order.remark || '',
       // 份数被超时释放的单必须顶在最前并标红：这份餐可能已经被别人买走了
       stockReleased: !!order.stockReleased,
       cancelRequested: !!order.cancelRequested,
@@ -178,6 +198,7 @@ Page({
       selected,
       selectedCount: count,
       acceptText: count ? '接单 ' + count + ' 单' : '接单',
+      rejectText: count ? '拒单 ' + count + ' 单' : '拒单',
     });
   },
 
@@ -208,6 +229,59 @@ Page({
       })
       .catch((err) => app.toastError(err))
       .then(() => this.setData({ accepting: false }));
+  },
+
+  /**
+   * 批量拒单：整批共用一条原因。
+   *
+   * 用 wx.showModal 的 editable 输入而不是跳新页面：拒单是个「点了就要马上给结果」的动作，
+   * 多跳一页反而慢。原因必填 —— 顾客会在订单详情里看到这句话。
+   */
+  onBatchReject() {
+    const orderIds = Object.keys(this.data.selected);
+    if (!orderIds.length) {
+      wx.showToast({ title: '请先勾选订单', icon: 'none' });
+      return;
+    }
+    if (this.data.rejecting) {
+      return;
+    }
+    wx.showModal({
+      title: '批量拒单（' + orderIds.length + ' 单）',
+      editable: true,
+      placeholderText: '拒单原因必填，顾客会看到',
+      success: (res) => {
+        if (!res.confirm) {
+          return;
+        }
+        const reason = (res.content || '').trim();
+        if (!reason) {
+          wx.showToast({ title: '请填写拒单原因', icon: 'none' });
+          return;
+        }
+        this.submitBatchReject(orderIds, reason);
+      },
+    });
+  },
+
+  submitBatchReject(orderIds, reason) {
+    this.setData({ rejecting: true });
+    request({
+      url: '/admin/order/reject-batch',
+      method: 'POST',
+      data: { orderIds, reason },
+    })
+      .then((result) => {
+        const skipped = result.skipped || [];
+        let msg = '已拒 ' + (result.rejected || []).length + ' 单';
+        if (skipped.length) {
+          msg += '，跳过 ' + skipped.length + ' 单：\n' + skipped.join('\n');
+        }
+        wx.showModal({ title: '拒单结果', content: msg, showCancel: false });
+        this.reload();
+      })
+      .catch((err) => app.toastError(err))
+      .then(() => this.setData({ rejecting: false }));
   },
 
   onOpen(e) {

@@ -25,6 +25,15 @@
       <text class="row-label">取餐时段</text>
       <text class="row-value">{{order.pickupSlot}}</text>
     </view>
+    <!-- 自取单必须告诉用户去哪取：商家填了自取点才渲染，留空不占位 -->
+    <view
+      class="row"
+      wx:if="{{order.deliveryType === 'pickup' && shopAddress}}"
+      bindlongpress="onCopyAddress"
+    >
+      <text class="row-label">取餐点</text>
+      <text class="row-value row-address">{{shopAddress}}</text>
+    </view>
     <view class="row">
       <text class="row-label">应付金额</text>
       <text class="row-amount">¥{{totalText}}</text>
@@ -34,6 +43,12 @@
   <view class="card">
     <view class="card-title">付款方式</view>
     <view class="pay-note">本店只收线下转账或现金。转账请联系商家获取收款账号；现金请取餐或送达时当面支付。付好后点下面的按钮。</view>
+
+    <!-- 付款说明里让用户「联系商家」，这里就必须真的点得动 -->
+    <view class="call-line" wx:if="{{shopPhone}}" bindtap="onCallShop">
+      <text class="call-text">联系商家：{{shopPhone}}</text>
+      <text class="call-btn">拨号</text>
+    </view>
 
     <view class="claim {{claimed ? 'claim-done' : ''}}" bindtap="onClaimPaid">
       {{claimed ? '已告诉商家，等核对' : (claiming ? '提交中…' : '我已完成付款')}}

@@ -70,7 +70,7 @@ public class PrepService {
                     id -> new RegionAgg(id, regionNameOf(order)));
 
             region.orderCount++;
-            region.addContact(order.getAddressSnapshot());
+            region.addContact(order.getAddressSnapshot(), order.getRemark());
 
             for (OrderItem item : items) {
                 int qty = item.qtyOrZero();
@@ -223,7 +223,13 @@ public class PrepService {
         String slots = row.slots().stream()
                 .map(s -> (s.slot() == null ? "未填时段" : s.slot()) + "：" + s.qty() + " 份")
                 .reduce((a, b) -> a + "、" + b).orElse("");
-        return new RegionExcelRow(row.regionName(), row.qty(), row.orderCount(), combos, contacts, slots);
+        // 备注是用户自由填写的文本，一并走 cell() 防公式注入
+        String remarks = row.contacts().stream()
+                .map(ContactRow::remark)
+                .filter(r -> r != null && !r.isBlank())
+                .map(PrepService::cell)
+                .reduce((a, b) -> a + "；" + b).orElse("");
+        return new RegionExcelRow(row.regionName(), row.qty(), row.orderCount(), combos, contacts, slots, remarks);
     }
 
     /**
@@ -289,13 +295,17 @@ public class PrepService {
             slots.merge(slot == null ? "未填时段" : slot, itemQty, Integer::sum);
         }
 
-        private void addContact(AddressSnapshot address) {
-            if (address == null) {
+        private void addContact(AddressSnapshot address, String remark) {
+            // 备注与订单一一对应：即使地址快照为空（历史脏数据）也要保留备注，
+            // 否则「少放辣」这种要求会随地址一起丢掉
+            String name = address == null ? null : address.contactName();
+            String detail = address == null ? null : address.detail();
+            if (name == null && (remark == null || remark.isBlank())) {
                 return;
             }
             // 备菜页只留「谁、送到哪」：菜要做给这个人，电话对分拣没有用。
             // 这一页最快到人最少，一旦把整批号码铺在上面，等于给每个能进后台的人发了一份通讯录
-            contacts.add(new ContactRow(address.contactName(), null, address.detail()));
+            contacts.add(new ContactRow(name, null, detail, remark));
         }
 
         private RegionRow toRow() {
@@ -321,7 +331,7 @@ public class PrepService {
     public record ComboQty(String name, int qty) {
     }
 
-    public record ContactRow(String contactName, String phone, String detail) {
+    public record ContactRow(String contactName, String phone, String detail, String remark) {
     }
 
     public record SlotRow(String slot, int qty) {
@@ -410,18 +420,22 @@ public class PrepService {
         @ExcelProperty("取餐时段")
         @ColumnWidth(30)
         private String slots;
+        @ExcelProperty("备注")
+        @ColumnWidth(36)
+        private String remarks;
 
         public RegionExcelRow() {
         }
 
         public RegionExcelRow(String regionName, int qty, int orderCount,
-                              String combos, String contacts, String slots) {
+                              String combos, String contacts, String slots, String remarks) {
             this.regionName = regionName;
             this.qty = qty;
             this.orderCount = orderCount;
             this.combos = combos;
             this.contacts = contacts;
             this.slots = slots;
+            this.remarks = remarks;
         }
 
         public String getRegionName() {
@@ -446,6 +460,10 @@ public class PrepService {
 
         public String getSlots() {
             return slots;
+        }
+
+        public String getRemarks() {
+            return remarks;
         }
     }
 }

@@ -11,6 +11,8 @@ Page({
     order: null,
     lines: [],
     totalText: '0.00',
+    /** 实际退款额（元），只在「已退款」时有值 */
+    refundText: '',
     busy: false,
     /** 可推进到的下一个状态 */
     nextStatus: '',
@@ -47,6 +49,11 @@ Page({
           order,
           lines,
           totalText: yuan(order.totalAmount),
+          // 历史单可能没有 refundAmount（v3.49 之前），回退订单合计
+          refundText:
+            order.payStatus === 'refunded'
+              ? yuan(order.refundAmount == null ? order.totalAmount : order.refundAmount)
+              : '',
           nextStatus: next.status,
           nextLabel: next.label,
           deliveryTypeText: dict.label(
@@ -162,6 +169,15 @@ Page({
     });
   },
 
+  /** 申请中点了「先处理取消申请」：不静默，明确告诉商家先批或驳 */
+  onAdvanceWhenRequested() {
+    wx.showModal({
+      title: '先处理取消申请',
+      content: '用户已申请取消，请先同意或驳回，再推进出餐。',
+      showCancel: false,
+    });
+  },
+
   onAdvance() {
     if (!this.data.nextStatus) {
       return;
@@ -236,15 +252,52 @@ Page({
     });
   },
 
+  /**
+   * 标记已退款，先填金额再填备注（P1-7 / `F-F06`）。
+   *
+   * 两步 showModal 而不是新开一页：这是「点了就要给结果」的动作，多跳一页反而慢。
+   * 金额默认带出订单合计、可改成实际退的 —— 线下退款天然会有部分退（少送一份、
+   * 扣掉已发生的配送费）。第二步点「不填」表示不带备注，仍然会提交。
+   */
   onRefund() {
+    const order = this.data.order || {};
+    const total = Number(order.totalAmount || 0);
+    const defaultYuan = (total / 100).toFixed(2);
     wx.showModal({
-      title: '标记已退款',
-      content: '确认钱已经退给用户了？标记后不可撤销。',
+      title: '退款金额（元）',
+      editable: true,
+      content: defaultYuan,
+      placeholderText: '实际退给顾客的金额',
       success: (res) => {
         if (!res.confirm) {
           return;
         }
-        this.post('/admin/order/refund', { orderId: this.data.orderId }, '已标记退款');
+        const raw = (res.content || '').trim() || defaultYuan;
+        const yuanValue = Number(raw);
+        if (!isFinite(yuanValue) || yuanValue <= 0) {
+          wx.showToast({ title: '退款金额必须大于 0', icon: 'none' });
+          return;
+        }
+        const cent = Math.round(yuanValue * 100);
+        if (total > 0 && cent > total) {
+          wx.showToast({ title: '不能超过订单合计', icon: 'none' });
+          return;
+        }
+        wx.showModal({
+          title: '退款备注（选填）',
+          editable: true,
+          placeholderText: '退到哪个账户、为什么少退',
+          cancelText: '不填',
+          confirmText: '确认退款',
+          success: (res2) => {
+            const remark = res2.confirm ? (res2.content || '').trim() : '';
+            this.post(
+              '/admin/order/refund',
+              { orderId: this.data.orderId, refundAmount: cent, refundRemark: remark || null },
+              '已标记退款'
+            );
+          },
+        });
       },
     });
   },

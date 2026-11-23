@@ -29,7 +29,7 @@ import java.util.List;
  * 未收款 = 收款状态 unpaid（用户没点付款）
  * 用户声称已付款 = 收款状态 claimed（用户说付了，商家还没核）
  * 待退款 = 收款状态 refunding（已收的钱挂着要退）
- * 已退款 = 收款状态 refunded
+ * 已退款 = 收款状态 refunded，金额取**实际退款额**（refund_amount，为空回退订单合计）
  *
  * 为什么要单独列「待退款」：不列出来，应收 ≠ 已收 + 未收 + 已退，
  * 商家月底对账会永远差一笔钱且找不到去向。
@@ -82,7 +82,10 @@ public class FinanceService {
                 }
                 // 退款相关不分有效单：钱确实动过，取消单也要留痕
                 case PayStatus.REFUNDING -> refunding.add(amount);
-                case PayStatus.REFUNDED -> refunded.add(amount);
+                // 已退款按**实际退的钱**累加，不是订单合计：线下退款天然会有部分退
+                // （少送一份、扣掉已发生的配送费），按合计算出来的「已退款」是虚的。
+                // refund_amount 为空的是 v3.49 之前的历史单，回退订单合计
+                case PayStatus.REFUNDED -> refunded.add(refundedAmount(order));
                 default -> {
                 }
             }
@@ -111,6 +114,9 @@ public class FinanceService {
                     OrderStatus.label(order.getStatus()),
                     PayStatus.label(order.getPayStatus()),
                     order.getTotalAmount() == null ? 0 : order.getTotalAmount(),
+                    // 非已退款的单这里是 0，前端只在已退款行上展示
+                    PayStatus.REFUNDED.equals(order.getPayStatus()) ? refundedAmount(order) : 0,
+                    order.getRefundRemark(),
                     itemsSummary(order)));
         }
         return rows;
@@ -137,6 +143,9 @@ public class FinanceService {
                     OrderStatus.label(order.getStatus()),
                     PayStatus.label(order.getPayStatus()),
                     yuan(order.getTotalAmount()),
+                    PayStatus.REFUNDED.equals(order.getPayStatus())
+                            ? yuan(refundedAmount(order)) : "",
+                    order.getRefundRemark() == null ? "" : order.getRefundRemark(),
                     itemsSummary(order)));
         }
 
@@ -171,6 +180,14 @@ public class FinanceService {
             default -> throw com.xxxfhf.meal.common.BizException.param(
                     "bucket 只能是 receivable / paid / unpaid / claimed / refunding / refunded");
         };
+    }
+
+    /** 实际退款额（分）：优先 refund_amount，为空回退订单合计（兼容 v3.49 之前的历史单） */
+    private static int refundedAmount(Order order) {
+        if (order.getRefundAmount() != null) {
+            return order.getRefundAmount();
+        }
+        return order.getTotalAmount() == null ? 0 : order.getTotalAmount();
     }
 
     private static String itemsSummary(Order order) {
@@ -218,6 +235,8 @@ public class FinanceService {
 
     public record FinanceRow(String orderNo, String contactName, String deliveryType,
                              String statusLabel, String payStatusLabel, int totalAmount,
+                             /** 实际退款额（分）：只有「已退款」的行有值，其余为 0 */
+                             int refundAmount, String refundRemark,
                              String items) {
     }
 
@@ -270,6 +289,11 @@ public class FinanceService {
         private String payStatusLabel;
         @ExcelProperty("金额（元）")
         private String amount;
+        @ExcelProperty("退款金额（元）")
+        private String refundAmount;
+        @ExcelProperty("退款备注")
+        @ColumnWidth(28)
+        private String refundRemark;
         @ExcelProperty("盒饭明细")
         @ColumnWidth(36)
         private String items;
@@ -278,18 +302,29 @@ public class FinanceService {
         }
 
         public DetailExcelRow(String orderNo, String contactName, String deliveryType,
-                              String statusLabel, String payStatusLabel, String amount, String items) {
+                              String statusLabel, String payStatusLabel, String amount,
+                              String refundAmount, String refundRemark, String items) {
             this.orderNo = orderNo;
             this.contactName = contactName;
             this.deliveryType = deliveryType;
             this.statusLabel = statusLabel;
             this.payStatusLabel = payStatusLabel;
             this.amount = amount;
+            this.refundAmount = refundAmount;
+            this.refundRemark = refundRemark;
             this.items = items;
         }
 
         public String getOrderNo() {
             return orderNo;
+        }
+
+        public String getRefundAmount() {
+            return refundAmount;
+        }
+
+        public String getRefundRemark() {
+            return refundRemark;
         }
 
         public String getContactName() {

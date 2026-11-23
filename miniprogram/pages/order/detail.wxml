@@ -85,6 +85,14 @@
   <view class="card">
     <view class="sum-row"><text>取送方式</text><text>{{deliveryTypeText}}</text></view>
     <view class="sum-row" wx:if="{{order.pickupSlot}}"><text>取餐时段</text><text>{{order.pickupSlot}}</text></view>
+    <!-- 自取点：自取单必须告诉用户去哪取；商家没填配置就不渲染这一行 -->
+    <view
+      class="sum-row"
+      wx:if="{{order.deliveryType === 'pickup' && shopAddress}}"
+      bindlongpress="onCopyAddress"
+    >
+      <text>取餐点</text><text class="addr">{{shopAddress}}</text>
+    </view>
     <block wx:if="{{order.address}}">
       <!-- 自取单的快照只有联系人与电话，没有地址，那行不渲染 -->
       <view class="sum-row" wx:if="{{order.address.regionName || order.address.detail}}">
@@ -94,13 +102,29 @@
     </block>
     <view class="sum-row" wx:if="{{order.remark}}"><text>备注</text><text>{{order.remark}}</text></view>
     <view class="sum-row" bindtap="onCopyOrderNo"><text>订单号</text><text>{{order.orderNo}}</text></view>
+    <view class="sum-row sum-link" wx:if="{{shopPhone}}" bindtap="onCallShop">
+      <text>联系商家</text><text>{{shopPhone}} 拨号</text>
+    </view>
   </view>
 
   <view class="bottom-gap"></view>
 
   <view class="bottom-bar">
-    <view class="btn btn-ghost" wx:if="{{order.status === 'pending_accept' && !order.cancelRequested}}" bindtap="onCancel">
+    <!-- 三档规则（需求 4.9）：待接单随时可取消；已接单未过截单直接取消；
+         已接单已过截单按钮变「申请取消」，由商家批。出餐及之后不显示按钮 -->
+    <view
+      class="btn btn-ghost"
+      wx:if="{{!order.cancelRequested && (order.status === 'pending_accept' || (order.status === 'accepted' && !order.cutoff))}}"
+      bindtap="onCancel"
+    >
       取消订单
+    </view>
+    <view
+      class="btn btn-ghost"
+      wx:elif="{{!order.cancelRequested && order.status === 'accepted' && order.cutoff}}"
+      bindtap="onCancel"
+    >
+      申请取消
     </view>
     <view
       class="btn"

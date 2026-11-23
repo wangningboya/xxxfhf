@@ -113,6 +113,32 @@
   line-height: 1.5;
 }
 
+.order-remark {
+  display: flex;
+  align-items: flex-start;
+  margin-top: 10rpx;
+  padding: 10rpx 14rpx;
+  background: #fff7ea;
+  border-radius: 10rpx;
+}
+
+.remark-tag {
+  flex: none;
+  margin-right: 10rpx;
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #a86b00;
+}
+
+.remark-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 24rpx;
+  line-height: 1.5;
+  color: #7a5300;
+  word-break: break-all;
+}
+
 .order-meta {
   margin-top: 10rpx;
   font-size: 22rpx;
@@ -173,6 +199,18 @@
 .accept {
   flex: 1;
   margin-left: 16rpx;
+}
+
+/* 批量拒单：挨着接单按钮，红底白字，勾选后才有 */
+.reject {
+  flex: 1;
+  margin-left: 16rpx;
+}
+
+/* 底部三个按钮并排（全选 / 拒单 / 接单）：收紧内边距与字号，否则小屏会挤成两行 */
+.bottom-bar .btn {
+  padding: 0 20rpx;
+  font-size: 28rpx;
 }
 
 /* 只看退订的筛选条：默认灰、开启后橙色底 */

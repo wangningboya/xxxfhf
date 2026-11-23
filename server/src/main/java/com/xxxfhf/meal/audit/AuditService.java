@@ -152,16 +152,9 @@ public class AuditService {
         return AuditActions.all();
     }
 
+    /** 对象表中文名：清单收在 {@link AuditActions#tableLabelOf}，这里只做转调，不再维护第二份 switch */
     static String tableLabel(String tableName) {
-        if (tableName == null) {
-            return "";
-        }
-        return switch (tableName) {
-            case AuditActions.TABLE_ADDRESS -> "地址";
-            case AuditActions.TABLE_USER -> "用户";
-            case AuditActions.TABLE_INVITE -> "邀请码";
-            default -> tableName;
-        };
+        return AuditActions.tableLabelOf(tableName);
     }
 
     /** 来源中文名。订单流转记录的时间轴也用同一套口径，故对外公开。 */

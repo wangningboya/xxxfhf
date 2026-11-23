@@ -1,7 +1,10 @@
 package com.xxxfhf.meal.notify;
 
 /**
- * 五类订阅消息，与需求 4.12「消息通知」一一对应。
+ * 订阅消息与站内消息的类型清单，与需求 4.12「消息通知」一一对应。
+ *
+ * <p>其中 {@code completed} / {@code cancelRejected} / {@code refunded} / {@code stockReleased}
+ * 四类**只落站内消息、不发微信订阅消息**（集合见 {@code NotifyService.MESSAGE_ONLY}）。
  *
  * 不做「截单前 N 小时提醒」：订阅消息是一次性的，每推一条消耗一次授权，
  * 提醒类消息最容易把授权次数耗光，反而让「拒单」这种关键通知发不出去。
@@ -43,7 +46,23 @@ public enum NotifyType {
     CANCEL_REQUEST("cancelRequest", "用户申请取消", Recipient.MERCHANT),
 
     /** 用户取消（截单前自撤、或取消申请被同意）→ 商家 */
-    CANCELLED("cancelled", "订单已取消", Recipient.MERCHANT);
+    CANCELLED("cancelled", "订单已取消", Recipient.MERCHANT),
+
+    /* ---------------- 只落站内消息的三类（v1.53 / 需求 4.12 / F-I04） ---------------- */
+
+    /**
+     * 取消申请被驳回 → 用户。
+     *
+     * <p>为什么不推送：微信一次性订阅一次最多授权 3 个模板，接单 / 拒单 / 出餐已经占满，
+     * 第 4 条根本发不出去。这三类都不影响「今天吃什么」，用户进小程序时看到即可。
+     */
+    CANCEL_REJECTED("cancelRejected", "取消申请未通过", Recipient.USER),
+
+    /** 商家标记退款完成 → 用户（带实际退款金额与备注） */
+    REFUNDED("refunded", "退款已完成", Recipient.USER),
+
+    /** 份数因超时未申报支付方式被释放 → 用户（订单还在，但那份可能被别人买走） */
+    STOCK_RELEASED("stockReleased", "份数已释放", Recipient.USER);
 
     /** 接收方 */
     public enum Recipient {
