@@ -24,7 +24,8 @@ export APP_DB_URL="jdbc:mysql://127.0.0.1:3306/${MYSQL_DATABASE}?useUnicode=true
 
 # 3) 启动。jar 路径从 .env 的 APP_JAR_PATH 读取（没设置就直接报错退出）；
 #    JVM 参数从 JAVA_OPTS 读取，多个参数用空格分隔
-#    （如 -Xms256m -Xmx512m -XX:+UseG1GC），没写就按 JVM 默认参数跑。
+#    （如 JAVA_OPTS="-Xms256m -Xmx512m -XX:+UseG1GC"），没写就按 JVM 默认参数跑。
+#    注意整个值要加引号：.env 是被 source 的，不加引号时第二个参数会被当成命令。
 JAR_PATH="${APP_JAR_PATH:?请在 deploy/.env 里设置 APP_JAR_PATH=/path/to/app.jar}"
 cd "$SCRIPT_DIR"
 exec java ${JAVA_OPTS:-} -jar "$JAR_PATH"
