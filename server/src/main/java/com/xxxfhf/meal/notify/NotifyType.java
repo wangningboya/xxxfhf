@@ -30,6 +30,15 @@ public enum NotifyType {
      */
     DELIVERED("delivered", "订单配送中", Recipient.USER),
 
+    /**
+     * 订单结束 → 用户（配送单「已送达」，自取单「已取餐」）。
+     *
+     * <p><b>只写站内消息，不走微信推送</b>：用户侧一次性订阅一次最多授权 3 个模板，
+     * 接单 / 拒单 / 出餐（配送单是「已出餐配送」）已经占满，这条没有额度可用。
+     * 跳过逻辑在 {@code NotifyService.doFire}，见那里的注释。
+     */
+    COMPLETED("completed", "订单已完成", Recipient.USER),
+
     /** 用户提交取消申请（截单后）→ 商家。不推的话申请只会躺在订单列表里等人翻 */
     CANCEL_REQUEST("cancelRequest", "用户申请取消", Recipient.MERCHANT),
 

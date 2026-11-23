@@ -102,6 +102,16 @@ public class NotifyService {
         fire(NotifyType.READY, order);
     }
 
+    /**
+     * 订单结束 → 用户。配送单叫「已送达」，自取单叫「已取餐」，文案在这里分流。
+     *
+     * <p>只落站内消息，不发微信订阅消息：用户侧一次授权最多 3 个模板，
+     * 接单 / 拒单 / 出餐（或配送）已经用满，第 4 条没有额度。
+     */
+    public void completed(Order order) {
+        fire(NotifyType.COMPLETED, order);
+    }
+
     /** 用户提交取消申请 → 商家 */
     public void cancelRequested(Order order) {
         fire(NotifyType.CANCEL_REQUEST, order);
@@ -154,6 +164,14 @@ public class NotifyService {
         // 这三种情况下推送全部发不出去，但用户打开小程序必须还能看到「单子被接了」。
         // 顺序也重要 —— 放在最前面，后面任何一步抛异常都不影响它已经落库。
         recordMessage(type, order);
+
+        // 「已完成」到此为止，不往下走推送：用户侧一次性订阅一次最多授权 3 个模板，
+        // 接单 / 拒单 / 出餐（配送单是「已出餐配送」）已经占满，这条发不出去。
+        // 放在这里而不是调用方，是为了让 OrderAdminService 只表达「订单结束了」，
+        // 也避免在时间轴上写一条注定失败的 event.notify_fail。
+        if (type == NotifyType.COMPLETED) {
+            return;
+        }
 
         Template template = templates().get(type.code());
         if (template == null || template.templateId() == null || template.templateId().isBlank()) {
@@ -215,20 +233,27 @@ public class NotifyService {
      */
     private void recordMessage(NotifyType type, Order order) {
         try {
-            messageService.record(order, type, messageTitle(type), messageContent(type, order));
+            messageService.record(order, type, messageTitle(type, order), messageContent(type, order));
         } catch (RuntimeException e) {
             // MessageService 内部已兜过一次；这里再兜一层，保证不会反过来影响推送
             log.error("写站内消息失败 orderNo={} type={}", order.getOrderNo(), type.code(), e);
         }
     }
 
-    private static String messageTitle(NotifyType type) {
+    /**
+     * 站内消息标题。
+     *
+     * <p>要带上 order：{@code COMPLETED} 是同一个状态，配送单说「已送达」、
+     * 自取单说「已取餐」，跟 {@code ready} 一个道理 —— 不能拿一句话套两种单。
+     */
+    private static String messageTitle(NotifyType type, Order order) {
         return switch (type) {
             case NEW_ORDER -> "新订单";
             case ACCEPTED -> "商家已接单";
             case REJECTED -> "商家已拒单";
             case READY -> "可以取餐了";
             case DELIVERED -> "已出餐配送";
+            case COMPLETED -> "delivery".equals(order.getDeliveryType()) ? "订单已送达" : "已取餐";
             case CANCEL_REQUEST -> "用户申请取消";
             case CANCELLED -> "订单已取消";
         };
@@ -248,6 +273,12 @@ public class NotifyService {
                 String day = order.getServeDate() == null
                         ? "" : order.getServeDate().format(DAY_FMT) + " ";
                 yield summary + "，" + day + "已出餐配送";
+            }
+            case COMPLETED -> {
+                String day = order.getServeDate() == null
+                        ? "" : order.getServeDate().format(DAY_FMT) + " ";
+                yield summary + "，" + day
+                        + ("delivery".equals(order.getDeliveryType()) ? "已送达" : "已取餐");
             }
             case CANCEL_REQUEST -> {
                 String reason = order.getCancelRequest() == null

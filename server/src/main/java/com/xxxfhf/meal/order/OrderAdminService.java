@@ -243,6 +243,10 @@ public class OrderAdminService {
             // 自取单发「可以取餐了」+ 取餐码，配送单发「订单配送中」，模板由
             // NotifyService.ready 按取送方式分流 —— 两种单要说的不是同一句话
             notifyService.ready(advanced);
+        } else if (transition == OrderTransition.COMPLETE) {
+            // 配送单在此刻才算「已送达」、自取单算「已取餐」。只落站内消息：
+            // 用户侧 3 个订阅模板额度已被接单 / 拒单 / 出餐占满，见 NotifyType.COMPLETED
+            notifyService.completed(advanced);
         }
         return orderService.toView(advanced);
     }
@@ -301,7 +305,10 @@ public class OrderAdminService {
         statusLogService.record(order.getId(), OrderTransition.PICKUP.logAction(),
                 order.getStatus(), OrderTransition.PICKUP.target(), "取餐码 " + trimmed,
                 LocalDateTime.now());
-        return orderService.toView(orderService.require(order.getId()));
+        Order finished = orderService.require(order.getId());
+        // 核销是自取单的「完成」入口，与手动点「完成订单」走同一条站内消息（只站内、不推送）
+        notifyService.completed(finished);
+        return orderService.toView(finished);
     }
 
     /* ==================== 联系顾客 ==================== */

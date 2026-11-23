@@ -14,6 +14,7 @@ const STYLES = {
   accepted: { icon: '✅', tone: 'ok' },
   ready: { icon: '🔔', tone: 'ok' },
   delivered: { icon: '🛵', tone: 'ok' },
+  completed: { icon: '🏁', tone: 'ok' },
   rejected: { icon: '❌', tone: 'danger' },
   cancelled: { icon: '🚫', tone: 'muted' },
   newOrder: { icon: '📦', tone: 'warn' },

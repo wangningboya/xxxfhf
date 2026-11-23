@@ -214,7 +214,9 @@
           <el-input v-model="form.detail" type="textarea" :rows="2" maxlength="120" />
         </el-form-item>
         <el-form-item label="标签">
-          <el-input v-model="form.tag" maxlength="10" placeholder="公司 / 家，可不填" />
+          <el-select v-model="form.tag" clearable placeholder="可不填" style="width: 100%">
+            <el-option v-for="item in tagOptions" :key="item" :label="item" :value="item" />
+          </el-select>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -350,13 +352,44 @@ function searchFormUsers(kw) {
   fetchUsers(kw, formUsers, formUserLoading);
 }
 
-/** 新增时切换归属用户，手机号跟着换成该用户的 —— 号码跟人走，不沿用上一个用户的 */
+/**
+ * 新增时带出归属用户的昵称与手机号 —— 这两项都是「跟人走」的，换人就整体换掉，
+ * 不沿用上一个用户的残留。
+ *
+ * 手机号不能直接用下拉里的值：`/admin/user/list` 下发的账号手机号是掩码
+ * （138****1234），填进 maxlength=11 的输入框会被截断，保存时也过不了 11 位校验。
+ * 所以有号时再走一次「查看完整手机号」接口（user.phone.view，一次一个用户、
+ * 每次写一条操作记录）拿明文；没号就不发请求，保持留空。
+ */
+function fillFromUser(user) {
+  if (!user) {
+    return;
+  }
+  form.value.contactName = user.nickName || '';
+  form.value.phone = '';
+  // 掩码非空 = 该用户绑了手机号；没绑就不用去要明文，省一次请求和一条操作记录
+  if (!user.phone) {
+    return;
+  }
+  const userId = user.userId;
+  http
+    .get(`/admin/user/${userId}/phone`)
+    .then((phone) => {
+      // 请求返回前可能已经换了人：只认当前仍选中这个人，且商家没自己填过才回填
+      if (form.value.userId === userId && !form.value.phone) {
+        form.value.phone = phone || '';
+      }
+    })
+    .catch(() => {
+      // 没 user.phone.view 权限或接口失败：留空让商家自己输，不打断填表
+    });
+}
+
 function onFormUserChange(userId) {
   if (form.value.id) {
     return;
   }
-  const user = formUsers.value.find((u) => u.userId === userId);
-  form.value.phone = user && user.phone ? user.phone : '';
+  fillFromUser(formUsers.value.find((u) => u.userId === userId));
 }
 
 /* ==================== 代客新增 / 编辑 ==================== */
@@ -364,6 +397,19 @@ function onFormUserChange(userId) {
 const dialog = ref(false);
 const saving = ref(false);
 const form = ref({});
+
+/**
+ * 标签只能选，不能手输（需求 4.x 定死「家 / 公司」，与小程序地址编辑页同一口径）。
+ *
+ * 编辑老数据时，库里可能存着早年手输的其它值（如「学校」）：
+ * 把它作为额外一项显示出来，不改就原样带回去，不强迫商家重选。
+ */
+const TAG_PRESETS = ['家', '公司'];
+
+const tagOptions = computed(() => {
+  const current = form.value.tag;
+  return current && !TAG_PRESETS.includes(current) ? TAG_PRESETS.concat(current) : TAG_PRESETS;
+});
 
 function openForm(row) {
   if (row) {
@@ -388,9 +434,11 @@ function openForm(row) {
       detail: '',
       tag: '',
     };
-    // 从「按用户筛选」进来时，用户下拉里得先有这一项，否则只显示一串 ID
+    // 从「按用户筛选」进来时，用户下拉里得先有这一项，否则只显示一串 ID；
+    // 顺手把该用户的昵称和手机号带进表单，省得再手填一遍
     if (form.value.userId) {
       formUsers.value = filterUsers.value.slice();
+      fillFromUser(formUsers.value.find((u) => u.userId === form.value.userId));
     }
   }
   dialog.value = true;
