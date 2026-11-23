@@ -1,0 +1,206 @@
+page {
+  background: #f5f6f8;
+}
+
+.page {
+  padding: 24rpx 24rpx 64rpx;
+}
+
+.head {
+  padding: 20rpx 12rpx 4rpx;
+}
+
+.head-title {
+  font-size: 40rpx;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.head-meta {
+  margin-top: 10rpx;
+  font-size: 22rpx;
+  color: #a8a8a8;
+}
+
+.sec {
+  margin-top: 24rpx;
+  padding: 28rpx 32rpx;
+  background: #ffffff;
+  border-radius: 20rpx;
+}
+
+.sec-title {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8rpx;
+}
+
+.sec-bar {
+  width: 6rpx;
+  height: 28rpx;
+  margin-right: 14rpx;
+  background: #ff9f1c;
+  border-radius: 3rpx;
+  flex-shrink: 0;
+}
+
+.sec-title-text {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.p {
+  margin-top: 16rpx;
+  font-size: 27rpx;
+  line-height: 1.85;
+  color: #4a4a4a;
+  text-align: justify;
+}
+
+.ul {
+  margin-top: 4rpx;
+}
+
+.li {
+  position: relative;
+  margin-top: 14rpx;
+  padding-left: 26rpx;
+  font-size: 27rpx;
+  line-height: 1.85;
+  color: #4a4a4a;
+  text-align: justify;
+}
+
+.li::before {
+  content: '';
+  position: absolute;
+  left: 6rpx;
+  top: 18rpx;
+  width: 8rpx;
+  height: 8rpx;
+  border-radius: 50%;
+  background: #d0d0d0;
+}
+
+.dl-row {
+  margin-top: 20rpx;
+}
+
+.dl-k {
+  display: block;
+  margin-bottom: 6rpx;
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.dl-v {
+  font-size: 26rpx;
+  line-height: 1.85;
+  color: #5a5a5a;
+  text-align: justify;
+}
+
+.cards {
+  margin-top: 8rpx;
+}
+
+.card {
+  margin-top: 16rpx;
+  padding: 22rpx 24rpx;
+  background: #fafafa;
+  border-radius: 16rpx;
+}
+
+.card-head {
+  display: flex;
+  align-items: flex-start;
+}
+
+.card-name {
+  flex: 1;
+  margin-right: 16rpx;
+  font-size: 26rpx;
+  font-weight: 600;
+  line-height: 1.6;
+  color: #1a1a1a;
+}
+
+.card-tag {
+  flex-shrink: 0;
+  padding: 4rpx 10rpx;
+  font-size: 20rpx;
+  line-height: 1.5;
+  color: #d97600;
+  background: #fdf1e3;
+  border-radius: 8rpx;
+}
+
+.card-row {
+  display: flex;
+  margin-top: 10rpx;
+}
+
+.card-k {
+  width: 120rpx;
+  flex-shrink: 0;
+  font-size: 24rpx;
+  line-height: 1.8;
+  color: #a8a8a8;
+}
+
+.card-v {
+  flex: 1;
+  font-size: 24rpx;
+  line-height: 1.8;
+  color: #5a5a5a;
+  text-align: justify;
+}
+
+/* 待补充项：提审前必须换成真实信息，标黄便于自查，正式上线时应当为空 */
+.todo {
+  color: #c26a00;
+}
+
+/* 证照公示：政策页底部，两个都没配时不渲染 */
+.license-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  margin-top: 8rpx;
+}
+
+.license {
+  width: 48%;
+  margin-top: 16rpx;
+}
+
+.license-img {
+  display: block;
+  width: 100%;
+  border-radius: 12rpx;
+  background: #f0f0f0;
+}
+
+.license-name {
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  color: #8a8a8a;
+  text-align: center;
+}
+
+.license-tip {
+  margin-top: 20rpx;
+  font-size: 22rpx;
+  color: #a8a8a8;
+}
+
+.foot {
+  margin-top: 32rpx;
+  padding: 0 12rpx;
+  font-size: 22rpx;
+  line-height: 1.8;
+  color: #a8a8a8;
+  text-align: center;
+}

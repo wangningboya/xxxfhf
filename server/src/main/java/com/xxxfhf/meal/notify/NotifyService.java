@@ -48,6 +48,8 @@ public class NotifyService {
     private static final Logger log = LoggerFactory.getLogger(NotifyService.class);
 
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    /** 温馨提示里的短日期：thing 类型只有 20 字，年份省掉。 */
+    private static final DateTimeFormatter DAY_FMT = DateTimeFormatter.ofPattern("MM-dd");
 
     private final WxApiClient wxApiClient;
     private final ConfigService configService;
@@ -82,8 +84,18 @@ public class NotifyService {
         fire(NotifyType.REJECTED, order);
     }
 
-    /** 订单可取餐 → 用户 */
+    /**
+     * 订单推进到 ready → 用户。
+     *
+     * 同一个 ready 状态在两种单上的含义不同，模板必须分开：
+     * 自取是「可以来拿了」，得带取餐码；配送是「已出餐、正在送」，带码反而误导。
+     * 分流放在这里而不是调用方，是为了让 OrderAdminService 只表达「状态推进了」这一件事。
+     */
     public void ready(Order order) {
+        if (order != null && "delivery".equals(order.getDeliveryType())) {
+            fire(NotifyType.DELIVERED, order);
+            return;
+        }
         fire(NotifyType.READY, order);
     }
 
@@ -239,6 +251,7 @@ public class NotifyService {
      * shopName 店铺名 / orderNo 订单号 / summary 盒饭摘要 / qty 总份数 / amount 金额（元）
      * serveDate 供餐日 / pickupCode 取餐码 / pickupSlot 取餐时段 / deliveryType 取送方式
      * status 状态文案 / reason 拒单原因 / nickname 下单人昵称 / remark 备注 / time 当前时间
+     * serveTip 接单温馨提示（一句话，带 MM-dd）/ serveInfo 取送方式 + 时段或份数
      */
     private Map<String, String> buildVars(Order order) {
         Map<String, String> vars = new LinkedHashMap<>();
@@ -259,6 +272,17 @@ public class NotifyService {
         vars.put("remark", nvl(order.getRemark()));
         vars.put("time", LocalDateTime.now().format(TIME_FMT));
         vars.put("serveDateDay", serveDateDay(order.getServeDate()));
+
+        // 接单通知的「温馨提示 / 订单信息」专用：配送单没有取餐时段，直接填 pickupSlot 会出现「-」，
+        // 所以按取送方式给不同文案，两个字段都保持在 20 字以内。
+        boolean delivery = "delivery".equals(order.getDeliveryType());
+        String day = order.getServeDate() == null ? "" : order.getServeDate().format(DAY_FMT);
+        String tip = delivery ? "商家将按时配送" : "请按时到店取餐";
+        vars.put("serveTip", day.isEmpty() ? tip : day + " " + tip);
+        String slot = nvl(order.getPickupSlot());
+        vars.put("serveInfo", delivery
+                ? "配送 " + totalQty(order) + "份"
+                : (slot.isEmpty() ? "自取" : "自取 " + slot));
 
         User user = order.getUserId() == null ? null : userMapper.selectById(order.getUserId());
         vars.put("nickname", user == null || user.getNickName() == null || user.getNickName().isBlank()

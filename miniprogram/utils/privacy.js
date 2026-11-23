@@ -99,12 +99,12 @@ function settle(value) {
   }
 }
 
-/** 跳政策全文页；页面还没建时给一句提示，不能点了没反应 */
+/** 跳政策全文页。页面是纯静态文本，正常不会失败；保留兜底提示，避免点了没有任何反馈 */
 function openPolicy() {
   wx.navigateTo({
     url: '/pages/privacy/index',
     fail: () => {
-      wx.showToast({ title: '隐私政策页即将上线', icon: 'none' });
+      wx.showToast({ title: '政策页打开失败，请稍后再试', icon: 'none' });
     },
   });
 }

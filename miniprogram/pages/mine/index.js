@@ -235,10 +235,18 @@ Page({
 
   /* ---------------- 隐私与注销 ---------------- */
 
+  /** 证照公示：营业执照与食品经营许可证，法规要求公示在经营主页面 */
+  onOpenLicense() {
+    wx.navigateTo({
+      url: '/pages/license/index',
+      fail: () => wx.showToast({ title: '证照页打开失败，请稍后再试', icon: 'none' }),
+    });
+  },
+
   onOpenPrivacy() {
     wx.navigateTo({
       url: '/pages/privacy/index',
-      fail: () => wx.showToast({ title: '隐私政策页即将上线', icon: 'none' }),
+      fail: () => wx.showToast({ title: '政策页打开失败，请稍后再试', icon: 'none' }),
     });
   },
 

@@ -100,12 +100,12 @@ Page({
     this.setData({ tag: this.data.tag === tag ? '' : tag });
   },
 
-  /** 用途告知里的政策入口：政策页（P0-01）建好前降级提示，避免点击无反应 */
+  /** 用途告知里的政策入口：跳 pages/privacy/index；页面为静态文本，兜底提示只在跳转失败时出现 */
   onOpenPrivacy() {
     wx.navigateTo({
       url: '/pages/privacy/index',
       fail: () => {
-        wx.showToast({ title: '隐私政策页即将上线', icon: 'none' });
+        wx.showToast({ title: '政策页打开失败，请稍后再试', icon: 'none' });
       },
     });
   },

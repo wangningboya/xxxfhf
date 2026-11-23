@@ -239,10 +239,9 @@ public class OrderAdminService {
         // 出餐与完成分成两个动作码：目标状态不同，商家在时间轴上一眼能看出这单走到哪一步
         statusLogService.record(orderId, transition.logAction(),
                 order.getStatus(), transition.target(), null, LocalDateTime.now());
-        if (transition == OrderTransition.READY
-                && !OrderStatus.TYPE_DELIVERY.equals(advanced.getDeliveryType())) {
-            // 只有自取单发「可以取餐了」+ 取餐码。配送单进的是同一个 ready，
-            // 但用户在等送货上门，硬套取餐模板等于告诉他「自己去拿」，是错的提醒 —— 静默不发。
+        if (transition == OrderTransition.READY) {
+            // 自取单发「可以取餐了」+ 取餐码，配送单发「订单配送中」，模板由
+            // NotifyService.ready 按取送方式分流 —— 两种单要说的不是同一句话
             notifyService.ready(advanced);
         }
         return orderService.toView(advanced);

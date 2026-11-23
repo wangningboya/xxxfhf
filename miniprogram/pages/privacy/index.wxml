@@ -1,0 +1,67 @@
+<view class="page">
+  <view class="head">
+    <view class="head-title">隐私政策</view>
+    <view class="head-meta">版本 {{version}}　生效日期 {{effectiveText}}</view>
+  </view>
+
+  <view class="sec" wx:for="{{sections}}" wx:key="_k">
+    <view class="sec-title" wx:if="{{item.title}}">
+      <view class="sec-bar"></view>
+      <text class="sec-title-text">{{item.title}}</text>
+    </view>
+
+    <block wx:for="{{item.blocks}}" wx:for-item="b" wx:key="_k">
+      <!-- 段落 -->
+      <view wx:if="{{b.type === 'p'}}" class="p {{b.todo ? 'todo' : ''}}">{{b.text}}</view>
+
+      <!-- 无序列表 -->
+      <view wx:elif="{{b.type === 'ul'}}" class="ul">
+        <view class="li" wx:for="{{b.items}}" wx:for-item="t" wx:key="_k">{{t.text}}</view>
+      </view>
+
+      <!-- 带小标题的条目 -->
+      <view wx:elif="{{b.type === 'dl'}}" class="dl">
+        <view class="dl-row" wx:for="{{b.rows}}" wx:for-item="r" wx:key="_k">
+          <text class="dl-k">{{r.k}}</text>
+          <text class="dl-v {{r.todo ? 'todo' : ''}}">{{r.v}}</text>
+        </view>
+      </view>
+
+      <!-- 收集清单卡片：一行一类信息 -->
+      <view wx:elif="{{b.type === 'cards'}}" class="cards">
+        <view class="card" wx:for="{{b.items}}" wx:for-item="c" wx:key="_k">
+          <view class="card-head">
+            <text class="card-name">{{c.name}}</text>
+            <text class="card-tag">{{c.tag}}</text>
+          </view>
+          <view class="card-row" wx:for="{{c.rows}}" wx:for-item="cr" wx:key="_k">
+            <text class="card-k">{{cr.k}}</text>
+            <text class="card-v">{{cr.v}}</text>
+          </view>
+        </view>
+      </view>
+    </block>
+  </view>
+
+  <view class="sec" wx:if="{{licenses.length}}">
+    <view class="sec-title">
+      <view class="sec-bar"></view>
+      <text class="sec-title-text">证照公示</text>
+    </view>
+    <view class="license-grid">
+      <view
+        class="license"
+        wx:for="{{licenses}}"
+        wx:key="src"
+        data-src="{{item.src}}"
+        bindtap="onPreviewLicense"
+      >
+        <image class="license-img" src="{{item.src}}" mode="widthFix" />
+        <view class="license-name">{{item.name}}</view>
+      </view>
+    </view>
+    <view class="license-tip">点击证照可放大查看。</view>
+  </view>
+
+  <view class="foot">以上内容与小程序内的隐私弹窗、微信侧《用户隐私保护指引》一致。</view>
+</view>

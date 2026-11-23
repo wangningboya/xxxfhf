@@ -32,6 +32,8 @@ server {
 
     location /upload/ {
         alias /data/upload/;
+        # 不让搜索引擎收录：证照图属于公开公示，但不需要出现在图片搜索里
+        add_header X-Robots-Tag "noindex" always;
         expires 30d;
         add_header Cache-Control "public, max-age=2592000";
         access_log off;

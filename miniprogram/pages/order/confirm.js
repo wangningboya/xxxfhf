@@ -5,6 +5,50 @@ const cartUtil = require('../../utils/cart');
 
 const SELECTED_ADDRESS_KEY = 'meal_selected_address';
 
+/**
+ * 用户侧订阅消息模板：接单、拒单，第三个按取送方式二选一。
+ *
+ * 微信一次最多请求 3 个模板，而用户侧一共需要 4 个（自取取餐码 / 配送进度各一个），
+ * 所以按这一单的取送方式拆分：自取单授权「取餐提醒」，配送单授权「订单配送通知」。
+ * 必须写在前端 —— requestSubscribeMessage 只认 tmplIds 实体值，读不到服务端配置；
+ * 与后台 config.subscribeTemplates 里同名项的 templateId 是同一组，换模板要两边一起改。
+ */
+const SUBSCRIBE_TMPL_IDS = {
+  pickup: [
+    'b5jJRQwng514myFXOsLuSLDxaVzMIDzbwLUpFKqB5ZU',
+    'qk-sIMYmoL0PhyLV-CjVIfHxDd-HmZ5tTgRNO_yeFwY',
+    '7Fb9GjfQAgGf-ZmIuLzf7In1qjtasqqZaQaZxLsF-UY',
+  ],
+  delivery: [
+    'b5jJRQwng514myFXOsLuSLDxaVzMIDzbwLUpFKqB5ZU',
+    'qk-sIMYmoL0PhyLV-CjVIfHxDd-HmZ5tTgRNO_yeFwY',
+    'xeXcnfIwF2fDiFOFcQwgYyHV6QMO-f1RvffX-8QKIog',
+  ],
+};
+
+/**
+ * 订阅消息授权，永不 reject。
+ *
+ * 微信要求这个接口必须由用户点击同步触发，所以只能放在「提交订单」的 tap 回调里。
+ * 用 complete 而不是 success：用户拒绝、基础库太旧、模板 ID 失效，都只是少几条通知，
+ * 不能因为拿不到授权就拦住这一单。
+ *
+ * @param {string} deliveryType 'delivery' 或 'pickup'，决定第三个模板用哪个
+ */
+function requestSubscribe(deliveryType) {
+  const tmplIds = SUBSCRIBE_TMPL_IDS[deliveryType === 'delivery' ? 'delivery' : 'pickup'];
+  return new Promise((resolve) => {
+    if (!wx.requestSubscribeMessage) {
+      resolve();
+      return;
+    }
+    wx.requestSubscribeMessage({
+      tmplIds,
+      complete: () => resolve(),
+    });
+  });
+}
+
 Page({
   data: {
     serveDate: '',
@@ -198,6 +242,12 @@ Page({
     // 自取单不强制留手机号：到店报 4 位取餐码即可核销，电话不是必要信息。
     // 账号里填过号会带进订单快照，商家仍能在售后窗口内联系到人
     this.setData({ submitting: true });
+    // 先弹授权框、再上遮罩：showLoading 的 mask 会盖住页面，
+    // 授权框夹在中间会让用户看到一次突兀的闪烁。拿到结果无论如何都继续下单
+    requestSubscribe(this.data.deliveryType).then(() => this.submitOrder());
+  },
+
+  submitOrder() {
     // loading 遮罩：挡住页面上的其他点击，配合按钮禁用双保险防重复提交
     wx.showLoading({ title: '提交中', mask: true });
     const data = {

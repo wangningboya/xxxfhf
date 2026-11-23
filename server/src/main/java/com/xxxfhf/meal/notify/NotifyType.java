@@ -19,8 +19,16 @@ public enum NotifyType {
     /** 商家拒单 → 用户（必须带原因） */
     REJECTED("rejected", "订单被拒", Recipient.USER),
 
-    /** 订单可取餐 / 已送达 → 用户 */
+    /** 订单可取餐 → 用户（自取单：带取餐码） */
     READY("ready", "可以取餐了", Recipient.USER),
+
+    /**
+     * 订单出餐、开始配送 → 用户（配送单）。
+     *
+     * 与 {@link #READY} 是同一个订单状态，但意思完全不同：自取是「来拿」，配送是「等着收货」。
+     * 硬套取餐模板等于告诉配送用户「自己去取」，所以拆成两套模板。
+     */
+    DELIVERED("delivered", "订单配送中", Recipient.USER),
 
     /** 用户提交取消申请（截单后）→ 商家。不推的话申请只会躺在订单列表里等人翻 */
     CANCEL_REQUEST("cancelRequest", "用户申请取消", Recipient.MERCHANT),

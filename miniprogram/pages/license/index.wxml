@@ -1,0 +1,25 @@
+<view class="page">
+  <view class="sec" wx:if="{{licenses.length}}">
+    <view class="sec-title">
+      <view class="sec-bar"></view>
+      <text class="sec-title-text">经营资质</text>
+    </view>
+
+    <view
+      class="item"
+      wx:for="{{licenses}}"
+      wx:key="key"
+      data-src="{{item.src}}"
+      bindtap="onPreview"
+    >
+      <image class="item-img" src="{{item.src}}" mode="widthFix" />
+      <view class="item-name">{{item.name}}</view>
+    </view>
+
+    <view class="tip">点击证照可全屏放大查看。</view>
+  </view>
+
+  <view class="sec empty" wx:else>
+    <view class="empty-text">证照信息正在补充中。</view>
+  </view>
+</view>

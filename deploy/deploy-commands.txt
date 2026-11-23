@@ -1,0 +1,105 @@
+====================================================================
+mysql 部署 & 演示数据 —— 执行命令
+所有命令都在 deploy 目录下执行
+====================================================================
+
+【0】前置：准备 .env（首次部署才需要）
+--------------------------------------------------------------------
+cp .env.example .env
+vi .env
+
+必须确认的几项：
+  MYSQL_ROOT_PASSWORD   root 密码，不能为空
+  MYSQL_PASSWORD        普通用户密码，不能为空
+  MYSQL_DATABASE        库名，必须显式填（如 xxxfhf），不能留空
+  MYSQL_USER            普通用户名，【绝对不能是 root】
+
+密码字符限制：不要用 @ : / ? & 和空格，会破坏 JDBC URL 解析。
+
+检查有没有隐藏字符（CRLF）：
+  file .env
+
+
+【1】启动 mysql
+--------------------------------------------------------------------
+docker compose up -d
+
+
+【2】等待初始化完成（关键：容器 Up ≠ 初始化完成）
+--------------------------------------------------------------------
+docker compose ps
+    → STATUS 变成 (healthy) 才算就绪
+
+docker compose logs mysql | grep "init process done"
+    → 出现 "MySQL init process done. Ready for start up." 才算完成
+
+注意：初始化分阶段（临时 server → 设 root 密码 → 建库 → 跑 init 脚本
+→ 换正式 server）。在"建库"之前执行 mysql 命令会报
+ERROR 1049 Unknown database。所以必须等上面的信号。
+
+
+【3】确认数据库已建出来
+--------------------------------------------------------------------
+docker compose exec mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -e "show databases;"'
+
+输出里必须能看到 .env 里 MYSQL_DATABASE 指定的库名（如 xxxfhf）。
+看不到就不要往下灌数据。
+
+
+【4】灌演示数据
+--------------------------------------------------------------------
+docker compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' < mysql/demo/03-demo-data.sql
+
+说明：
+  - 无输出 = 成功（mysql 静默执行）
+  - 脚本是幂等的，可重复执行
+  - mysql/demo/ 不在自动初始化范围，必须手动执行
+
+
+【5】验证数据
+--------------------------------------------------------------------
+docker compose exec mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -e "show tables; select count(*) from \`order\`;"'
+
+应能看到 15 张表，order 表有记录。
+
+
+【附 A】改了 .env 之后（MYSQL_* 相关）必须重建
+--------------------------------------------------------------------
+MYSQL_* 只在首次初始化时读取一次，改完不重建不生效：
+  docker compose down -v      # ⚠️ 删数据卷，数据全丢
+  docker compose up -d
+  （然后重复第 2 步等待就绪）
+
+
+【附 B】日常操作
+--------------------------------------------------------------------
+docker compose ps                       查看状态
+docker compose logs -f mysql            看实时日志
+docker compose restart mysql            重启（不重建卷）
+docker compose stop / start             停止 / 启动
+docker compose down                     停止并删容器（保留数据卷）
+docker compose down -v                  停止并删容器 + 数据卷（⚠️ 数据全丢）
+docker compose exec mysql mysql -uroot -p 进容器调试
+
+
+【附 C】已知踩坑记录
+--------------------------------------------------------------------
+1. MYSQL_USER 填 root
+   → 报 "MYSQL_USER and MYSQL_PASSWORD are for configuring a regular user"
+   → 改成任意非 root 名字
+
+2. ERROR 1045 Access denied for user 'root'
+   → 容器里 root 密码和 .env 不一致（卷里是旧密码）
+   → docker compose down -v 重建
+
+3. ERROR 1049 Unknown database
+   → 初始化还没建库就执行了命令（抢跑）
+   → 等 healthy / init process done 再操作
+
+4. .env 是 Windows 换行（CRLF）
+   → 值尾部带 \r，密码对不上
+   → sed -i 's/\r$//' .env 然后 down -v 重建
+
+5. 3306 只绑 127.0.0.1，外网连不上是正常的
+   → 验证：ss -lntp | grep 3306 应为 127.0.0.1:3306
+====================================================================
