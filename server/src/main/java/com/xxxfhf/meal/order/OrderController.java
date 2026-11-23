@@ -7,11 +7,14 @@ import com.xxxfhf.meal.common.PageResult;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 /**
  * 用户端订单。
@@ -54,6 +57,20 @@ public class OrderController {
         Long userId = UserContext.userId();
         accessGuard.requireAccess(userId);
         return ApiResponse.ok(orderService.detail(userId, orderId));
+    }
+
+    /**
+     * 我的订单时间轴。
+     *
+     * <p>独立于 {@code /detail}：时间轴条数随订单生命周期增长，混进详情会让每次打开都多传
+     * 一个数组；商家端详情走的是 {@code /admin/order/status-log}，两边本来也不是同一份数据
+     * —— 那边要全部记录（含推送投递成败），这边只要订单流转。
+     */
+    @GetMapping("/{id}/timeline")
+    public ApiResponse<List<OrderStatusLogService.Row>> timeline(@PathVariable Long id) {
+        Long userId = UserContext.userId();
+        accessGuard.requireAccess(userId);
+        return ApiResponse.ok(orderService.timeline(userId, id));
     }
 
     /** 我已完成付款 → 收款状态置为「用户声称已付款」，等商家核对。收款方式必填。 */

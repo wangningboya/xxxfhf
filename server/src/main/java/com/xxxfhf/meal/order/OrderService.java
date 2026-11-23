@@ -462,6 +462,19 @@ public class OrderService {
         return toView(requireOwned(orderId, userId));
     }
 
+    /**
+     * 我的订单时间轴：只返回订单本身的流转节点。
+     *
+     * <p>归属校验与 {@link #detail} 同一口径 —— 时间轴里有操作人、备注，能看时间轴
+     * 就等于能看到这一单的全部处理过程，不能只看「有权限读日志」。
+     *
+     * <p>过滤规则见 {@link OrderStatusLogService#listOrderLine}：不含 {@code event.*}。
+     */
+    public List<OrderStatusLogService.Row> timeline(Long userId, Long orderId) {
+        requireOwned(orderId, userId);
+        return statusLogService.listOrderLine(orderId);
+    }
+
     /* ==================== 用户操作 ==================== */
 
     /**

@@ -189,6 +189,27 @@ public class OrderStatusLogService {
         return rows;
     }
 
+    /**
+     * 只有订单本身流转的那条线，给用户端时间轴用。
+     *
+     * <p>滤掉两类：{@code event.*} 是业务事件与推送投递记录 —— 把「通知未送达｜模板未配置」
+     * 摆到用户面前等于系统自己承认没做到；{@code pay.*} 是收款线，用户端详情页已有独立的
+     * 「收款状态」一栏，再进时间轴是同一件事说两遍。
+     *
+     * <p>不在这里做归属校验：本方法只回答「这一单经历了什么」，谁能看由调用方决定
+     * （用户端走 {@code OrderService} 的 {@code requireOwned}，商家端复用后台接口的权限注解）。
+     */
+    public List<Row> listOrderLine(Long orderId) {
+        List<Row> all = list(orderId);
+        List<Row> rows = new ArrayList<>(all.size());
+        for (Row row : all) {
+            if (OrderLogActions.TYPE_ORDER.equals(row.logType())) {
+                rows.add(row);
+            }
+        }
+        return rows;
+    }
+
     /** 收款线用收款字典，其余（订单线、事件）用订单状态字典。 */
     private static String statusDictOf(String logType) {
         return OrderLogActions.TYPE_PAY.equals(logType) ? DictCodes.PAY_STATUS : DictCodes.ORDER_STATUS;

@@ -85,6 +85,8 @@ const MENU_GROUPS = [
     title: '日常经营',
     icon: Tickets,
     items: [
+      // 不写 perm：canSee 走 has(undefined) 返回 true，任何登录账号都能看到自己的消息
+      { path: '/message', title: '消息通知' },
       { path: '/order', title: '订单管理', perms: ['order.view', 'order.accept'] },
       { path: '/user', title: '用户管理', perms: ['user.audit', 'user.view'] },
       { path: '/address', title: '地址维护', perm: 'user.address' },

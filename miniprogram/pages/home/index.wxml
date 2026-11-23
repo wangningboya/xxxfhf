@@ -1,4 +1,38 @@
 <view class="page">
+  <!-- 通知横栏：左侧轮播未读（最多 3 条），右侧铃铛进消息中心。
+       铃铛常驻 —— 没有未读时它是进消息中心看历史的唯一入口 -->
+  <view class="notice-bar">
+    <view class="notice-main" bindtap="onOpenMessages">
+      <swiper
+        class="notice-swiper"
+        wx:if="{{noticeItems.length}}"
+        vertical
+        circular="{{noticeItems.length > 1}}"
+        autoplay="{{noticeItems.length > 1}}"
+        interval="3000"
+        duration="400"
+      >
+        <swiper-item wx:for="{{noticeItems}}" wx:key="id">
+          <view class="notice-line">
+            <text class="notice-title">{{item.title}}</text>
+            <text class="notice-text">{{item.content}}</text>
+          </view>
+        </swiper-item>
+      </swiper>
+      <view class="notice-line" wx:elif="{{shopNotice}}">
+        <text class="notice-title">公告</text>
+        <text class="notice-text">{{shopNotice}}</text>
+      </view>
+      <view class="notice-line" wx:else>
+        <text class="notice-text notice-empty">暂无新消息</text>
+      </view>
+    </view>
+    <view class="notice-bell" bindtap="onOpenMessages">
+      <text class="bell-icon">🔔</text>
+      <text class="bell-badge" wx:if="{{unreadCount > 0}}">{{unreadBadge}}</text>
+    </view>
+  </view>
+
   <!-- 店招 -->
   <view class="hero">
     <view class="hero-name">{{shopName}}</view>

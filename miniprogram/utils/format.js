@@ -92,4 +92,113 @@ function assetUrl(path) {
   return base + (path.charAt(0) === '/' ? path : '/' + path);
 }
 
-module.exports = { yuan, parseList, dayLabel, dateStr, addDays, delta, assetUrl };
+/**
+ * 解析服务端的 LocalDateTime。
+ *
+ * iOS 对 `2026-11-23T12:00:00` 的解析不稳定（可能直接 NaN），必须换成空格、
+ * 并把 `-` 换成 `/` —— 这是本项目里所有时间处理都要走一遍的原因，
+ * 不要在页面里各写一份。
+ */
+function parseTime(value) {
+  if (!value) {
+    return null;
+  }
+  if (value instanceof Date) {
+    return value;
+  }
+  const d = new Date(String(value).replace('T', ' ').replace(/-/g, '/'));
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function pad2(n) {
+  return String(n).padStart(2, '0');
+}
+
+/**
+ * 相对时间：刚刚 / X 分钟前 / X 小时前 / 昨天 / MM-DD。
+ *
+ * 「昨天」按自然日判断而不是「24 小时前」：晚上 23:50 的消息，
+ * 第二天早上 8 点看到时应当说「昨天」，说「8 小时前」会让人算不清是哪天。
+ */
+function relativeTime(value) {
+  const d = parseTime(value);
+  if (!d) {
+    return '';
+  }
+  const diff = Date.now() - d.getTime();
+  if (diff < 60000) {
+    return '刚刚';
+  }
+  if (diff < 3600000) {
+    return Math.floor(diff / 60000) + ' 分钟前';
+  }
+  const todayZero = new Date();
+  todayZero.setHours(0, 0, 0, 0);
+  const thatZero = new Date(d.getTime());
+  thatZero.setHours(0, 0, 0, 0);
+  const days = Math.round((todayZero.getTime() - thatZero.getTime()) / 86400000);
+  if (days === 0) {
+    return Math.floor(diff / 3600000) + ' 小时前';
+  }
+  if (days === 1) {
+    return '昨天';
+  }
+  if (d.getFullYear() === todayZero.getFullYear()) {
+    return pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+}
+
+/** 时间点：11-23 12:05。时间轴用，只到分钟 —— 到秒反而看不清。 */
+function timeLabel(value) {
+  const d = parseTime(value);
+  if (!d) {
+    return '';
+  }
+  return (
+    pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes())
+  );
+}
+
+/**
+ * 两个时间点之间的耗时：不到 1 分钟 / X 分钟 / X 小时 Y 分钟 / X 天 Y 小时。
+ *
+ * 只看分钟及以上，不算秒：接单耗时「2 分 13 秒」对商家没有额外信息，
+ * 而秒级数字会让同一笔单刷新两次看到不同结果，像在跳动。
+ */
+function durationText(from, to) {
+  const a = parseTime(from);
+  const b = parseTime(to);
+  if (!a || !b) {
+    return '';
+  }
+  const minutes = Math.max(0, Math.floor((b.getTime() - a.getTime()) / 60000));
+  if (minutes < 1) {
+    return '不到 1 分钟';
+  }
+  if (minutes < 60) {
+    return minutes + ' 分钟';
+  }
+  const hours = Math.floor(minutes / 60);
+  const restMinutes = minutes % 60;
+  if (hours < 24) {
+    return restMinutes ? hours + ' 小时 ' + restMinutes + ' 分钟' : hours + ' 小时';
+  }
+  const days = Math.floor(hours / 24);
+  const restHours = hours % 24;
+  return restHours ? days + ' 天 ' + restHours + ' 小时' : days + ' 天';
+}
+
+module.exports = {
+  yuan,
+  parseList,
+  dayLabel,
+  dateStr,
+  addDays,
+  delta,
+  assetUrl,
+  parseTime,
+  relativeTime,
+  timeLabel,
+  durationText,
+};

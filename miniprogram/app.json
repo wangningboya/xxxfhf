@@ -12,6 +12,7 @@
     "pages/order/result",
     "pages/order/list",
     "pages/order/detail",
+    "pages/message/index",
     "pages/address/list",
     "pages/address/edit",
     "pages/mine/index",

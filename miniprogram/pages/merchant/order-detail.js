@@ -1,6 +1,6 @@
 const app = getApp();
 const { request } = require('../../utils/request');
-const { yuan, dateStr } = require('../../utils/format');
+const { yuan, dateStr, timeLabel, durationText } = require('../../utils/format');
 const dict = require('../../utils/dict');
 const payMethod = require('../../utils/pay-method');
 
@@ -15,6 +15,8 @@ Page({
     /** 可推进到的下一个状态 */
     nextStatus: '',
     nextLabel: '',
+    /** 全部流转记录（含推送投递成败），节点耗时只算订单线 */
+    timeline: [],
   },
 
   onLoad(options) {
@@ -53,8 +55,48 @@ Page({
             order.deliveryType === 'delivery' ? '配送' : '自取'
           ),
         });
+        this.loadTimeline();
       })
       .catch((err) => app.toastError(err));
+  },
+
+  /**
+   * 状态流转时间轴（商家工作台入口）。
+   *
+   * 与用户端不同，这里要**全部记录**，含 `event.notify` / `event.notify_fail` ——
+   * 商家需要判断「系统到底发没发出去」，用户说没收到时这是唯一的依据。
+   * 直接复用网页后台在用的 `/admin/order/status-log`，不新增后端接口。
+   *
+   * 耗时只在订单线节点之间算：中间夹着的「通知已发送」与状态变化只差一两秒，
+   * 若按相邻两条记录相减，「下单 → 接单」会被算成 2 秒，完全失真。
+   */
+  loadTimeline() {
+    request({ url: '/admin/order/status-log?orderId=' + this.data.orderId })
+      .then((rows) => {
+        let lastOrderAt = null;
+        const timeline = (rows || []).map((row) => {
+          const isOrderLine = row.logType === 'order';
+          let gapText = '';
+          if (isOrderLine) {
+            if (lastOrderAt) {
+              gapText = durationText(lastOrderAt, row.createdAt);
+            }
+            lastOrderAt = row.createdAt;
+          }
+          return {
+            id: row.id,
+            // 有前状态就取「变成了什么」，没有前状态（下单、事件）用动作名：
+            // 下单直接显示 toStatusLabel 会变成「待接单」，看着像还没下单
+            label: row.fromStatusLabel ? row.toStatusLabel : row.actionLabel,
+            timeText: timeLabel(row.createdAt),
+            remark: row.remark || '',
+            gapText,
+            tone: row.logType,
+          };
+        });
+        this.setData({ timeline });
+      })
+      .catch(() => {});
   },
 
   /**

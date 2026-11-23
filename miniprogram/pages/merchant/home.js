@@ -59,6 +59,10 @@ Page({
     cutoffText: '',
     loading: true,
     can: {},
+    /** 消息：只统计「发给商家」的那一侧，与用户首页各算各的 */
+    unreadCount: 0,
+    unreadBadge: '',
+    noticeItems: [],
   },
 
   onShow() {
@@ -74,6 +78,7 @@ Page({
     this.setData(buildStatLabels());
     dict.load().then(() => this.setData(buildStatLabels()));
     this.load();
+    this.loadMessages();
     this.startTimer();
   },
 
@@ -126,6 +131,29 @@ Page({
         }
         app.toastError(err);
       });
+  },
+
+  /**
+   * 未读消息（商家侧）。
+   *
+   * 单独发请求、不进下面的 Promise.all：消息接口失败不该让整个工作台报错或跳登录页。
+   * 新订单、取消申请这两类推送商家基本收不到（订阅消息要授权），这里才是主要提醒途径。
+   */
+  loadMessages() {
+    request({ url: '/message/summary?side=merchant' })
+      .then((data) => {
+        const count = (data && data.unreadCount) || 0;
+        this.setData({
+          unreadCount: count,
+          unreadBadge: count > 99 ? '99+' : String(count),
+          noticeItems: (data && data.items) || [],
+        });
+      })
+      .catch(() => {});
+  },
+
+  onOpenMessages() {
+    wx.navigateTo({ url: '/pages/message/index?role=merchant' });
   },
 
   startTimer() {

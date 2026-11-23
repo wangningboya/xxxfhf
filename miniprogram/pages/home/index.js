@@ -13,6 +13,10 @@ Page({
     serveDate: '',
     statusText: '',
     statusWarn: false,
+    /** 消息：首页只显示「发给我本人」的那一侧，与商家工作台各算各的 */
+    unreadCount: 0,
+    unreadBadge: '',
+    noticeItems: [],
   },
 
   onLoad(options) {
@@ -65,6 +69,32 @@ Page({
         this.setData({ loading: false });
         this.loadingNow = false;
       });
+
+    // 消息与菜单并行：它慢或失败都不该拖住「开始点餐」按钮
+    this.loadMessages();
+  },
+
+  /**
+   * 未读数与最近 3 条未读。
+   *
+   * 失败静默，不弹错误：首页的第一件事是点餐，消息接口挂了不该顶一个红色提示出来。
+   * 未登录时这里必然 401，同样什么都不做 —— 引导用户登录是 bootstrap 的职责。
+   */
+  loadMessages() {
+    request({ url: '/message/summary?side=user' })
+      .then((data) => {
+        const count = (data && data.unreadCount) || 0;
+        this.setData({
+          unreadCount: count,
+          unreadBadge: count > 99 ? '99+' : String(count),
+          noticeItems: (data && data.items) || [],
+        });
+      })
+      .catch(() => {});
+  },
+
+  onOpenMessages() {
+    wx.navigateTo({ url: '/pages/message/index' });
   },
 
   /** 营业状态口径与点餐页完全同源，不另算一套 */

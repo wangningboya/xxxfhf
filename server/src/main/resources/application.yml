@@ -72,6 +72,8 @@ app:
     prepay-release-cron: "${APP_PREPAY_RELEASE_CRON:0 */5 * * * *}"
     # 取消申请超时自动同意扫描，默认每 10 分钟
     cancel-request-cron: "${APP_CANCEL_REQUEST_CRON:0 */10 * * * *}"
+    # 站内消息清理（删除 90 天前的消息），默认每天 03:30
+    message-cleanup-cron: "${APP_MESSAGE_CLEANUP_CRON:0 30 3 * * *}"
     enabled: ${APP_SCHEDULE_ENABLED:true}
   admin:
     # 商家初始账号：库里没有该 username 时创建一次，已存在则不覆盖

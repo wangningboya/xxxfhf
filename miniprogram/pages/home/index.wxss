@@ -8,6 +8,92 @@ page {
   box-sizing: border-box;
 }
 
+/* ---------- 通知横栏 ---------- */
+
+.notice-bar {
+  display: flex;
+  align-items: center;
+  height: 76rpx;
+  padding: 0 20rpx 0 24rpx;
+  margin-bottom: 20rpx;
+  background: #ffffff;
+  border-radius: 16rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+}
+
+.notice-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.notice-swiper {
+  width: 100%;
+  height: 76rpx;
+}
+
+.notice-line {
+  display: flex;
+  align-items: center;
+  height: 76rpx;
+  overflow: hidden;
+}
+
+.notice-title {
+  flex: none;
+  max-width: 220rpx;
+  margin-right: 12rpx;
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #ff9f1c;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.notice-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 26rpx;
+  color: #666666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.notice-empty {
+  color: #b0b0b0;
+}
+
+.notice-bell {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  height: 76rpx;
+  padding-left: 20rpx;
+}
+
+.bell-icon {
+  font-size: 34rpx;
+  line-height: 1;
+}
+
+.bell-badge {
+  position: absolute;
+  top: 10rpx;
+  right: -4rpx;
+  min-width: 32rpx;
+  height: 32rpx;
+  padding: 0 8rpx;
+  box-sizing: border-box;
+  border-radius: 16rpx;
+  background: #ff4d4f;
+  color: #ffffff;
+  font-size: 20rpx;
+  line-height: 32rpx;
+  text-align: center;
+}
+
 /* ---------- 店招 ---------- */
 
 .hero {

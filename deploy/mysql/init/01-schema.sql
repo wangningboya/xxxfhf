@@ -361,4 +361,47 @@ CREATE TABLE IF NOT EXISTS `order_status_log` (
     KEY `idx_osl_order` (`order_id`, `created_at`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT ='订单状态流转记录';
 
+-- -----------------------------------------------------------------------------
+-- 18. 站内消息 user_message（见 站内通知需求.md）
+--
+-- 存在的理由：order_status_log 是「订单维度」，回答不了一个人「有没有被通知到、读没读」。
+-- 订阅消息有三重失败（未授权 / 额度用完 / 总是保持后拒绝），且失败后界面不留任何痕迹，
+-- 用户事后说「你没通知我」时没有凭证。所以推送照发，站内消息照写，两条线互不依赖。
+--
+-- 触发点：NotifyService.doFire() 进入时先写本表，再去调微信。推送成不成功都不影响这里。
+--
+-- user_type 存的是**这条消息属于哪一侧**（customer 用户侧 / merchant 商家侧），
+-- 不是接收人账号的类型 —— 商家自己下单时，他收到的那条「已接单」属于用户侧。
+--
+-- 收件范围分两种：
+--   customer 侧按 user_id 逐人，一人一份、各自算未读；
+--   merchant 侧是全店共享的一个收件箱，user_id 恒为 NULL，任何商家账号都能看、都能标已读，
+--   标已读时把「谁点的」记进 read_by_id / read_by_name。
+-- 共享而不是逐账号复制：商家要的是「这件事店里已经有人处理过了」，
+-- 逐账号存会让 A 读过之后 B 的红点还亮着，等于同一件事被反复提醒。
+--
+-- 保留 90 天，由 MessageCleanupTask 删除（含未读）。所以 idx_msg_cleanup 是必要的：
+-- 按 created_at 全表扫的删除在消息量大时会锁住整表。
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `user_message` (
+    `id`         BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `user_id`    BIGINT                DEFAULT NULL COMMENT '接收人；商家侧为全店共享收件箱，固定 NULL',
+    `user_type`  VARCHAR(16)  NOT NULL COMMENT 'customer 用户侧 / merchant 商家侧',
+    `order_id`   BIGINT                DEFAULT NULL COMMENT '关联订单；为将来非订单类消息留空',
+    `msg_type`   VARCHAR(32)  NOT NULL COMMENT '与 NotifyType.code 一致，如 accepted / newOrder',
+    `title`      VARCHAR(64)  NOT NULL COMMENT '标题，如「商家已接单」',
+    `content`    VARCHAR(255) NOT NULL COMMENT '一行摘要',
+    `read_at`    DATETIME              DEFAULT NULL COMMENT '已读时间；NULL 即未读',
+    `read_by_id` BIGINT                DEFAULT NULL COMMENT '点已读的人 user_id；NULL 即未读',
+    `read_by_name` VARCHAR(64)         DEFAULT NULL COMMENT '点已读的人显示名（快照，改昵称不回溯）',
+    `created_at` DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '生成时间（毫秒仅用于排序）',
+    PRIMARY KEY (`id`),
+    -- 用户侧查询形态：某人的消息，按未读与时间筛
+    KEY `idx_msg_user` (`user_id`, `user_type`, `read_at`, `created_at`),
+    -- 商家侧查询形态：全店一份，不带 user_id，所以索引首列换成 user_type
+    KEY `idx_msg_shared` (`user_type`, `read_at`, `created_at`),
+    KEY `idx_msg_order` (`order_id`),
+    KEY `idx_msg_cleanup` (`created_at`)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT ='站内消息';
+
 SET FOREIGN_KEY_CHECKS = 1;

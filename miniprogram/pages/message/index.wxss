@@ -1,0 +1,184 @@
+page {
+  background: #f5f6f8;
+}
+
+.page {
+  min-height: 100vh;
+  padding: 20rpx 24rpx 40rpx;
+  box-sizing: border-box;
+}
+
+/* ---------- 工具栏 ---------- */
+
+.toolbar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 4rpx 0 16rpx;
+}
+
+.broom {
+  display: flex;
+  align-items: center;
+  padding: 10rpx 20rpx;
+  border-radius: 24rpx;
+  background: #ffffff;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+}
+
+.broom-icon {
+  margin-right: 8rpx;
+  font-size: 26rpx;
+}
+
+.broom-text {
+  font-size: 24rpx;
+  color: #666666;
+}
+
+/* ---------- 列表 ---------- */
+
+.list {
+  overflow: hidden;
+  border-radius: 20rpx;
+  background: #ffffff;
+}
+
+.msg {
+  display: flex;
+  padding: 26rpx 24rpx;
+  border-bottom: 1rpx solid #f2f2f2;
+}
+
+.msg:last-child {
+  border-bottom: none;
+}
+
+/* 未读不加背景色差，只用圆点与字重区分 —— 整块变色会让列表看起来像被选中 */
+.msg-icon {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72rpx;
+  height: 72rpx;
+  margin-right: 20rpx;
+  border-radius: 20rpx;
+}
+
+.tone-ok {
+  background: #e8f7ee;
+}
+
+.tone-danger {
+  background: #fdecec;
+}
+
+.tone-warn {
+  background: #fff5e6;
+}
+
+.tone-muted {
+  background: #f0f1f3;
+}
+
+.msg-emoji {
+  font-size: 34rpx;
+  line-height: 1;
+}
+
+.msg-dot {
+  position: absolute;
+  top: -6rpx;
+  right: -6rpx;
+  width: 16rpx;
+  height: 16rpx;
+  border-radius: 50%;
+  background: #ff4d4f;
+  border: 3rpx solid #ffffff;
+  box-sizing: content-box;
+}
+
+.msg-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.msg-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.msg-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 30rpx;
+  font-weight: 400;
+  color: #333333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.msg-unread .msg-title {
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.msg-time {
+  flex: none;
+  margin-left: 16rpx;
+  font-size: 22rpx;
+  color: #b0b0b0;
+}
+
+.msg-content {
+  margin-top: 8rpx;
+  font-size: 26rpx;
+  line-height: 1.5;
+  color: #888888;
+  /* 最多两行：内容里可能带长商品名，全文展开会把列表拉得很高 */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.msg-unread .msg-content {
+  color: #666666;
+}
+
+/* 已读人：比正文再轻一档，只用来回答「这单谁看过了」，不抢正文注意力 */
+.msg-reader {
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  color: #b0b0b0;
+}
+
+/* ---------- 空态与底部 ---------- */
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 200rpx;
+}
+
+.empty-icon {
+  font-size: 88rpx;
+  line-height: 1;
+}
+
+.empty-text {
+  margin-top: 24rpx;
+  font-size: 26rpx;
+  color: #b0b0b0;
+}
+
+.more {
+  padding: 28rpx 0;
+  text-align: center;
+  font-size: 24rpx;
+  color: #b0b0b0;
+}

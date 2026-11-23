@@ -5,6 +5,7 @@ import com.xxxfhf.meal.audit.AuditHelper;
 import com.xxxfhf.meal.auth.WxApiClient;
 import com.xxxfhf.meal.config.ConfigKey;
 import com.xxxfhf.meal.config.ConfigService;
+import com.xxxfhf.meal.message.MessageService;
 import com.xxxfhf.meal.order.Order;
 import com.xxxfhf.meal.order.OrderItem;
 import com.xxxfhf.meal.order.OrderLogActions;
@@ -56,15 +57,17 @@ public class NotifyService {
     private final UserMapper userMapper;
     private final ObjectMapper objectMapper;
     private final OrderStatusLogService statusLogService;
+    private final MessageService messageService;
 
     public NotifyService(WxApiClient wxApiClient, ConfigService configService,
                          UserMapper userMapper, ObjectMapper objectMapper,
-                         OrderStatusLogService statusLogService) {
+                         OrderStatusLogService statusLogService, MessageService messageService) {
         this.wxApiClient = wxApiClient;
         this.configService = configService;
         this.userMapper = userMapper;
         this.objectMapper = objectMapper;
         this.statusLogService = statusLogService;
+        this.messageService = messageService;
     }
 
     /* ==================== 对外：五类通知 ==================== */
@@ -147,6 +150,11 @@ public class NotifyService {
     }
 
     private void doFire(NotifyType type, Order order, Long operatorId, String source) {
+        // 站内消息先写，且与下面每个分支都无关：模板没配、商家没绑 openid、用户拒绝授权，
+        // 这三种情况下推送全部发不出去，但用户打开小程序必须还能看到「单子被接了」。
+        // 顺序也重要 —— 放在最前面，后面任何一步抛异常都不影响它已经落库。
+        recordMessage(type, order);
+
         Template template = templates().get(type.code());
         if (template == null || template.templateId() == null || template.templateId().isBlank()) {
             // 模板还没申请下来，静默跳过（F-I01 未完成时系统也要能跑），但要留下痕迹：
@@ -196,6 +204,82 @@ public class NotifyService {
                             + (firstFail == null ? "未知原因" : firstFail),
                     operatorId, source);
         }
+    }
+
+    /**
+     * 写站内消息（用户打开小程序就能看到的那一条）。
+     *
+     * <p>文案不复用 {@code buildVars}：那是给微信模板用的，字段粒度与截断规则都为微信服务。
+     * 这里要的是一句人话，而且**必须在 {@code templates()} 之前就能算出来** ——
+     * 否则「模板没配」的分支一 return，站内消息也跟着没了。
+     */
+    private void recordMessage(NotifyType type, Order order) {
+        try {
+            messageService.record(order, type, messageTitle(type), messageContent(type, order));
+        } catch (RuntimeException e) {
+            // MessageService 内部已兜过一次；这里再兜一层，保证不会反过来影响推送
+            log.error("写站内消息失败 orderNo={} type={}", order.getOrderNo(), type.code(), e);
+        }
+    }
+
+    private static String messageTitle(NotifyType type) {
+        return switch (type) {
+            case NEW_ORDER -> "新订单";
+            case ACCEPTED -> "商家已接单";
+            case REJECTED -> "商家已拒单";
+            case READY -> "可以取餐了";
+            case DELIVERED -> "已出餐配送";
+            case CANCEL_REQUEST -> "用户申请取消";
+            case CANCELLED -> "订单已取消";
+        };
+    }
+
+    private String messageContent(NotifyType type, Order order) {
+        String summary = summaryOf(order);
+        return switch (type) {
+            case NEW_ORDER -> yuan(order.getTotalAmount()) + " 元 " + summary + "，" + nicknameOf(order);
+            case ACCEPTED -> summary + "，" + serveTipOf(order);
+            case REJECTED -> "原因：" + textOr(order.getRejectReason(), "商家未填写");
+            case READY -> {
+                String slot = nvl(order.getPickupSlot());
+                yield "取餐码 " + textOr(order.getPickupCode(), "-") + (slot.isEmpty() ? "" : "，" + slot);
+            }
+            case DELIVERED -> {
+                String day = order.getServeDate() == null
+                        ? "" : order.getServeDate().format(DAY_FMT) + " ";
+                yield summary + "，" + day + "已出餐配送";
+            }
+            case CANCEL_REQUEST -> {
+                String reason = order.getCancelRequest() == null
+                        ? "" : nvl(order.getCancelRequest().reason());
+                yield "订单 " + nvl(order.getOrderNo()) + (reason.isEmpty() ? "" : "，理由：" + reason);
+            }
+            case CANCELLED -> {
+                if (type.recipient() == NotifyType.Recipient.MERCHANT) {
+                    yield "订单 " + nvl(order.getOrderNo());
+                }
+                String reason = nvl(order.getRejectReason());
+                yield "订单 " + nvl(order.getOrderNo()) + (reason.isEmpty() ? "已取消" : "，原因：" + reason);
+            }
+        };
+    }
+
+    private String nicknameOf(Order order) {
+        User user = order.getUserId() == null ? null : userMapper.selectById(order.getUserId());
+        return user == null || user.getNickName() == null || user.getNickName().isBlank()
+                ? "群成员" : user.getNickName();
+    }
+
+    /** 接单通知的温馨提示，也是站内消息里那句「什么时候来拿」。两处必须同一口径。 */
+    private static String serveTipOf(Order order) {
+        boolean delivery = "delivery".equals(order.getDeliveryType());
+        String day = order.getServeDate() == null ? "" : order.getServeDate().format(DAY_FMT);
+        String tip = delivery ? "商家将按时配送" : "请按时到店取餐";
+        return day.isEmpty() ? tip : day + " " + tip;
+    }
+
+    private static String textOr(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value.trim();
     }
 
     /**
@@ -276,17 +360,13 @@ public class NotifyService {
         // 接单通知的「温馨提示 / 订单信息」专用：配送单没有取餐时段，直接填 pickupSlot 会出现「-」，
         // 所以按取送方式给不同文案，两个字段都保持在 20 字以内。
         boolean delivery = "delivery".equals(order.getDeliveryType());
-        String day = order.getServeDate() == null ? "" : order.getServeDate().format(DAY_FMT);
-        String tip = delivery ? "商家将按时配送" : "请按时到店取餐";
-        vars.put("serveTip", day.isEmpty() ? tip : day + " " + tip);
+        vars.put("serveTip", serveTipOf(order));
         String slot = nvl(order.getPickupSlot());
         vars.put("serveInfo", delivery
                 ? "配送 " + totalQty(order) + "份"
                 : (slot.isEmpty() ? "自取" : "自取 " + slot));
 
-        User user = order.getUserId() == null ? null : userMapper.selectById(order.getUserId());
-        vars.put("nickname", user == null || user.getNickName() == null || user.getNickName().isBlank()
-                ? "群成员" : user.getNickName());
+        vars.put("nickname", nicknameOf(order));
         return vars;
     }
 

@@ -1,0 +1,42 @@
+<view class="page">
+  <view class="toolbar">
+    <view class="broom" bindtap="onReadAll">
+      <text class="broom-icon">🧹</text>
+      <text class="broom-text">全部已读</text>
+    </view>
+  </view>
+
+  <view class="list" wx:if="{{items.length}}">
+    <view
+      class="msg {{item.unread ? 'msg-unread' : ''}}"
+      wx:for="{{items}}"
+      wx:key="id"
+      data-index="{{index}}"
+      bindtap="onTapItem"
+    >
+      <view class="msg-icon tone-{{item.tone}}">
+        <text class="msg-emoji">{{item.icon}}</text>
+        <text class="msg-dot" wx:if="{{item.unread}}"></text>
+      </view>
+      <view class="msg-main">
+        <view class="msg-head">
+          <text class="msg-title">{{item.title}}</text>
+          <text class="msg-time">{{item.timeText}}</text>
+        </view>
+        <view class="msg-content">{{item.content}}</view>
+        <!-- 商家侧是全店共用一份收件箱，谁点过已读要能看出来；用户侧后端不记，永远为空 -->
+        <view class="msg-reader" wx:if="{{!item.unread}}">
+          {{item.readByName ? item.readByName + ' 已读' : '已读'}}
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view class="empty" wx:elif="{{!loading}}">
+    <text class="empty-icon">📭</text>
+    <text class="empty-text">暂无消息</text>
+  </view>
+
+  <view class="more" wx:if="{{loadingMore}}">加载中…</view>
+  <view class="more" wx:elif="{{!hasMore && items.length}}">没有更多了</view>
+</view>

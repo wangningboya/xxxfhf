@@ -1,6 +1,6 @@
 const app = getApp();
 const { request } = require('../../utils/request');
-const { yuan } = require('../../utils/format');
+const { yuan, timeLabel } = require('../../utils/format');
 const dict = require('../../utils/dict');
 const payMethod = require('../../utils/pay-method');
 
@@ -14,6 +14,8 @@ Page({
     specText: '0.00',
     feeText: '0.00',
     busy: false,
+    /** 订单流转节点：只含订单本身的状态变化，不含推送投递记录 */
+    timeline: [],
   },
 
   onLoad(options) {
@@ -51,10 +53,36 @@ Page({
             order.deliveryType === 'delivery' ? '配送' : '自取'
           ),
         });
+        this.loadTimeline();
       })
       .catch((err) => {
         app.toastError(err);
       });
+  },
+
+  /**
+   * 订单进度时间轴。
+   *
+   * 接口只返回 log_type='order' 的节点，推送投递记录（event.notify / notify_fail）
+   * 在服务端就滤掉了 —— 把「通知未送达」摆给用户看，等于系统自认没做到。
+   *
+   * 失败静默：时间轴是补充信息，订单状态本身已经显示在顶部状态卡片里，
+   * 不该因为它拉不到就弹一个错误。
+   */
+  loadTimeline() {
+    request({ url: '/order/' + this.data.orderId + '/timeline' })
+      .then((rows) => {
+        const timeline = (rows || []).map((row) => ({
+          id: row.id,
+          // 有前状态就取「变成了什么」（已接单 / 待取餐）；下单这类没有前状态，
+          // 用动作名「下单」—— 直接显示 toStatusLabel 会变成「待接单」，看着像还没下单
+          label: row.fromStatusLabel ? row.toStatusLabel : row.actionLabel,
+          timeText: timeLabel(row.createdAt),
+          remark: row.remark || '',
+        }));
+        this.setData({ timeline });
+      })
+      .catch(() => {});
   },
 
   /**

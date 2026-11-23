@@ -1,4 +1,34 @@
 <view class="page">
+  <!-- 通知横栏：左侧轮播未读（最多 3 条），右侧铃铛进消息中心。
+       商家侧没有店铺公告，没有未读时留一句空态文案，铃铛仍然是进消息中心的入口 -->
+  <view class="notice-bar">
+    <view class="notice-main" bindtap="onOpenMessages">
+      <swiper
+        class="notice-swiper"
+        wx:if="{{noticeItems.length}}"
+        vertical
+        circular="{{noticeItems.length > 1}}"
+        autoplay="{{noticeItems.length > 1}}"
+        interval="3000"
+        duration="400"
+      >
+        <swiper-item wx:for="{{noticeItems}}" wx:key="id">
+          <view class="notice-line">
+            <text class="notice-title">{{item.title}}</text>
+            <text class="notice-text">{{item.content}}</text>
+          </view>
+        </swiper-item>
+      </swiper>
+      <view class="notice-line" wx:else>
+        <text class="notice-text notice-empty">暂无新消息</text>
+      </view>
+    </view>
+    <view class="notice-bell" bindtap="onOpenMessages">
+      <text class="bell-icon">🔔</text>
+      <text class="bell-badge" wx:if="{{unreadCount > 0}}">{{unreadBadge}}</text>
+    </view>
+  </view>
+
   <view class="head">
     <view class="head-name">{{displayName}}</view>
     <view class="head-sub">供餐日 {{serveDate}} · {{cutoffText}}</view>

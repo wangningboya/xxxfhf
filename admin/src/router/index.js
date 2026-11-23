@@ -21,6 +21,13 @@ const routes = [
         meta: { title: '工作台', perms: ['order.view', 'order.accept', 'user.audit'] },
       },
       {
+        // 消息不设权限门槛：内容全是他自己账号收到的订单类通知，
+        // 和小程序商家端的口径一致 —— 能进后台就能看自己的消息
+        path: 'message',
+        component: () => import('../views/message/MessageList.vue'),
+        meta: { title: '消息通知' },
+      },
+      {
         path: 'order',
         component: () => import('../views/order/OrderList.vue'),
         meta: { title: '订单管理', perms: ['order.view', 'order.accept'] },

@@ -462,8 +462,16 @@ function onSelectionChange(selection) {
   selected.value = selection;
 }
 
-function openDetail(row) {
-  const orderId = row.order.orderId;
+/**
+ * 按订单 ID 打开详情。
+ *
+ * 单独拆出来是为了消息页能直接带 orderId 跳进来定位 —— 那条消息对应的单
+ * 未必在当前筛选的供餐日里，所以不能靠「先查列表再找行」。
+ */
+function openDetailById(orderId) {
+  if (!orderId) {
+    return;
+  }
   http
     .get('/admin/order/detail', { params: { orderId } })
     .then((result) => {
@@ -472,6 +480,10 @@ function openDetail(row) {
       loadLogs(orderId);
     })
     .catch(() => {});
+}
+
+function openDetail(row) {
+  openDetailById(row.order.orderId);
 }
 
 /**
@@ -742,6 +754,10 @@ onMounted(() => {
     cancelOnly.value = true;
   }
   load();
+  // 从消息通知点进来：直接打开那一单，不要求它在当前筛选结果里
+  if (route.query.orderId) {
+    openDetailById(String(route.query.orderId));
+  }
 });
 </script>
 

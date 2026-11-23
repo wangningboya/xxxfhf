@@ -53,6 +53,26 @@
     <view class="row" wx:if="{{order.rejectReason}}"><text class="row-label">拒单原因</text><text class="row-value">{{order.rejectReason}}</text></view>
   </view>
 
+  <!-- 状态流转：含「通知已发送 / 未送达」，用于判断系统到底发没发；耗时只算订单线节点 -->
+  <view class="card" wx:if="{{timeline.length}}">
+    <view class="card-title">状态流转</view>
+    <view class="tl">
+      <view class="tl-item tl-{{item.tone}}" wx:for="{{timeline}}" wx:key="id">
+        <view class="tl-dot"></view>
+        <view class="tl-body">
+          <view class="tl-head">
+            <text class="tl-label">{{item.label}}</text>
+            <text class="tl-gap" wx:if="{{item.gapText}}">距上一步 {{item.gapText}}</text>
+          </view>
+          <view class="tl-meta">
+            <text class="tl-time">{{item.timeText}}</text>
+            <text class="tl-remark" wx:if="{{item.remark}}">{{item.remark}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+
   <view class="bottom-gap"></view>
 
   <view class="bottom-bar">
