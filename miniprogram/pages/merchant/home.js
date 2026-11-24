@@ -40,6 +40,8 @@ function buildCan(permissions) {
     menu: has('menu.manage'),
     finance: has('finance.view'),
     config: has('config.manage'),
+    // 打印不新增权限项：打印只是把屏幕上已有的信息落到纸上，权限口径与看单一致
+    printTag: has('order.view') || has('order.accept'),
   };
 }
 
@@ -64,6 +66,8 @@ Page({
     cutoffText: '',
     loading: true,
     can: {},
+    /** 本机记住的打印机名，空串表示没连过 */
+    printerName: '',
     /** 消息：只统计「发给商家」的那一侧，与用户首页各算各的 */
     unreadCount: 0,
     unreadBadge: '',
@@ -79,6 +83,9 @@ Page({
     this.setData({ displayName: saved.displayName || saved.username || '商家' });
     this.setData({ can: buildCan(saved.permissions) });
     this.setData({ serveDate: addDays(dateStr(), 1) });
+    // 只读本地记住的设备名，不 require 打印 SDK：这里显示的是「连过哪台」，
+    // 真实连接状态要问蓝牙，问一次就得把整套蓝牙栈加载起来，不值得
+    this.refreshPrinterName();
     // 先用当前字典（可能还没加载好，退回兜底文案）渲染，取回来再校正一次
     this.setData(buildStatLabels());
     dict.load().then(() => this.setData(buildStatLabels()));
@@ -89,6 +96,18 @@ Page({
 
   onHide() {
     this.stopTimer();
+  },
+
+  /**
+   * 读本机记住的打印机名。
+   *
+   * 直接用 storage 而不是 utils/print/printer.js：那个模块会连带 require 整套 JCAPI，
+   * 工作台首屏不该为一行卡片付这个代价。storage 键名与 printer.js 的 DEVICE_KEY 保持一致。
+   */
+  refreshPrinterName() {
+    const device = wx.getStorageSync('print_device');
+    const name = device && (device.name || device.localName || device.deviceId);
+    this.setData({ printerName: name || '' });
   },
 
   onUnload() {

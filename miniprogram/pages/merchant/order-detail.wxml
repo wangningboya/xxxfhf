@@ -80,6 +80,18 @@
     </view>
   </view>
 
+  <!-- 打印记录：多部手机共用一台打印机时，端上唯一能回答「谁打的、打了几张、成没成」的地方 -->
+  <view class="card" wx:if="{{printRecords.length}}">
+    <view class="card-title">打印记录</view>
+    <view class="pr-row" wx:for="{{printRecords}}" wx:key="batchNo">
+      <text class="pr-time">{{item.time}}</text>
+      <text class="pr-who">{{item.who}}</text>
+      <text class="pr-device" wx:if="{{item.device}}">{{item.device}}</text>
+      <text class="pr-copies">{{item.successCopies}}/{{item.copies}} 张</text>
+      <text class="pr-result {{item.ok ? 'pr-ok' : 'pr-fail'}}">{{item.resultText}}</text>
+    </view>
+  </view>
+
   <view class="bottom-gap"></view>
 
   <view class="bottom-bar">
@@ -116,5 +128,32 @@
     <view class="btn btn-danger" wx:if="{{order.payStatus === 'refunding'}}" bindtap="onRefund">
       标记已退款
     </view>
+    <!-- 打印：权限与看单一致，不新增 order.print（否则所有自定义角色都要重新勾选） -->
+    <view
+      class="btn btn-ghost"
+      wx:if="{{printable}}"
+      bindtap="onPrintLabel"
+    >
+      {{busy ? '准备中…' : (printRecords.length ? '重打标签' : '打印标签')}}
+    </view>
   </view>
+</view>
+
+<!-- 打印进度层 -->
+<view class="mask" wx:if="{{printing}}">
+  <view class="dialog">
+    <view class="dialog-title">{{paused ? '打印机暂停' : '正在打印'}}</view>
+    <view class="progress-text">{{printedCount}} / {{totalCount}} 张</view>
+    <view class="progress-bar"><view class="progress-inner" style="width:{{progressPercent}}%"></view></view>
+    <view class="dialog-msg" wx:if="{{printError}}">{{printError}}</view>
+    <view class="dialog-msg" wx:elif="{{paused}}">处理好后点「继续」，打印机会接着打。</view>
+    <view class="dialog-actions">
+      <view class="btn btn-ghost" wx:if="{{paused}}" bindtap="onResumePrint">继续</view>
+      <view class="btn btn-danger" bindtap="onCancelPrint">停止</view>
+    </view>
+  </view>
+</view>
+
+<view class="print-canvas">
+  <canvas canvas-id="test" style="width:560px;height:320px;"></canvas>
 </view>

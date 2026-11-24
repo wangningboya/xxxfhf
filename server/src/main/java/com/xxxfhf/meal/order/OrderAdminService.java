@@ -11,6 +11,7 @@ import com.xxxfhf.meal.dict.DictService;
 import com.xxxfhf.meal.menu.DateParam;
 import com.xxxfhf.meal.menu.ServeDateClock;
 import com.xxxfhf.meal.notify.NotifyService;
+import com.xxxfhf.meal.print.PrintService;
 import com.xxxfhf.meal.user.User;
 import com.xxxfhf.meal.user.UserMapper;
 import org.slf4j.Logger;
@@ -47,11 +48,13 @@ public class OrderAdminService {
     private final OrderStatusLogService statusLogService;
     private final OrderStatusLogMapper statusLogMapper;
     private final DictService dictService;
+    private final PrintService printService;
 
     public OrderAdminService(OrderMapper orderMapper, OrderService orderService,
                              UserMapper userMapper, ServeDateClock clock,
                              NotifyService notifyService, OrderStatusLogService statusLogService,
-                             OrderStatusLogMapper statusLogMapper, DictService dictService) {
+                             OrderStatusLogMapper statusLogMapper, DictService dictService,
+                             PrintService printService) {
         this.orderMapper = orderMapper;
         this.orderService = orderService;
         this.userMapper = userMapper;
@@ -60,6 +63,7 @@ public class OrderAdminService {
         this.statusLogService = statusLogService;
         this.statusLogMapper = statusLogMapper;
         this.dictService = dictService;
+        this.printService = printService;
     }
 
     /* ==================== 查询 ==================== */
@@ -117,9 +121,19 @@ public class OrderAdminService {
         return mapped;
     }
 
+    /**
+     * 按订单号取 ID。扫标签上的小程序码落地时用 —— 扫码进来手里只有订单号。
+     */
+    public Long idByOrderNo(String orderNo) {
+        return orderService.byOrderNo(orderNo).getId();
+    }
+
     public AdminOrderRow detail(Long orderId) {
         Order order = orderService.require(orderId);
-        return toRows(List.of(order)).get(0);
+        AdminOrderRow row = toRows(List.of(order)).get(0);
+        // 打印记录只给详情：列表一次 20 单，把日志表扫一遍不值当（需求 6.2）
+        return new AdminOrderRow(row.order(), row.userNickName(), row.userPhone(),
+                row.contactPhone(), row.print(), printService.recordsOf(orderId));
     }
 
     /**
@@ -859,16 +873,27 @@ public class OrderAdminService {
         for (User user : userMapper.selectBatchIds(userIds)) {
             users.put(user.getId(), user);
         }
+        // 打印进度同样批量取一次：逐单 count 就是 20 次查询
+        Map<Long, PrintService.PrintStat> printStats =
+                printService.statsOf(orders.stream().map(Order::getId).toList());
         List<AdminOrderRow> rows = new ArrayList<>(orders.size());
         for (Order order : orders) {
             User user = users.get(order.getUserId());
             AddressSnapshot snapshot = order.getAddressSnapshot();
+            PrintService.PrintStat stat = printStats.get(order.getId());
+            // 应打张数取订单明细的份数之和（页 = 张），不取「打过的行数」
+            int totalCopies = PrintService.totalCopies(order);
+            int printed = stat == null ? 0 : stat.printed();
             rows.add(new AdminOrderRow(orderService.toView(order),
                     user == null ? null : user.getNickName(),
                     // 账号手机号只是「这单是谁订的」的辅助信息，订单列表按对外口径给前 3 后 2
                     user == null ? null : MaskUtil.phoneShort(user.getPhone()),
                     // 本单联系电话：取原始快照再掩码，不能用 toView 里已掩过的 address（会二次打码）
-                    snapshot == null ? null : MaskUtil.phoneShort(snapshot.phone())));
+                    snapshot == null ? null : MaskUtil.phoneShort(snapshot.phone()),
+                    new PrintInfo(printed, totalCopies, PrintService.stateOf(printed, totalCopies),
+                            stat == null ? "" : stat.lastAt()),
+                    // 列表不带打印记录（体积与查询成本都不划算），详情才填
+                    List.of()));
         }
         return rows;
     }
@@ -885,16 +910,33 @@ public class OrderAdminService {
     }
 
     /**
-     * 商家端订单行：订单本体 + 下单人信息 + 本单联系电话。
+     * 商家端订单行：订单本体 + 下单人信息 + 本单联系电话 + 打印进度。
      *
      * 昵称在这张表里没有冗余，列表必须能看出「这是谁订的」，
      * 否则中午接单只能靠订单号猜人。
      *
      * <p>`contactPhone` 是这单下单时确认的收货电话（掩码），与「联系顾客」拨出的号码同源；
      * `userPhone` 是账号手机号，只用来认人，不用于拨号。
+     *
+     * <p>`print` 是标签打印进度，`printRecords` 只在详情接口里有值（列表为 `List.of()`）：
+     * 列表要回答「这单打没打」，详情才需要回答「谁在什么时候用哪台机器打的」。
      */
     public record AdminOrderRow(OrderService.OrderView order, String userNickName, String userPhone,
-                                String contactPhone) {
+                                String contactPhone, PrintInfo print,
+                                List<PrintService.PrintRecordRow> printRecords) {
+    }
+
+    /**
+     * 打印进度。
+     *
+     * <p>口径都是**张**（一张纸 = 一张标签），不是「次」也不是「页」：
+     * A×2 只出了一张时 `printedPages=1 / totalPages=2`，角标显示「部分 1/2」。
+     * 按页去重会把它错标成「已打」，商家以为齐了 —— 少一张就是少一份饭。
+     *
+     * @param printState none 未打 / partial 部分 / done 打完
+     * @param lastPrintedAt 最近一次成功打印时间，形如 `11-24 18:30`；没打过为空串
+     */
+    public record PrintInfo(int printedPages, int totalPages, String printState, String lastPrintedAt) {
     }
 
     /**

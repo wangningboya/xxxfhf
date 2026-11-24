@@ -119,6 +119,8 @@ public class AppProperties {
         private String subscribeSendUrl = "https://api.weixin.qq.com/cgi-bin/message/subscribe/send";
         /** 内容安全检测（msg_sec_check）的地址。 */
         private String msgSecCheckUrl = "https://api.weixin.qq.com/wxa/msg_sec_check";
+        /** 生成小程序码（getUnlimited，不限数量）的地址。标签上用。 */
+        private String qrCodeUrl = "https://api.weixin.qq.com/wxa/getwxacodeunlimit";
         private int timeoutSeconds = 5;
 
         public String getAppId() {
@@ -175,6 +177,14 @@ public class AppProperties {
 
         public void setMsgSecCheckUrl(String msgSecCheckUrl) {
             this.msgSecCheckUrl = msgSecCheckUrl;
+        }
+
+        public String getQrCodeUrl() {
+            return qrCodeUrl;
+        }
+
+        public void setQrCodeUrl(String qrCodeUrl) {
+            this.qrCodeUrl = qrCodeUrl;
         }
     }
 

@@ -1,0 +1,100 @@
+<view class="page">
+  <!-- 连接状态：页面第一屏只回答一个问题——现在能不能打 -->
+  <view class="card">
+    <view class="card-title">打印机</view>
+    <view class="conn">
+      <view class="conn-state {{connected ? 'conn-on' : 'conn-off'}}">
+        {{connected ? '已连接' : '未连接'}}
+      </view>
+      <view class="conn-name">{{deviceName || '还没有连接过打印机'}}</view>
+    </view>
+    <view class="note">
+      标签 70×40mm 间隙纸。同一台手机连过之后会记住，换手机需要重新连。
+    </view>
+    <view class="actions">
+      <view class="btn btn-ghost" bindtap="onScan">{{scanning ? '搜索中…' : '搜索打印机'}}</view>
+      <view class="btn btn-ghost" wx:if="{{connected}}" bindtap="onDisconnect">断开</view>
+    </view>
+  </view>
+
+  <!-- 附近设备 -->
+  <view class="card" wx:if="{{devices.length || scanTip}}">
+    <view class="card-title">附近设备</view>
+    <view class="scan-tip" wx:if="{{scanTip}}">{{scanTip}}</view>
+    <view
+      class="device"
+      wx:for="{{devices}}"
+      wx:key="deviceId"
+      data-index="{{index}}"
+      bindtap="onConnect"
+    >
+      <view class="device-main">
+        <view class="device-name">{{item.name || item.deviceId}}</view>
+        <view class="device-id">{{item.deviceId}}</view>
+      </view>
+      <view class="device-btn">连接</view>
+    </view>
+  </view>
+
+  <!-- 打印设置 -->
+  <view class="card">
+    <view class="card-title">打印设置</view>
+    <view class="row">
+      <text class="row-label">纸张类型</text>
+      <text class="row-value">间隙纸（70×40mm）</text>
+    </view>
+    <view class="sub-title">浓度</view>
+    <view class="chips">
+      <view
+        class="chip {{settings.darkness === item ? 'chip-active' : ''}}"
+        wx:for="{{densityOptions}}"
+        wx:key="*this"
+        data-value="{{item}}"
+        bindtap="onDensity"
+      >
+        {{item}}
+      </view>
+    </view>
+    <view class="note">默认 3。字太淡往上调，边缘发虚往下调；只在测试样张看不清时才需要改。</view>
+  </view>
+
+  <!-- 样张 -->
+  <view class="card">
+    <view class="card-title">测试</view>
+    <view class="cell" bindtap="onTestPrint">
+      <view class="cell-main">
+        <view class="cell-title">测试样张</view>
+        <view class="cell-desc">中英文、线条、二维码位各一处，看清晰度与四边是否被裁</view>
+      </view>
+      <view class="cell-arrow">›</view>
+    </view>
+    <view class="cell" bindtap="onRulerPrint" bindlongpress="onRulerLongPress">
+      <view class="cell-main">
+        <view class="cell-title">标尺样张</view>
+        <view class="cell-desc">每 10mm 一道刻度，量上下留白是否一致。<text class="cell-hint">长按连打 20 张</text></view>
+      </view>
+      <view class="cell-arrow">›</view>
+    </view>
+  </view>
+
+  <view class="tip" wx:if="{{!connected}}">先在手机上打开蓝牙，再点「搜索打印机」。</view>
+</view>
+
+<!-- 打印进度层：批量与样张共用，打印中不可返回 -->
+<view class="mask" wx:if="{{printing}}">
+  <view class="dialog">
+    <view class="dialog-title">{{paused ? '打印机暂停' : '正在打印'}}</view>
+    <view class="progress-text">{{printedCount}} / {{totalCount}} 张</view>
+    <view class="progress-bar"><view class="progress-inner" style="width:{{progressPercent}}%"></view></view>
+    <view class="dialog-msg" wx:if="{{errorText}}">{{errorText}}</view>
+    <view class="dialog-msg" wx:elif="{{paused}}">处理好后点「继续」，打印机会接着打。</view>
+    <view class="dialog-actions">
+      <view class="btn btn-ghost" wx:if="{{paused}}" bindtap="onResume">继续</view>
+      <view class="btn btn-danger" bindtap="onCancelPrint">停止</view>
+    </view>
+  </view>
+</view>
+
+<view class="print-canvas">
+  <canvas canvas-id="test" style="width:560px;height:320px;"></canvas>
+</view>

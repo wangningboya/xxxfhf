@@ -23,6 +23,7 @@ import com.xxxfhf.meal.menu.DateParam;
 import com.xxxfhf.meal.menu.MenuStatus;
 import com.xxxfhf.meal.menu.ServeDateClock;
 import com.xxxfhf.meal.notify.NotifyService;
+import com.xxxfhf.meal.print.QrCodeService;
 import com.xxxfhf.meal.user.User;
 import com.xxxfhf.meal.user.UserMapper;
 import org.slf4j.Logger;
@@ -73,13 +74,15 @@ public class OrderService {
     private final DictService dictService;
     private final OrderStatusLogService statusLogService;
     private final ContentSecurityService contentSecurity;
+    /** 标签上的小程序码，建单后台生成（见 QrCodeService） */
+    private final QrCodeService qrCodeService;
 
     public OrderService(OrderMapper orderMapper, DailyMenuMapper menuMapper,
                         AddressService addressService, UserMapper userMapper, ServeDateClock clock,
                         ConfigService configService, OrderNumberService numberService,
                         AccessGuard accessGuard, NotifyService notifyService,
                         DictService dictService, OrderStatusLogService statusLogService,
-                        ContentSecurityService contentSecurity) {
+                        ContentSecurityService contentSecurity, QrCodeService qrCodeService) {
         this.orderMapper = orderMapper;
         this.menuMapper = menuMapper;
         this.addressService = addressService;
@@ -92,6 +95,7 @@ public class OrderService {
         this.dictService = dictService;
         this.statusLogService = statusLogService;
         this.contentSecurity = contentSecurity;
+        this.qrCodeService = qrCodeService;
     }
 
     /* ==================== 下单 ==================== */
@@ -252,6 +256,9 @@ public class OrderService {
                 order.getOrderNo(), userId, serveDate, order.getTotalAmount());
         // 通知商家有新单。事务提交后才真正发出，发不出去也不影响这单已经建成
         notifyService.newOrder(order);
+        // 标签上的小程序码在这里预生成：打印时再去调微信接口要等 3~5 秒，
+        // 而这单根本还没到要打的时候，挪到现在没人等
+        qrCodeService.generateAsync(order.getOrderNo());
         return toView(order);
     }
 
@@ -718,6 +725,36 @@ public class OrderService {
     }
 
     /* ==================== 内部 ==================== */
+
+    /**
+     * 按订单号取详情并校验归属。给小程序码落地页用。
+     *
+     * <p>扫码进来的人只有 orderNo（`scene` 里塞的就是它），没有 orderId。
+     * 非本人订单返回 403 而不是 404：订单号是顺序流水，能被猜到，
+     * 回 404 会让人以为「这个号不存在」，回 403 才说得清是「不归你」。
+     */
+    public OrderView viewByOrderNo(Long userId, String orderNo) {
+        Order order = byOrderNo(orderNo);
+        if (!order.getUserId().equals(userId)) {
+            throw BizException.forbidden("只能查看自己的订单");
+        }
+        return toView(order);
+    }
+
+    /** 按订单号取订单，不存在直接 404。 */
+    public Order byOrderNo(String orderNo) {
+        String value = orderNo == null ? "" : orderNo.trim();
+        if (value.isEmpty()) {
+            throw BizException.param("缺少订单号");
+        }
+        Order order = orderMapper.selectOne(Wrappers.<Order>lambdaQuery()
+                .eq(Order::getOrderNo, value)
+                .last("LIMIT 1"));
+        if (order == null) {
+            throw BizException.notFound("订单不存在");
+        }
+        return order;
+    }
 
     Order require(Long orderId) {
         Order order = orderId == null ? null : orderMapper.selectById(orderId);

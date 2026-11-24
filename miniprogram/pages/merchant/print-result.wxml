@@ -1,0 +1,82 @@
+<view class="page">
+  <view class="summary">
+    <view class="summary-total">{{summary.total}} 张</view>
+    <view class="summary-row">
+      <view class="summary-item">
+        <text class="num ok">{{summary.successCount}}</text>
+        <text class="lbl">成功</text>
+      </view>
+      <view class="summary-item">
+        <text class="num fail">{{summary.failCount}}</text>
+        <text class="lbl">失败</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="card" wx:if="{{doneRows.length}}">
+    <view class="card-title">已打</view>
+    <view class="rrow" wx:for="{{doneRows}}" wx:key="key">
+      <text class="tick">✓</text>
+      <text class="rrow-name">{{item.label}}</text>
+      <text class="rrow-count">{{item.success}}/{{item.total}}</text>
+    </view>
+  </view>
+
+  <view class="card" wx:if="{{failRows.length}}">
+    <view class="card-title">未打</view>
+    <view class="rrow" wx:for="{{failRows}}" wx:key="key">
+      <text class="cross">✗</text>
+      <view class="rrow-main">
+        <view class="rrow-line">
+          <text class="rrow-name">{{item.label}}</text>
+          <text class="rrow-count">{{item.success}}/{{item.total}}</text>
+          <text class="rrow-reason">{{item.reason}}</text>
+        </view>
+        <text class="rrow-who">{{item.who}}</text>
+      </view>
+    </view>
+    <view class="note">补打只补没出纸的那些张，已经打过的不会再出。</view>
+  </view>
+
+  <!-- 被 30 张上限截下的那批：与「未打」分开列，这是没轮到，不是打坏了 -->
+  <view class="card" wx:if="{{restCount}}">
+    <view class="card-title">还剩 {{restCount}} 张</view>
+    <view class="note">单批上限 30 张，剩下的按套餐边界截断了（同一套餐的几份不会被拆到两批）。</view>
+    <view class="btn btn-block" bindtap="onContinue">继续打印剩余 {{restCount}} 张</view>
+  </view>
+
+  <view class="empty" wx:if="{{!doneRows.length && !failRows.length}}">
+    <view class="empty-title">没有打印记录</view>
+    <view class="empty-desc">回到订单列表重新选择要打印的订单</view>
+  </view>
+
+  <view class="bottom-gap"></view>
+  <view class="bottom-bar">
+    <view class="btn btn-ghost" bindtap="onClose">关闭</view>
+    <view
+      class="btn {{summary.failCount && !printing ? '' : 'btn-disabled'}}"
+      bindtap="onReprint"
+    >
+      {{reprinting ? '打印中…' : (summary.failCount ? '只重打未打的 ' + summary.failCount + ' 张' : '全部已打完')}}
+    </view>
+  </view>
+</view>
+
+<!-- 重打的进度层：不跳页，原地打完直接刷新结果 -->
+<view class="mask" wx:if="{{printing}}">
+  <view class="dialog">
+    <view class="dialog-title">{{paused ? '打印机暂停' : '正在补打'}}</view>
+    <view class="progress-text">{{printedCount}} / {{totalCount}} 张</view>
+    <view class="progress-bar"><view class="progress-inner" style="width:{{progressPercent}}%"></view></view>
+    <view class="dialog-msg" wx:if="{{errorText}}">{{errorText}}</view>
+    <view class="dialog-msg" wx:elif="{{paused}}">处理好后点「继续」，打印机会接着打。</view>
+    <view class="dialog-actions">
+      <view class="btn btn-ghost" wx:if="{{paused}}" bindtap="onResume">继续</view>
+      <view class="btn btn-danger" bindtap="onCancelPrint">停止</view>
+    </view>
+  </view>
+</view>
+
+<view class="print-canvas">
+  <canvas canvas-id="test" style="width:560px;height:320px;"></canvas>
+</view>

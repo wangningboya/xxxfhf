@@ -141,6 +141,77 @@ public class WxApiClient {
         }
     }
 
+    /* ==================== 小程序码 ==================== */
+
+    /**
+     * 生成不限数量的小程序码（{@code wxacode.getUnlimited}），标签上贴的那个。
+     *
+     * <p>成功返回 PNG 字节；失败抛异常 —— 调用方（{@code QrCodeService}）会捕获它并降级成
+     * 「这单没有码」，走端上的无码布局。**二维码不能成为打标签的前置条件**：
+     * 小程序还没发布、域名没配、微信偶发抽风，都会让这个接口失败。
+     *
+     * <p>{@code scene} 上限 32 字符，本系统的订单号 12 位放得下。不塞 JSON：
+     * 塞了以后想换落地参数，历史标签上的码就全废了。
+     *
+     * @param scene 落地页参数，本系统是订单号
+     * @param page  落地页路径，必须与 app.json 里注册的完全一致 —— 少一个字符就是「页面不存在」
+     * @param width 码边长（px），280 足够 14mm 的印刷尺寸
+     */
+    public byte[] getUnlimitedQrCode(String scene, String page, int width) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("scene", scene);
+        body.put("page", page);
+        body.put("width", width);
+        // 开发版 / 体验版的页面路径校验会直接拒，check_path=false 让它先出码
+        body.put("check_path", false);
+
+        String json;
+        try {
+            json = objectMapper.writeValueAsString(body);
+        } catch (Exception ex) {
+            throw new BizException(ErrorCode.WX_API_ERROR, "小程序码请求体序列化失败");
+        }
+
+        String url = wx.getQrCodeUrl() + "?access_token=" + encode(accessToken());
+        HttpResponse<byte[]> response;
+        try {
+            HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+                    .timeout(Duration.ofSeconds(wx.getTimeoutSeconds()))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(json, StandardCharsets.UTF_8))
+                    .build();
+            response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new BizException(ErrorCode.WX_API_ERROR, "小程序码请求被中断");
+        } catch (Exception ex) {
+            log.error("调用 getUnlimited 失败 scene={}", scene, ex);
+            throw new BizException(ErrorCode.WX_API_ERROR, "小程序码服务暂时不可用");
+        }
+
+        byte[] data = response.body();
+        if (response.statusCode() != 200 || data == null || data.length == 0) {
+            log.warn("getUnlimited 返回 HTTP {}，body 长度 {}", response.statusCode(),
+                    data == null ? 0 : data.length);
+            throw new BizException(ErrorCode.WX_API_ERROR, "小程序码服务暂时不可用");
+        }
+        // 成功是图片二进制，失败是 JSON：用首字节区分比看 Content-Type 可靠
+        if (data[0] == '{') {
+            int errcode = -1;
+            String errmsg = "";
+            try {
+                JsonNode node = objectMapper.readTree(new String(data, StandardCharsets.UTF_8));
+                errcode = node.path("errcode").asInt(-1);
+                errmsg = node.path("errmsg").asText("");
+            } catch (Exception ignored) {
+                // 解析不了就按未知错误处理，不在这里再抛一个解析异常盖掉原因
+            }
+            log.warn("getUnlimited 业务错误 errcode={} errmsg={} scene={}", errcode, errmsg, scene);
+            throw new BizException(ErrorCode.WX_API_ERROR, "小程序码生成失败（" + errcode + "）");
+        }
+        return data;
+    }
+
     /**
      * 发送一条订阅消息。
      *

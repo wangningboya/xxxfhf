@@ -3,6 +3,7 @@ const { request } = require('../../utils/request');
 const { yuan, dateStr, timeLabel, durationText } = require('../../utils/format');
 const dict = require('../../utils/dict');
 const payMethod = require('../../utils/pay-method');
+const { errorText } = require('../../utils/print/error-text');
 
 Page({
   data: {
@@ -19,6 +20,16 @@ Page({
     nextLabel: '',
     /** 全部流转记录（含推送投递成败），节点耗时只算订单线 */
     timeline: [],
+    /** 标签打印记录（最近 10 批）：多部手机共用一台打印机时，这是端上唯一能自查的地方 */
+    printRecords: [],
+    /** 取消/退款中的单不打印，打出来就是废纸（服务端还会再判一次） */
+    printable: false,
+    printing: false,
+    paused: false,
+    printedCount: 0,
+    totalCount: 0,
+    progressPercent: 0,
+    printError: '',
   },
 
   onLoad(options) {
@@ -27,6 +38,17 @@ Page({
 
   onShow() {
     this.load();
+    // 补传上次没报成功的打印记录（需求 5.2）：详情页是老板最常来的地方，
+    // 也是唯一能立刻看到「记录少了一条」的地方，补在这里比只放打印机页有效。
+    // 从 pending.js 取而不是 print-runner：后者会把 300 多 KB 的蓝牙 SDK 一起拉进来。
+    require('../../utils/print/pending').flushPending();
+  },
+
+  onUnload() {
+    if (this.runner) {
+      this.runner.cancel();
+      this.runner = null;
+    }
   },
 
   load() {
@@ -44,11 +66,30 @@ Page({
           specText: (item.specs || []).map((s) => s.groupName + '：' + s.optionName).join('　'),
         }));
         const next = this.nextOf(order.status, order.deliveryType);
+        // 打印记录：只展示，不参与判定。一张一行太碎，后端已按批聚合
+        const printRecords = (row.printRecords || []).map((item) => ({
+          batchNo: item.batchNo,
+          time: item.createdAt,
+          who: item.operatorName || '系统',
+          device: item.deviceName || '',
+          copies: item.copies,
+          successCopies: item.successCopies,
+          ok: item.result === 'success',
+          // 失败时带上原因：隔着几天回看「失败」两个字，等于没记
+          resultText: item.result === 'success'
+            ? '成功'
+            : '失败（' + errorText(item.failErrCode) + '）',
+        }));
         this.setData({
           row,
           order,
           lines,
           totalText: yuan(order.totalAmount),
+          printRecords,
+          printable: order.status !== 'cancelled'
+            && order.payStatus !== 'refunded'
+            && order.payStatus !== 'refunding'
+            && !order.cancelRequested,
           // 历史单可能没有 refundAmount（v3.49 之前），回退订单合计
           refundText:
             order.payStatus === 'refunded'
@@ -338,6 +379,129 @@ Page({
         );
       },
     });
+  },
+
+  /* ==================== 打印标签 ==================== */
+
+  /**
+   * 打整单标签。
+   *
+   * **只做整单重打，不支持「只重打某个套餐」**：多一个按钮就多一处误触，
+   * 而「A×2 + B×1 只错了 B」这种场景用列表勾选那单批量打印也能解决 ——
+   * 多费两张纸比多一个按钮划算。
+   */
+  onPrintLabel() {
+    if (this.data.printing || !this.data.orderId) {
+      return;
+    }
+    const printer = require('../../utils/print/printer');
+    if (!printer.isConnected()) {
+      wx.showModal({
+        title: '打印机未连接',
+        content: '先连接打印机，再回来打印。',
+        confirmText: '去连接',
+        success: (res) => {
+          if (res.confirm) {
+            wx.navigateTo({ url: '/pages/merchant/printer' });
+          }
+        },
+      });
+      return;
+    }
+    this.setData({ busy: true });
+    request({
+      url: '/admin/print/labels',
+      method: 'POST',
+      data: { orderIds: [Number(this.data.orderId)] },
+    })
+      .then((data) => {
+        this.setData({ busy: false });
+        const pages = (data && data.pages) || [];
+        const skipped = (data && data.skipped) || [];
+        if (!pages.length) {
+          const { skipText } = require('../../utils/print/error-text');
+          wx.showModal({
+            title: '无法打印',
+            content: skipped.length
+              ? '这单不可打印：' + skipText(skipped[0].reason)
+              : '这单没有可打印的内容',
+            showCancel: false,
+          });
+          return;
+        }
+        this.startPrint(pages);
+      })
+      .catch((err) => {
+        this.setData({ busy: false });
+        app.toastError(err);
+      });
+  },
+
+  startPrint(pages) {
+    const printer = require('../../utils/print/printer');
+    const { runJob } = require('../../utils/print/print-runner');
+
+    const device = printer.loadDevice();
+    const settings = Object.assign(printer.loadSettings(device), {
+      deviceName: printer.deviceName(device),
+    });
+    const batchNo = 'b' + Date.now().toString(36);
+
+    this.runner = runJob({
+      pages,
+      settings,
+      component: this,
+      canvasId: 'test',
+      batchNo,
+      onProgress: ({ printed, total }) => {
+        this.setData({
+          printedCount: printed,
+          totalCount: total,
+          progressPercent: total ? Math.min(100, Math.round((printed / total) * 100)) : 0,
+        });
+      },
+      onPause: ({ errCode }) => {
+        this.setData({ paused: true, printError: errCode ? errorText(errCode) : '' });
+      },
+      onResume: () => this.setData({ paused: false, printError: '' }),
+    });
+
+    this.setData({
+      printing: true,
+      paused: false,
+      printedCount: 0,
+      totalCount: pages.length,
+      progressPercent: 0,
+      printError: '',
+    });
+
+    this.runner.promise.then((summary) => {
+      this.runner = null;
+      this.setData({ printing: false, paused: false });
+      if (summary.successCount === summary.total) {
+        wx.showToast({ title: '已打 ' + summary.total + ' 张', icon: 'success' });
+        // 刷新详情：打印记录区块要立刻出现这一批
+        this.load();
+        return;
+      }
+      // 有失败就进结果页：那里能看到是哪一张没出来、直接补打
+      app.globalData.printResult = { pages, results: summary.results, batchNo };
+      wx.navigateTo({ url: '/pages/merchant/print-result' });
+    });
+  },
+
+  onCancelPrint() {
+    if (this.runner) {
+      this.runner.cancel();
+    }
+    this.setData({ printing: false, paused: false });
+  },
+
+  onResumePrint() {
+    if (this.runner) {
+      this.setData({ paused: false, printError: '' });
+      this.runner.resume();
+    }
   },
 
   post(url, data, successText) {

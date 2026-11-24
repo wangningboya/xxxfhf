@@ -32,7 +32,10 @@
     "pages/merchant/combos",
     "pages/merchant/combo-edit",
     "pages/merchant/dishes",
-    "pages/merchant/config"
+    "pages/merchant/config",
+    "pages/merchant/printer",
+    "pages/merchant/print-result",
+    "pages/scan/entry"
   ],
   "window": {
     "backgroundTextStyle": "light",

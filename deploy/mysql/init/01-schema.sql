@@ -423,4 +423,41 @@ CREATE TABLE IF NOT EXISTS `user_message` (
     KEY `idx_msg_cleanup` (`created_at`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT ='站内消息';
 
+-- -----------------------------------------------------------------------------
+-- 19. 标签打印记录 order_print_page（见 打印需求.md 第六章）
+--
+-- **一行 = 一张纸**（订单 × 套餐 × 份序号）。不是「一次作业一行」：
+-- 端上是一张一张推给打印机的（count 恒为 1），中间卡纸时才知道缺的是哪一张，
+-- 补打也才能只补那一张。按作业存的话，一次打 5 张只出一张失败记录，
+-- 回答不了「这单的哪个套餐没出纸」。
+--
+-- page_key 形如 o1024-i1-c2（订单 + 套餐下标 + 份序号），与 order_id 组成唯一键，
+-- 让端上的重复上报变成幂等更新 —— 网络重试不该多算出一张纸。
+--
+-- 为什么不把「打过几次」冗余到 order 表：多部手机共用一个商家账号，
+-- 老板手机打完，店员手机要能看到「这单已打过几张、谁打的」。
+-- 只加计数字段回答不了「谁打的、什么结果」，出了问题也追不回来。
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `order_print_page` (
+    `id`            BIGINT      NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `batch_no`      VARCHAR(36) NOT NULL COMMENT '端上生成的作业号，同一批共用一个，便于按批查',
+    `order_id`      BIGINT      NOT NULL COMMENT '订单主键',
+    `page_key`      VARCHAR(32) NOT NULL COMMENT '页标识，如 o1024-i1-c2（订单 + 套餐下标 + 份序号）',
+    `serve_date`    DATE                 DEFAULT NULL COMMENT '供餐日冗余，便于按天统计耗材',
+    `template`      VARCHAR(16) NOT NULL COMMENT 'delivery 配送单 / pickup 自取单',
+    `result`        VARCHAR(16) NOT NULL COMMENT 'success 成功 / fail 失败',
+    `err_code`      INT                  DEFAULT NULL COMMENT '失败时的 SDK 错误码，成功为 NULL',
+    `operator_id`   BIGINT               DEFAULT NULL COMMENT '操作人 user_id',
+    `operator_name` VARCHAR(64)          DEFAULT NULL COMMENT '操作人名称快照，改昵称不回溯',
+    `device_name`   VARCHAR(64)          DEFAULT NULL COMMENT '打印机广播名，如 B3S-E623012991',
+    `created_at`    DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '打印时间（毫秒仅用于排序）',
+    PRIMARY KEY (`id`),
+    -- 端上重复上报按它做幂等：同一张只应该有一行
+    UNIQUE KEY `uk_print_order_page` (`order_id`, `page_key`),
+    -- 列表角标：按订单批量取「打过几张」
+    KEY `idx_print_order` (`order_id`, `result`),
+    KEY `idx_print_serve_date` (`serve_date`),
+    KEY `idx_print_batch` (`batch_no`)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT ='标签打印记录（一行一张）';
+
 SET FOREIGN_KEY_CHECKS = 1;

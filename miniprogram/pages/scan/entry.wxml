@@ -1,0 +1,15 @@
+<view class="page">
+  <block wx:if="{{failed}}">
+    <view class="icon">!</view>
+    <view class="tip">{{message}}</view>
+    <view class="btns">
+      <view class="btn" bindtap="onRetry">重试</view>
+      <view class="btn ghost" bindtap="onHome">回首页</view>
+    </view>
+  </block>
+
+  <block wx:else>
+    <view class="spinner"></view>
+    <view class="tip">正在打开订单…</view>
+  </block>
+</view>

@@ -108,6 +108,18 @@ public class OrderAdminController {
     }
 
     /**
+     * 按订单号取订单 ID。**扫标签上的小程序码落地时用**。
+     *
+     * <p>只回 ID 不回详情：落地页拿到 ID 就跳详情页，让它走同一条渲染路径，
+     * 不要在扫码入口再维护一份「详情长什么样」。
+     */
+    @GetMapping("/by-no")
+    @RequirePerm({Perms.ORDER_VIEW, Perms.ORDER_ACCEPT})
+    public ApiResponse<Long> byNo(@RequestParam String orderNo) {
+        return ApiResponse.ok(orderAdminService.idByOrderNo(orderNo));
+    }
+
+    /**
      * 订单状态流转记录（时间轴），按时间正序，中文名与配色随行下发。
      *
      * <p><b>不并入 /detail</b>：详情接口被小程序商家端共用，塞一个只有网页后台用的数组会让它无谓变重；

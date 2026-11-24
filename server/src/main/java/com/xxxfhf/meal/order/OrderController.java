@@ -60,6 +60,19 @@ public class OrderController {
     }
 
     /**
+     * 按订单号取详情。**小程序码落地页用**。
+     *
+     * <p>扫码进来的人手里只有 {@code scene} 里的订单号，没有订单 ID。
+     * 只校验归属（非本人 403），与 {@code /detail} 同一口径，没有额外暴露。
+     */
+    @GetMapping("/by-no")
+    public ApiResponse<OrderService.OrderView> byNo(@RequestParam String orderNo) {
+        Long userId = UserContext.userId();
+        accessGuard.requireAccess(userId);
+        return ApiResponse.ok(orderService.viewByOrderNo(userId, orderNo));
+    }
+
+    /**
      * 我的订单时间轴。
      *
      * <p>独立于 {@code /detail}：时间轴条数随订单生命周期增长，混进详情会让每次打开都多传

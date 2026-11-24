@@ -22,6 +22,12 @@
     <text class="cancel-filter-hint">{{cancelOnly ? '（不限供餐日）' : ''}}</text>
   </view>
 
+  <!-- 打印模式：勾选规则换成「所有能打的单」，因为补打常发生在已接单/已出餐的订单上 -->
+  <view class="cancel-filter {{printMode ? 'cancel-filter-on' : ''}}" bindtap="onTogglePrintMode">
+    <text>{{printMode ? '✓ ' : ''}}打印标签模式</text>
+    <text class="cancel-filter-hint">{{printMode ? '（可选已接单的订单）' : ''}}</text>
+  </view>
+
   <scroll-view class="tabs" scroll-x enable-flex>
     <view
       class="tab {{status === item.key ? 'tab-active' : ''}}"
@@ -48,9 +54,9 @@
   >
     <view class="order-head">
       <view
-        class="check {{selected[item.orderId] ? 'check-on' : ''}} {{item.selectable ? '' : 'check-off'}}"
+        class="check {{selected[item.orderId] ? 'check-on' : ''}} {{(printMode ? item.printable : item.selectable) ? '' : 'check-off'}}"
         data-id="{{item.orderId}}"
-        data-selectable="{{item.selectable}}"
+        data-selectable="{{printMode ? item.printable : item.selectable}}"
         catchtap="onToggle"
       >
         {{selected[item.orderId] ? '✓' : ''}}
@@ -78,6 +84,8 @@
     <view class="badges">
       <text class="badge badge-red" wx:if="{{item.stockReleased}}">份数已释放</text>
       <text class="badge badge-warn" wx:if="{{item.cancelRequested}}">用户申请取消</text>
+      <!-- 打印三态：A×2 只出 1 张时是「部分 1/2」而不是「已打」，少一张就是少一份饭 -->
+      <text class="badge {{item.printState === 'done' ? 'badge-done' : 'badge-warn'}}" wx:if="{{item.printState !== 'none'}}">{{item.printText}}</text>
       <text class="badge">{{item.payStatusLabel}}</text>
     </view>
 
@@ -93,11 +101,40 @@
   <view class="bottom-gap" wx:if="{{selectedCount > 0}}"></view>
   <view class="bottom-bar" wx:if="{{selectedCount > 0}}">
     <view class="btn btn-ghost" bindtap="onSelectAll">全选 / 取消</view>
-    <view class="btn btn-danger reject" bindtap="onBatchReject">
-      {{rejecting ? '处理中…' : rejectText}}
-    </view>
-    <view class="btn accept" bindtap="onAccept">
-      {{accepting ? '处理中…' : acceptText}}
+    <!-- 打印模式下只出打印按钮：这时勾的可能是已接单的单，摆在接单旁边迟早点错 -->
+    <block wx:if="{{printMode}}">
+      <view class="btn {{printLoading ? 'btn-disabled' : ''}}" bindtap="onBatchPrint">
+        {{printLoading ? '取数据…' : printText}}
+      </view>
+    </block>
+    <block wx:else>
+      <view class="btn btn-danger reject" bindtap="onBatchReject">
+        {{rejecting ? '处理中…' : rejectText}}
+      </view>
+      <view class="btn accept" bindtap="onAccept">
+        {{accepting ? '处理中…' : acceptText}}
+      </view>
+    </block>
+  </view>
+</view>
+
+<!-- 打印进度层：打印期间必须留在页面上，切后台会丢数据 -->
+<view class="mask" wx:if="{{printing}}">
+  <view class="dialog">
+    <view class="dialog-title">{{paused ? '打印机暂停' : '正在打印'}}</view>
+    <view class="progress-text">{{printedCount}} / {{totalCount}} 张</view>
+    <view class="progress-bar"><view class="progress-inner" style="width:{{progressPercent}}%"></view></view>
+    <view class="dialog-msg" wx:if="{{printError}}">{{printError}}</view>
+    <view class="dialog-msg" wx:elif="{{paused}}">处理好后点「继续」，打印机会接着打。</view>
+    <view class="dialog-msg" wx:else>打印期间不要切出小程序，切到后台会中断。</view>
+    <view class="dialog-actions">
+      <view class="btn btn-ghost" wx:if="{{paused}}" bindtap="onResumePrint">继续</view>
+      <view class="btn btn-danger" bindtap="onCancelPrint">停止</view>
     </view>
   </view>
+</view>
+
+<!-- SDK 需要真实画布取像素，放在屏幕外但必须存在 -->
+<view class="print-canvas">
+  <canvas canvas-id="test" style="width:560px;height:320px;"></canvas>
 </view>

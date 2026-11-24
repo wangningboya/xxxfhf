@@ -106,6 +106,72 @@ public class FileStorageService {
         return prefix + "/" + subDir + "/" + fileName;
     }
 
+    /**
+     * 按固定相对路径写一段二进制（小程序码用）。
+     *
+     * <p>与 {@link #store(MultipartFile)} 的区别是**不做压缩、不改名**：
+     * 小程序码是微信生成的 PNG，重编码没有意义，而文件名必须可推导
+     * （{@code qr/202611250012.png}），这样打印取数时不必查库就知道有没有码。
+     *
+     * @param subDir   相对子目录，如 {@code qr}；会被规范化，越界直接拒
+     * @param fileName 固定文件名，如 {@code 202611250012.png}
+     * @return 可对外访问的相对路径，如 {@code /upload/qr/202611250012.png}
+     */
+    public String storeBytes(byte[] data, String subDir, String fileName) {
+        if (data == null || data.length == 0) {
+            throw BizException.param("文件内容为空");
+        }
+        Path targetDir = root.resolve(subDir).normalize();
+        if (!targetDir.startsWith(root)) {
+            throw BizException.param("非法的存储路径");
+        }
+        try {
+            Files.createDirectories(targetDir);
+            Files.write(targetDir.resolve(fileName), data);
+        } catch (IOException ex) {
+            log.error("写入文件失败 dir={} name={}", targetDir, fileName, ex);
+            throw new BizException(ErrorCode.STORAGE_ERROR, "文件保存失败");
+        }
+        return urlPrefix() + "/" + subDir + "/" + fileName;
+    }
+
+    /**
+     * 相对路径对应的文件是否存在。
+     *
+     * <p>路径以 {@link #urlPrefix()} 开头，不匹配的一律当不存在 —— 这个方法会被
+     * 「按订单号拼路径」的调用方使用，不能让一个拼错的路径读到别处的文件。
+     */
+    public boolean exists(String relativePath) {
+        if (relativePath == null || relativePath.isBlank()) {
+            return false;
+        }
+        String prefix = urlPrefix() + "/";
+        if (!relativePath.startsWith(prefix)) {
+            return false;
+        }
+        Path target = root.resolve(relativePath.substring(prefix.length())).normalize();
+        if (!target.startsWith(root)) {
+            return false;
+        }
+        return Files.isRegularFile(target);
+    }
+
+    private String urlPrefix() {
+        return upload.getUrlPrefix().endsWith("/")
+                ? upload.getUrlPrefix().substring(0, upload.getUrlPrefix().length() - 1)
+                : upload.getUrlPrefix();
+    }
+
+    /**
+     * 由子目录与文件名推导出可访问的相对路径。
+     *
+     * <p>给「文件名固定」的场景用（如按订单号命名的小程序码）：写入前要判断是否已存在，
+     * 就必须能在不写文件的前提下拼出一模一样的路径。
+     */
+    public String pathOf(String subDir, String fileName) {
+        return urlPrefix() + "/" + subDir + "/" + fileName;
+    }
+
     private static String resolveExtension(String originalFilename) {
         if (originalFilename == null || !originalFilename.contains(".")) {
             return "";
