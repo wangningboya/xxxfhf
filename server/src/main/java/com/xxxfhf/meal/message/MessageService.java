@@ -82,26 +82,56 @@ public class MessageService {
         }
         try {
             if (type.recipient() == NotifyType.Recipient.MERCHANT) {
-                insert(null, UserMessage.SIDE_MERCHANT, order, type, title, content);
+                insert(null, UserMessage.SIDE_MERCHANT, order.getId(), type.code(), title, content);
                 return;
             }
             if (order.getUserId() == null) {
                 return;
             }
-            insert(order.getUserId(), UserMessage.SIDE_CUSTOMER, order, type, title, content);
+            insert(order.getUserId(), UserMessage.SIDE_CUSTOMER, order.getId(), type.code(), title, content);
         } catch (RuntimeException e) {
             // 与 order_status_log 同理：留痕是副产品，失败不能影响推送与主流程
             log.error("写站内消息失败 orderNo={} type={}", order.getOrderNo(), type.code(), e);
         }
     }
 
-    private void insert(Long userId, String side, Order order, NotifyType type,
+    /**
+     * 写一条**不挂订单**的站内消息给某个用户（v3.50 / 需求 4.12「非订单类」）。
+     *
+     * <p>审核通过与驳回、地址驳回与收回都不属于任何一笔订单，{@code order_id} 留空 ——
+     * 表结构本来就允许（列注释写了「为将来非订单类消息留空」）。
+     *
+     * <p>同样独立事务、同样吞异常：审核动作不能因为写不进消息而回滚。
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordToUser(Long userId, NoticeType type, String title, String content) {
+        if (userId == null) {
+            return;
+        }
+        try {
+            insert(userId, UserMessage.SIDE_CUSTOMER, null, type.code(), title, content);
+        } catch (RuntimeException e) {
+            log.error("写站内消息失败 userId={} type={}", userId, type.code(), e);
+        }
+    }
+
+    /** 给全店共享收件箱写一条不挂订单的消息（如「昨日 N 笔订单超时关闭」的汇总）。 */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordToMerchant(NotifyType type, String title, String content) {
+        try {
+            insert(null, UserMessage.SIDE_MERCHANT, null, type.code(), title, content);
+        } catch (RuntimeException e) {
+            log.error("写商家站内消息失败 type={}", type.code(), e);
+        }
+    }
+
+    private void insert(Long userId, String side, Long orderId, String msgType,
                         String title, String content) {
         UserMessage message = new UserMessage();
         message.setUserId(userId);
         message.setUserType(side);
-        message.setOrderId(order.getId());
-        message.setMsgType(type.code());
+        message.setOrderId(orderId);
+        message.setMsgType(msgType);
         message.setTitle(truncate(title, MAX_TITLE));
         message.setContent(truncate(content, MAX_CONTENT));
         message.setCreatedAt(LocalDateTime.now());

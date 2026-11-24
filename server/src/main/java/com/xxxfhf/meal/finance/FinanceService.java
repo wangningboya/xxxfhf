@@ -92,7 +92,83 @@ public class FinanceService {
         }
 
         return new FinanceSummary(date, receivable.toBucket(), paid.toBucket(), unpaid.toBucket(),
-                claimed.toBucket(), refunding.toBucket(), refunded.toBucket(), orders.size());
+                claimed.toBucket(), refunding.toBucket(), refunded.toBucket(), orders.size(),
+                check(orders, receivable, paid, unpaid, claimed, refunding, refunded));
+    }
+
+    /**
+     * 勾稽校验（v3.50 / 4.16）：六个桶各自看都对、合起来不平，是最难查的一类账。
+     *
+     * <p>恒等式：**净应收 − 净已收 − 未收 − 声称已付 = 0**。
+     * <ul>
+     *   <li>净应收 = 有效订单合计 − 有效单已退的钱</li>
+     *   <li>净已收 = 已确认收款 + 待退款 + （已退款单的 合计 − 退款额）</li>
+     * </ul>
+     *
+     * <p>差额不为 0 时，把「贡献了差额」的订单列出来：绝大多数是「单子关了、收款状态没跟着改」，
+     * 一眼就能认出是哪几单。不加第七个桶 —— 多一个数只是多一处要维护的口径，
+     * 而这里要的是一个能自证的等式。
+     */
+    private FinanceCheck check(List<Order> orders,
+                               Accumulator receivable, Accumulator paid, Accumulator unpaid,
+                               Accumulator claimed, Accumulator refunding, Accumulator refunded) {
+        int netReceivable = receivable.amount - refundedOnValid(orders);
+        int netReceived = paid.amount + refunding.amount + refundedKept(orders);
+        int difference = netReceivable - netReceived - unpaid.amount - claimed.amount;
+
+        List<CheckRow> rows = new ArrayList<>();
+        if (difference != 0) {
+            for (Order order : orders) {
+                int amount = order.getTotalAmount() == null ? 0 : order.getTotalAmount();
+                boolean valid = !OrderStatus.CANCELLED.equals(order.getStatus())
+                        && !OrderStatus.REJECTED.equals(order.getStatus());
+                String pay = order.getPayStatus() == null ? "" : order.getPayStatus();
+                int rowReceivable = valid ? amount : 0;
+                if (valid && PayStatus.REFUNDED.equals(pay)) {
+                    rowReceivable -= refundedAmount(order);
+                }
+                int rowReceived = switch (pay) {
+                    case PayStatus.PAID -> valid ? amount : 0;
+                    case PayStatus.REFUNDING -> amount;
+                    case PayStatus.REFUNDED -> amount - refundedAmount(order);
+                    default -> 0;
+                };
+                int rowOutstanding = valid && (PayStatus.UNPAID.equals(pay) || PayStatus.CLAIMED.equals(pay))
+                        ? amount : 0;
+                int contribution = rowReceivable - rowReceived - rowOutstanding;
+                if (contribution != 0) {
+                    rows.add(new CheckRow(order.getOrderNo(), OrderStatus.label(order.getStatus()),
+                            PayStatus.label(pay), rowReceivable, rowReceived, contribution));
+                }
+            }
+        }
+        return new FinanceCheck(netReceivable, netReceived, difference, rows);
+    }
+
+    /** 有效单里已经退掉的钱：这部分不该再算应收 */
+    private int refundedOnValid(List<Order> orders) {
+        int total = 0;
+        for (Order order : orders) {
+            boolean valid = !OrderStatus.CANCELLED.equals(order.getStatus())
+                    && !OrderStatus.REJECTED.equals(order.getStatus());
+            if (valid && PayStatus.REFUNDED.equals(order.getPayStatus())) {
+                total += refundedAmount(order);
+            }
+        }
+        return total;
+    }
+
+    /** 已退款单里实际留下的钱（部分退款时不为 0），这部分仍算「已收」 */
+    private int refundedKept(List<Order> orders) {
+        int total = 0;
+        for (Order order : orders) {
+            if (!PayStatus.REFUNDED.equals(order.getPayStatus())) {
+                continue;
+            }
+            int amount = order.getTotalAmount() == null ? 0 : order.getTotalAmount();
+            total += amount - refundedAmount(order);
+        }
+        return total;
     }
 
     /**
@@ -134,6 +210,14 @@ public class FinanceService {
                 new SummaryExcelRow("用户声称已付款（待核对）", summary.claimed().amount(), summary.claimed().count()),
                 new SummaryExcelRow("待退款", summary.refunding().amount(), summary.refunding().count()),
                 new SummaryExcelRow("已退款", summary.refunded().amount(), summary.refunded().count()));
+        // 勾稽校验跟着表一起走：只看六个数字的表格，等于把「自证账平」这件事留给人工
+        summaryRows = new ArrayList<>(summaryRows);
+        summaryRows.add(new SummaryExcelRow("净应收（应收 − 已退）",
+                summary.check().netReceivable(), 0));
+        summaryRows.add(new SummaryExcelRow("净已收（已收 + 待退 + 部分退留款）",
+                summary.check().netReceived(), 0));
+        summaryRows.add(new SummaryExcelRow("差额（净应收 − 净已收 − 未收 − 声称，应为 0）",
+                summary.check().difference(), 0));
 
         List<DetailExcelRow> detailRows = new ArrayList<>();
         for (Order order : ordersOf(date)) {
@@ -230,7 +314,25 @@ public class FinanceService {
     }
 
     public record FinanceSummary(LocalDate serveDate, Bucket receivable, Bucket paid, Bucket unpaid,
-                                 Bucket claimed, Bucket refunding, Bucket refunded, int orderCount) {
+                                 Bucket claimed, Bucket refunding, Bucket refunded, int orderCount,
+                                 FinanceCheck check) {
+    }
+
+    /**
+     * 勾稽校验结果。
+     *
+     * @param netReceivable 净应收（有效订单合计 − 有效单已退）
+     * @param netReceived   净已收（已确认收款 + 待退款 + 已退款单里留下的钱）
+     * @param difference    差额，应恒为 0；不为 0 时 {@code rows} 列出贡献差额的订单
+     * @param rows          贡献差额的订单，按订单号升序
+     */
+    public record FinanceCheck(int netReceivable, int netReceived, int difference,
+                               List<CheckRow> rows) {
+    }
+
+    /** @param contribution 该单对差额的贡献（分）：正数=应收多算，负数=已收多算 */
+    public record CheckRow(String orderNo, String statusLabel, String payStatusLabel,
+                           int receivable, int received, int contribution) {
     }
 
     public record FinanceRow(String orderNo, String contactName, String deliveryType,

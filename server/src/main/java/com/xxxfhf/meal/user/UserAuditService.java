@@ -13,6 +13,8 @@ import com.xxxfhf.meal.common.MaskUtil;
 import com.xxxfhf.meal.common.PhoneValidator;
 import com.xxxfhf.meal.invite.InviteCode;
 import com.xxxfhf.meal.invite.InviteCodeMapper;
+import com.xxxfhf.meal.message.MessageService;
+import com.xxxfhf.meal.message.NoticeType;
 import com.xxxfhf.meal.order.Order;
 import com.xxxfhf.meal.order.OrderMapper;
 import com.xxxfhf.meal.role.Role;
@@ -47,11 +49,12 @@ public class UserAuditService {
     private final AuditService auditService;
     private final PasswordService passwordService;
     private final RoleMapper roleMapper;
+    private final MessageService messageService;
 
     public UserAuditService(UserMapper userMapper, InviteCodeMapper inviteCodeMapper,
                             AddressMapper addressMapper, OrderMapper orderMapper,
                             AuditService auditService, PasswordService passwordService,
-                            RoleMapper roleMapper) {
+                            RoleMapper roleMapper, MessageService messageService) {
         this.userMapper = userMapper;
         this.inviteCodeMapper = inviteCodeMapper;
         this.addressMapper = addressMapper;
@@ -59,6 +62,7 @@ public class UserAuditService {
         this.auditService = auditService;
         this.passwordService = passwordService;
         this.roleMapper = roleMapper;
+        this.messageService = messageService;
     }
 
     /**
@@ -164,6 +168,9 @@ public class UserAuditService {
         log.info("用户审核 userId={} {} -> {} 操作人={}", userId, from, to, operatorId);
 
         recordAudit(user, from, to, reason);
+        // 审核结果必须主动告诉用户（v3.50）：建号后要等商家审核，通过了他不知道就不来；
+        // 驳回了不告诉他原因，他只会再提一次同样的资料。只落站内，不推订阅
+        notifyAuditResult(user, to, reason);
 
         Set<Long> inviteUsers = inviteUserIds(List.of(user));
         return toRow(user, inviteUsers.contains(user.getId()));
@@ -190,6 +197,23 @@ public class UserAuditService {
             summary.append("｜原因：").append(reason.trim());
         }
         auditService.record(AuditActions.TABLE_USER, user.getId(), action, summary.toString());
+    }
+
+    /**
+     * 审核结果 → 用户站内消息（v3.50）。
+     *
+     * <p>只处理「通过 / 驳回」两种结果：停用与恢复不在这里发（停用的用户进不来，
+     * 说明改在登录拦截文案上）。消息不带订单，走 {@code MessageService.recordToUser}。
+     */
+    private void notifyAuditResult(User user, String to, String reason) {
+        if (AuditStatus.APPROVED.equals(to)) {
+            messageService.recordToUser(user.getId(), NoticeType.USER_APPROVED, "审核已通过",
+                    "你的账号已通过商家审核，现在可以选餐下单了。菜单每天 0 点后开放次日预订");
+        } else if (AuditStatus.REJECTED.equals(to)) {
+            String why = reason == null || reason.isBlank() ? "" : "：原因：" + reason.trim();
+            messageService.recordToUser(user.getId(), NoticeType.USER_REJECTED, "审核未通过",
+                    "你的账号未通过审核" + why + "。请修改资料后重新提交，或联系商家");
+        }
     }
 
     /** 操作记录里指代一个用户：昵称 + 掩码手机号。开头 3 位 + 尾 4 位够认出是谁，拼不出完整号 */

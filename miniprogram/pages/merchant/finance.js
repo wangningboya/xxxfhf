@@ -28,6 +28,10 @@ Page({
     detailBucket: '',
     detailTitle: '',
     detailLoading: false,
+    /** 勾稽校验（v3.50）：差额与贡献差额的订单 */
+    checkDiff: 0,
+    checkText: {},
+    checkRows: [],
   },
 
   onLoad() {
@@ -57,7 +61,30 @@ Page({
             count: bucketData.count,
           });
         });
-        this.setData({ summary, buckets, orderCount: summary.orderCount || 0 });
+        // 勾稽校验（v3.50 / F-J14）：服务端算好差额与「贡献差额的订单」，
+        // 前端只做展示，不在这里重新加减 —— 两边各算一次，迟早会算出两个数
+        const check = summary.check || { netReceivable: 0, netReceived: 0, difference: 0, rows: [] };
+        const checkText = {
+          netReceivable: yuan(check.netReceivable),
+          netReceived: yuan(check.netReceived),
+          unpaid: yuan((summary.unpaid || {}).amount),
+          claimed: yuan((summary.claimed || {}).amount),
+          difference: yuan(check.difference),
+        };
+        const checkRows = (check.rows || []).map((row) => ({
+          orderNo: row.orderNo,
+          statusLabel: row.statusLabel,
+          payStatusLabel: row.payStatusLabel,
+          contributionText: yuan(row.contribution),
+        }));
+        this.setData({
+          summary,
+          buckets,
+          orderCount: summary.orderCount || 0,
+          checkDiff: check.difference || 0,
+          checkText,
+          checkRows,
+        });
       })
       .catch((err) => app.toastError(err))
       .then(() => {

@@ -38,6 +38,9 @@ Page({
     finished: false,
     loading: false,
     keyword: '',
+    /** 批量通过：只在待审核页签、只手动勾选（不做全选） */
+    batchMode: false,
+    batchCount: 0,
     /** 邀请码：新用户没有群卡片时靠它进来 */
     inviteCodes: [],
     showInvite: false,
@@ -65,7 +68,8 @@ Page({
   },
 
   reload() {
-    this.setData({ list: [], page: 1, finished: false });
+    // 列表重来时勾选一并清掉：留着上次的勾，商家会以为已经勾好了
+    this.setData({ list: [], page: 1, finished: false, batchMode: false, batchCount: 0 });
     return this.load(1);
   },
 
@@ -90,6 +94,7 @@ Page({
           avatarUrl: row.avatarUrl,
           // 没填昵称的人列表照常显示，但通过/驳回置灰：认不出是谁，点了也只能靠猜
           canAudit: !!row.canAudit,
+          checked: false,
         }));
         this.setData({
           list: page === 1 ? rows : this.data.list.concat(rows),
@@ -147,6 +152,118 @@ Page({
 
   onSearch() {
     this.reload();
+  },
+
+  /* ---------------- 批量通过 ---------------- */
+
+  onToggleBatch() {
+    if (this.data.batchMode) {
+      this.clearChecked();
+      this.setData({ batchMode: false, batchCount: 0 });
+      return;
+    }
+    this.setData({ batchMode: true, batchCount: 0 });
+  },
+
+  /** 批量模式下点卡片任意位置即勾选 / 取消；非批量模式什么都不做 */
+  onCardTap(e) {
+    if (!this.data.batchMode) {
+      return;
+    }
+    const index = Number(e.currentTarget.dataset.index);
+    const row = this.data.list[index];
+    if (!row) {
+      return;
+    }
+    if (!row.canAudit) {
+      wx.showToast({ title: '对方还没填昵称，暂时不能审核', icon: 'none' });
+      return;
+    }
+    this.setData({
+      ['list[' + index + '].checked']: !row.checked,
+      batchCount: this.countChecked() + (row.checked ? -1 : 1),
+    });
+  },
+
+  countChecked() {
+    return (this.data.list || []).filter((row) => row.checked).length;
+  },
+
+  clearChecked() {
+    const patch = {};
+    (this.data.list || []).forEach((row, index) => {
+      if (row.checked) {
+        patch['list[' + index + '].checked'] = false;
+      }
+    });
+    if (Object.keys(patch).length) {
+      this.setData(patch);
+    }
+  },
+
+  onBatchApprove() {
+    const picked = (this.data.list || []).filter((row) => row.checked);
+    if (!picked.length) {
+      wx.showToast({ title: '请先勾选要放行的人', icon: 'none' });
+      return;
+    }
+    if (this.approving) {
+      return;
+    }
+    wx.showModal({
+      title: '批量通过',
+      content: '确定通过选中的 ' + picked.length + ' 位用户？',
+      success: (res) => {
+        if (res.confirm) {
+          this.runBatchApprove(picked);
+        }
+      },
+    });
+  },
+
+  /**
+   * 逐条发请求：与后台「用户管理」的批量通过同一做法 ——
+   * 单条失败（比如对方刚自己改了昵称、或状态已被别处改掉）不该拖住其余人，
+   * 最后汇总一次结果，失败的把人名列出来让商家自己去补。
+   */
+  runBatchApprove(picked) {
+    this.approving = true;
+    wx.showLoading({ title: '处理中…', mask: true });
+    let ok = 0;
+    const failed = [];
+
+    const one = (i) => {
+      if (i >= picked.length) {
+        return Promise.resolve();
+      }
+      return request({
+        url: '/admin/user/audit',
+        method: 'POST',
+        data: { userId: picked[i].userId, action: 'approve' },
+      })
+        .then(() => {
+          ok += 1;
+        })
+        .catch(() => {
+          failed.push(picked[i].nickName);
+        })
+        .then(() => one(i + 1));
+    };
+
+    one(0).then(() => {
+      wx.hideLoading();
+      this.approving = false;
+      this.reload();
+      if (!failed.length) {
+        wx.showToast({ title: '已通过 ' + ok + ' 位', icon: 'none' });
+        return;
+      }
+      wx.showModal({
+        title: '部分未通过',
+        content: '已通过 ' + ok + ' 位；以下未通过：' + failed.join('、'),
+        showCancel: false,
+      });
+    });
   },
 
   onAudit(e) {

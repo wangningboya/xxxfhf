@@ -25,6 +25,7 @@
     "pages/merchant/menu",
     "pages/merchant/prep",
     "pages/merchant/finance",
+    "pages/merchant/collect",
     "pages/merchant/proxy-order",
     "pages/merchant/users",
     "pages/merchant/regions",

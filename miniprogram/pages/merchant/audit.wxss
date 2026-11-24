@@ -220,3 +220,84 @@
   color: #b0b0b0;
   padding: 24rpx 0;
 }
+
+/* 批量通过（v3.51）：入口轻一点，勾选看得清，底部条不挡最后一张卡 */
+.bulk-entry {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 4rpx 16rpx;
+}
+
+.bulk-open {
+  font-size: 26rpx;
+  color: #ff9f1c;
+}
+
+.bulk-cancel {
+  font-size: 26rpx;
+  color: #9a9a9a;
+}
+
+.user-batch {
+  display: flex;
+  align-items: flex-start;
+}
+
+.user-check {
+  padding: 24rpx 20rpx 0 0;
+  flex-shrink: 0;
+}
+
+.user-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.checkbox {
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 50%;
+  border: 2rpx solid #d0d0d0;
+  color: #ffffff;
+  font-size: 26rpx;
+  line-height: 36rpx;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.checkbox-on {
+  background: #ff9f1c;
+  border-color: #ff9f1c;
+}
+
+/* 没填昵称的人勾不上：留个淡圈，说明这里是「暂时不行」而不是漏画 */
+.checkbox-off {
+  opacity: 0.35;
+}
+
+.page-batch {
+  padding-bottom: 200rpx;
+}
+
+.bulk-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20rpx 32rpx calc(20rpx + env(safe-area-inset-bottom));
+  background: #ffffff;
+  box-shadow: 0 -2rpx 16rpx rgba(0, 0, 0, 0.06);
+}
+
+.bulk-count {
+  font-size: 26rpx;
+  color: #6a6a6a;
+}
+
+.bulk-submit {
+  margin-left: 0;
+  padding: 0 40rpx;
+}

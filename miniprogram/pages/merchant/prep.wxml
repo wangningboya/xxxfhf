@@ -13,6 +13,17 @@
     <view class="muted-note">只统计已接单及之后，待接单与已取消不备料</view>
   </view>
 
+  <!--
+    未接单提示（v3.50 / F-G11）：下面的数字不含待接单，而截单后很可能还有一批单挂在待接单。
+    不在这里说一句，商家照着当前数字备料，第二天一定少做。
+  -->
+  <view class="pending-tip" wx:if="{{view.pendingAcceptCount > 0}}" bindtap="onGoOrders">
+    <text class="pending-main">
+      另有 {{view.pendingAcceptCount}} 笔待接单（约 {{view.pendingAcceptQty}} 份）未计入下方数字
+    </text>
+    <text class="pending-go">去接单 ›</text>
+  </view>
+
   <view class="tabs">
     <view class="tab {{tab === 'dish' ? 'tab-active' : ''}}" data-tab="dish" bindtap="onSwitchTab">
       按菜品

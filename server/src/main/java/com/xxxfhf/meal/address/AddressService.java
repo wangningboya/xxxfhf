@@ -11,6 +11,8 @@ import com.xxxfhf.meal.common.ContentSecurityService;
 import com.xxxfhf.meal.common.MaskUtil;
 import com.xxxfhf.meal.common.PageResult;
 import com.xxxfhf.meal.common.PhoneValidator;
+import com.xxxfhf.meal.message.MessageService;
+import com.xxxfhf.meal.message.NoticeType;
 import com.xxxfhf.meal.region.Region;
 import com.xxxfhf.meal.region.RegionService;
 import com.xxxfhf.meal.user.User;
@@ -47,15 +49,17 @@ public class AddressService {
     private final UserMapper userMapper;
     private final AuditService auditService;
     private final ContentSecurityService contentSecurity;
+    private final MessageService messageService;
 
     public AddressService(AddressMapper addressMapper, RegionService regionService,
                           UserMapper userMapper, AuditService auditService,
-                          ContentSecurityService contentSecurity) {
+                          ContentSecurityService contentSecurity, MessageService messageService) {
         this.addressMapper = addressMapper;
         this.regionService = regionService;
         this.userMapper = userMapper;
         this.auditService = auditService;
         this.contentSecurity = contentSecurity;
+        this.messageService = messageService;
     }
 
     /** 某个用户的全部地址（含待确认的），用户端与商家端都用这一个查询。 */
@@ -404,6 +408,17 @@ public class AddressService {
         auditService.record(AuditActions.TABLE_ADDRESS, addressId, action,
                 verb + "：" + describe(address)
                         + ("rejected".equals(target) ? "｜原因：" + trimmed : ""));
+        // 驳回与收回都要告诉归属用户（v3.50）：地址没了他到下单那一刻才发现，
+        // 等于把商家的一次审核变成用户的一次失败。只落站内消息
+        if ("rejected".equals(target)) {
+            messageService.recordToUser(address.getUserId(), NoticeType.ADDRESS_REJECTED,
+                    "地址未通过", "你提交的地址「" + describeShort(address) + "」未通过商家确认，原因："
+                            + trimmed + "。请修改后重新提交");
+        } else if ("pending".equals(target)) {
+            messageService.recordToUser(address.getUserId(), NoticeType.ADDRESS_REVOKED,
+                    "地址已停用", "地址「" + describeShort(address)
+                            + "」已被商家收回，需重新确认后才能用于下单");
+        }
         return address;
     }
 
@@ -441,6 +456,12 @@ public class AddressService {
         String verb = enabled ? "启用地址" : "停用地址";
         auditService.record(AuditActions.TABLE_ADDRESS, addressId, action,
                 verb + "：" + describe(address) + (target == null ? "" : "｜原因：" + target));
+        // 停用也要说一声：用户看到地址还在列表里，却下不了单，会比「被驳回」更困惑
+        if (!enabled) {
+            messageService.recordToUser(address.getUserId(), NoticeType.ADDRESS_REVOKED,
+                    "地址已停用", "地址「" + describeShort(address) + "」已被商家停用"
+                            + (target == null ? "" : "，原因：" + target) + "，暂不能用于下单");
+        }
         return address;
     }
 
@@ -537,6 +558,19 @@ public class AddressService {
             text.append('）');
         }
         return text.toString();
+    }
+
+    /**
+     * 给用户看的地址短描述：区域 + 门牌，不带联系人手机号。
+     *
+     * <p>用户消息里没必要重复他自己的电话，写长了反而会把 {@code VARCHAR(255)} 撑满，
+     * 把真正要说的「为什么没通过」挤掉。
+     */
+    private static String describeShort(Address address) {
+        String region = address.getRegionName() == null ? "" : address.getRegionName();
+        String detail = address.getDetail() == null ? "" : address.getDetail();
+        String text = (region + " " + detail).trim();
+        return text.length() > 60 ? text.substring(0, 60) + "…" : text;
     }
 
     /**

@@ -1,4 +1,4 @@
-<view class="page">
+<view class="page {{batchMode ? 'page-batch' : ''}}">
   <view class="invite">
     <view class="invite-head">
       <text class="invite-title" bindtap="onToggleInvite">邀请码</text>
@@ -66,72 +66,100 @@
     </view>
   </scroll-view>
 
+  <!-- 批量通过只对待审核页签开放：驳回要逐个人看原因，恢复与启停也不该成批点 -->
+  <view class="bulk-entry" wx:if="{{auditStatus === 'pending' && list.length}}">
+    <text class="{{batchMode ? 'bulk-cancel' : 'bulk-open'}}" bindtap="onToggleBatch">
+      {{batchMode ? '取消' : '批量通过'}}
+    </text>
+  </view>
+
   <view class="empty" wx:if="{{!loading && !list.length}}">
     <view class="empty-title">这里没有人</view>
     <view class="empty-desc">群成员首次进入就会出现在「待审核」</view>
   </view>
 
-  <view class="user" wx:for="{{list}}" wx:key="userId">
-    <view class="user-head">
-      <image class="avatar" wx:if="{{item.avatarUrl}}" src="{{item.avatarUrl}}" mode="aspectFill" />
-      <view class="avatar avatar-empty" wx:else></view>
-      <view class="user-info">
-        <view class="user-name">{{item.nickName}}</view>
-        <view class="user-sub">
-          <text wx:if="{{item.phone}}">{{item.phone}}</text>
-          <text wx:else>未填手机号</text>
-          <text wx:if="{{item.accessVia}}"> · 通过{{item.accessVia === 'group' ? '群' : '邀请码'}}进入</text>
+  <view
+    class="user {{batchMode ? 'user-batch' : ''}}"
+    wx:for="{{list}}"
+    wx:key="userId"
+    data-index="{{index}}"
+    bindtap="onCardTap"
+  >
+    <!-- 批量模式才有勾选框：日常单个审核时不该多一列东西 -->
+    <view class="user-check" wx:if="{{batchMode}}">
+      <view class="checkbox {{item.checked ? 'checkbox-on' : ''}} {{item.canAudit ? '' : 'checkbox-off'}}">{{item.checked ? '✓' : ''}}</view>
+    </view>
+    <view class="user-main">
+      <view class="user-head">
+        <image class="avatar" wx:if="{{item.avatarUrl}}" src="{{item.avatarUrl}}" mode="aspectFill" />
+        <view class="avatar avatar-empty" wx:else></view>
+        <view class="user-info">
+          <view class="user-name">{{item.nickName}}</view>
+          <view class="user-sub">
+            <text wx:if="{{item.phone}}">{{item.phone}}</text>
+            <text wx:else>未填手机号</text>
+            <text wx:if="{{item.accessVia}}"> · 通过{{item.accessVia === 'group' ? '群' : '邀请码'}}进入</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="user-reason" wx:if="{{item.rejectReason}}">驳回原因：{{item.rejectReason}}</view>
+
+      <!-- 没填昵称：人照样在列表里，但通过/驳回置灰，免得商家凭 id 瞎点 -->
+      <view class="user-hint" wx:if="{{(item.auditStatus === 'pending' || item.auditStatus === 'rejected') && !item.canAudit}}">
+        对方还没填昵称，填完才能审核
+      </view>
+
+      <!-- 批量模式下藏起单个动作：勾选时误点「驳回」是最不该发生的事 -->
+      <view class="user-actions" wx:if="{{!batchMode}}">
+        <view
+          class="btn btn-ghost small {{item.auditStatus === 'rejected' && !item.canAudit ? 'btn-disabled' : ''}}"
+          wx:if="{{item.auditStatus === 'rejected' || item.auditStatus === 'disabled'}}"
+          data-id="{{item.userId}}"
+          data-action="{{item.auditStatus === 'rejected' ? 'approve' : 'enable'}}"
+          data-can-audit="{{item.canAudit}}"
+          bindtap="onAudit"
+        >
+          恢复
+        </view>
+        <view
+          class="btn btn-ghost small"
+          wx:if="{{item.auditStatus === 'approved'}}"
+          data-id="{{item.userId}}"
+          data-action="disable"
+          bindtap="onAudit"
+        >
+          停用
+        </view>
+        <view
+          class="btn btn-ghost small {{item.canAudit ? '' : 'btn-disabled'}}"
+          wx:if="{{item.auditStatus === 'pending'}}"
+          data-id="{{item.userId}}"
+          data-action="reject"
+          data-can-audit="{{item.canAudit}}"
+          bindtap="onAudit"
+        >
+          驳回
+        </view>
+        <view
+          class="btn small {{item.canAudit ? '' : 'btn-disabled'}}"
+          wx:if="{{item.auditStatus === 'pending'}}"
+          data-id="{{item.userId}}"
+          data-action="approve"
+          data-can-audit="{{item.canAudit}}"
+          bindtap="onAudit"
+        >
+          通过
         </view>
       </view>
     </view>
+  </view>
 
-    <view class="user-reason" wx:if="{{item.rejectReason}}">驳回原因：{{item.rejectReason}}</view>
-
-    <!-- 没填昵称：人照样在列表里，但通过/驳回置灰，免得商家凭 id 瞎点 -->
-    <view class="user-hint" wx:if="{{(item.auditStatus === 'pending' || item.auditStatus === 'rejected') && !item.canAudit}}">
-      对方还没填昵称，填完才能审核
-    </view>
-
-    <view class="user-actions">
-      <view
-        class="btn btn-ghost small {{item.auditStatus === 'rejected' && !item.canAudit ? 'btn-disabled' : ''}}"
-        wx:if="{{item.auditStatus === 'rejected' || item.auditStatus === 'disabled'}}"
-        data-id="{{item.userId}}"
-        data-action="{{item.auditStatus === 'rejected' ? 'approve' : 'enable'}}"
-        data-can-audit="{{item.canAudit}}"
-        bindtap="onAudit"
-      >
-        恢复
-      </view>
-      <view
-        class="btn btn-ghost small"
-        wx:if="{{item.auditStatus === 'approved'}}"
-        data-id="{{item.userId}}"
-        data-action="disable"
-        bindtap="onAudit"
-      >
-        停用
-      </view>
-      <view
-        class="btn btn-ghost small {{item.canAudit ? '' : 'btn-disabled'}}"
-        wx:if="{{item.auditStatus === 'pending'}}"
-        data-id="{{item.userId}}"
-        data-action="reject"
-        data-can-audit="{{item.canAudit}}"
-        bindtap="onAudit"
-      >
-        驳回
-      </view>
-      <view
-        class="btn small {{item.canAudit ? '' : 'btn-disabled'}}"
-        wx:if="{{item.auditStatus === 'pending'}}"
-        data-id="{{item.userId}}"
-        data-action="approve"
-        data-can-audit="{{item.canAudit}}"
-        bindtap="onAudit"
-      >
-        通过
-      </view>
+  <!-- 底部提交条：只在批量模式出现，避免常驻占位 -->
+  <view class="bulk-bar" wx:if="{{batchMode}}">
+    <text class="bulk-count">已选 {{batchCount}} 人</text>
+    <view class="btn small bulk-submit {{batchCount ? '' : 'btn-disabled'}}" bindtap="onBatchApprove">
+      通过（{{batchCount}}）
     </view>
   </view>
 

@@ -59,6 +59,11 @@ Page({
     this.load();
   },
 
+  /** 从提示条直接去接单：提示的价值就在「看见了能马上处理」 */
+  onGoOrders() {
+    wx.navigateTo({ url: '/pages/merchant/orders?status=pending_accept' });
+  },
+
   onSwitchTab(e) {
     this.setData({ tab: e.currentTarget.dataset.tab });
   },

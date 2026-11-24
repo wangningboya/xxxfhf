@@ -415,6 +415,32 @@
       </template>
     </el-dialog>
 
+    <!--
+      回退收款必须填原因（v3.50）：原因原样进用户的站内消息。
+      不填原因就回退，用户只看到「未收款」，不知道发生了什么，只能再来问一遍。
+    -->
+    <el-dialog v-model="revertDialog" title="回退为未收款" width="420px">
+      <div class="pay-tip">
+        回退后该单会重新变为「未收款」，并给顾客发一条站内消息说明原因。
+      </div>
+      <el-form label-width="88px">
+        <el-form-item label="回退原因">
+          <el-input
+            v-model="revertReason"
+            type="textarea"
+            :rows="3"
+            maxlength="200"
+            show-word-limit
+            placeholder="必填，会原样展示给顾客，例如：微信账单里没查到这笔，请核对后重新支付"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="revertDialog = false">取消</el-button>
+        <el-button type="primary" :loading="reverting" @click="submitRevert">确认回退</el-button>
+      </template>
+    </el-dialog>
+
     <ProxyOrderDialog v-model="proxyVisible" @created="reload" />
   </div>
 </template>
@@ -491,12 +517,17 @@ const rejectReason = ref('');
 const rejecting = ref(false);
 
 /** 退款：金额默认订单合计（单位元，输入框里给人看的是元，提交时换成分） */
-const refundDialog = ref(false);
-const refundTargetId = ref(null);
+const refundDialog = ref(false);const refundTargetId = ref(null);
 const refundTotal = ref(0);
 const refundAmount = ref('');
 const refundRemark = ref('');
 const refunding = ref(false);
+
+/** 回退收款（v3.50）：必填原因，会写进时间轴并原样发给顾客 */
+const revertDialog = ref(false);
+const revertTargetId = ref(null);
+const revertReason = ref('');
+const reverting = ref(false);
 
 /** 字典没加载出来时的兜底：初始三项，与服务端 PayMethod 常量一致 */
 const PAY_METHOD_FALLBACK = [
@@ -809,19 +840,42 @@ function onPayment(row, action) {
     refundDialog.value = true;
     return;
   }
-  const labelMap = { revert: '回退收款' };
-  ElMessageBox.confirm('确定' + labelMap[action] + '？', labelMap[action])
-    .then(() => {
-      // 回退走 payment 接口靠 action 区分（退款已在上面分流到弹窗）
-      const request = http.post('/admin/order/payment', { orderId: row.order.orderId, action });
-      request
-        .then(() => {
-          ElMessage.success('已' + labelMap[action]);
-          refreshDetail();
-        })
-        .catch(() => {});
+  // 回退必须先填原因（v3.50）：原因会原样进用户的站内消息，不能再点一下「确定」就完事
+  if (action === 'revert') {
+    revertTargetId.value = row.order.orderId;
+    revertReason.value = '';
+    revertDialog.value = true;
+  }
+}
+
+/**
+ * 提交回退收款。
+ *
+ * 原因由服务端二次校验（为空直接 400）：前端这道只是少跑一趟，
+ * 真正的规则不能只写在页面上。
+ */
+function submitRevert() {
+  const reason = (revertReason.value || '').trim();
+  if (!reason) {
+    ElMessage.warning('请填写回退原因，顾客会看到');
+    return;
+  }
+  reverting.value = true;
+  http
+    .post('/admin/order/payment', {
+      orderId: revertTargetId.value,
+      action: 'revert',
+      reason,
     })
-    .catch(() => {});
+    .then(() => {
+      ElMessage.success('已回退为未收款');
+      revertDialog.value = false;
+      refreshDetail();
+    })
+    .catch(() => {})
+    .finally(() => {
+      reverting.value = false;
+    });
 }
 
 /** 打开批量拒单弹窗；没选单时按钮本身是禁用的，这里再兜一次 */

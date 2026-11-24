@@ -239,15 +239,33 @@ Page({
       });
   },
 
+  /**
+   * 回退为未收款（v3.50 起必须填原因）。
+   *
+   * 原因会写进时间轴、并原样进用户的站内消息 —— 只改状态不说话，是这个场景里
+   * 最容易扯皮的一步：用户以为付了、系统显示未收，却没人告诉他为什么。
+   * 用 editable 的 showModal 收一句原因，比新开一页快，也不至于让人放弃填写。
+   */
   onRevertPay() {
     wx.showModal({
       title: '回退为未收款',
-      content: '用在「用户说转了但查不到」的情况，确定吗？',
+      content: '',
+      editable: true,
+      placeholderText: '必填，例如：微信账单里没查到这笔',
       success: (res) => {
         if (!res.confirm) {
           return;
         }
-        this.post('/admin/order/payment', { orderId: this.data.orderId, action: 'revert' }, '已回退');
+        const reason = (res.content || '').trim();
+        if (!reason) {
+          wx.showToast({ title: '请填写回退原因', icon: 'none' });
+          return;
+        }
+        this.post(
+          '/admin/order/payment',
+          { orderId: this.data.orderId, action: 'revert', reason },
+          '已回退'
+        );
       },
     });
   },

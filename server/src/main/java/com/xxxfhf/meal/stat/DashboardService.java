@@ -63,9 +63,12 @@ public class DashboardService {
         // 资金类待办（v1.53）：不限供餐日，与其余四个待办同口径
         int pendingCheck = count("SELECT COUNT(*) FROM `order` WHERE pay_status = 'claimed'");
         int pendingRefund = count("SELECT COUNT(*) FROM `order` WHERE pay_status = 'refunding'");
+        // 已出餐/已完成但钱没到（v3.50 / F-F07）：不限供餐日，欠得越久越该催
+        int pendingCollect = count("SELECT COUNT(*) FROM `order` "
+                + "WHERE status IN ('ready', 'completed') AND pay_status IN ('unpaid', 'claimed')");
 
         return new DashboardView(serveDate, pendingAccept, pendingCancel, pendingAudit,
-                pendingAddress, pendingCheck, pendingRefund,
+                pendingAddress, pendingCheck, pendingRefund, pendingCollect,
                 dayOrderCount, dayAmount, pendingPayment, publishedCombos);
     }
 
@@ -86,6 +89,7 @@ public class DashboardService {
      * @param pendingAddress  待确认收货地址
      * @param pendingCheck    待核对收款（`claimed`，不限日）
      * @param pendingRefund   待退款（`refunding`，不限日）
+     * @param pendingCollect  待收款（已出餐/已完成 + 未收款/声称已付款，不限日；v3.50）
      * @param dayOrderCount   该供餐日订单总数
      * @param dayAmount       该供餐日已确认收款金额（分）
      * @param pendingPayment  该供餐日待核对 / 待退款的单数
@@ -94,6 +98,7 @@ public class DashboardService {
     public record DashboardView(LocalDate serveDate,
                                 int pendingAccept, int pendingCancel, int pendingAudit,
                                 int pendingAddress, int pendingCheck, int pendingRefund,
+                                int pendingCollect,
                                 int dayOrderCount, long dayAmount,
                                 int pendingPayment, int publishedCombos) {
     }

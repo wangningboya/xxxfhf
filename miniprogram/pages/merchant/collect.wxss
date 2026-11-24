@@ -1,0 +1,131 @@
+@import "./merchant.wxss";
+
+.page {
+  padding: 24rpx;
+}
+
+.tip {
+  background: #fff7e6;
+  color: #a86b00;
+  font-size: 24rpx;
+  line-height: 1.6;
+  padding: 18rpx 24rpx;
+  border-radius: 14rpx;
+  margin-bottom: 20rpx;
+}
+
+.item {
+  background: #ffffff;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 18rpx;
+}
+
+.item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.no {
+  font-size: 26rpx;
+  color: #666666;
+}
+
+.late {
+  font-size: 24rpx;
+  font-weight: 600;
+}
+
+/* 逾期越久越显眼：0 天灰、1~2 天黄、3 天以上红 */
+.late-ok {
+  color: #999999;
+}
+
+.late-warn {
+  color: #e6a23c;
+}
+
+.late-red {
+  color: #e54d42;
+}
+
+.item-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12rpx;
+  font-size: 28rpx;
+  color: #1a1a1a;
+}
+
+.item-line.muted {
+  color: #888888;
+  font-size: 24rpx;
+}
+
+.who {
+  font-weight: 600;
+}
+
+.amount {
+  color: #e54d42;
+  font-weight: 600;
+}
+
+.pay-claimed {
+  color: #e6a23c;
+}
+
+.pay-unpaid {
+  color: #999999;
+}
+
+.item-remark {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  color: #a86b00;
+  word-break: break-all;
+}
+
+.item-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16rpx;
+  margin-top: 20rpx;
+}
+
+.btn-ghost {
+  background: #f5f5f5;
+  color: #555555;
+  border-radius: 10rpx;
+}
+
+.btn-main {
+  background: #ff9f1c;
+  color: #ffffff;
+  border-radius: 10rpx;
+}
+
+.loading {
+  text-align: center;
+  color: #999999;
+  font-size: 24rpx;
+  padding: 24rpx 0;
+}
+
+.empty {
+  text-align: center;
+  padding: 120rpx 0;
+}
+
+.empty-title {
+  font-size: 30rpx;
+  color: #333333;
+}
+
+.empty-desc {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  color: #999999;
+}

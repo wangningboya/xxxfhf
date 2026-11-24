@@ -10,6 +10,7 @@ import com.xxxfhf.meal.order.Order;
 import com.xxxfhf.meal.order.OrderItem;
 import com.xxxfhf.meal.order.OrderLogActions;
 import com.xxxfhf.meal.order.OrderStatusLogService;
+import com.xxxfhf.meal.order.PayStatus;
 import com.xxxfhf.meal.user.User;
 import com.xxxfhf.meal.user.UserMapper;
 import com.xxxfhf.meal.user.UserType;
@@ -57,7 +58,10 @@ public class NotifyService {
      */
     private static final Set<NotifyType> MESSAGE_ONLY = Set.of(
             NotifyType.COMPLETED, NotifyType.CANCEL_REJECTED,
-            NotifyType.REFUNDED, NotifyType.STOCK_RELEASED);
+            NotifyType.REFUNDED, NotifyType.STOCK_RELEASED,
+            // v3.50：没有订阅模板可用、或本来就不值得占用户额度，全部只落站内
+            NotifyType.PAY_CLAIMED, NotifyType.PAY_REVERTED, NotifyType.CANCEL_APPROVED,
+            NotifyType.PROXY_CREATED, NotifyType.ORDER_EXPIRED, NotifyType.ORDER_EXPIRED_SUMMARY);
 
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     /** 温馨提示里的短日期：thing 类型只有 20 字，年份省掉。 */
@@ -160,6 +164,56 @@ public class NotifyService {
         fire(NotifyType.STOCK_RELEASED, order);
     }
 
+    /* ---------- v3.50 补齐：六类只落站内消息 ---------- */
+
+    /** 用户声称已付款 → 商家（工作台只有角标，商家不刷就不知道有人在等核对） */
+    public void payClaimed(Order order) {
+        fire(NotifyType.PAY_CLAIMED, order);
+    }
+
+    /**
+     * 收款被回退为未收款 → 用户。
+     *
+     * @param reason 商家填的原因，原样进正文；这是「为什么说我没付」的唯一解释
+     */
+    public void payReverted(Order order, String reason) {
+        fire(NotifyType.PAY_REVERTED, order, reason);
+    }
+
+    /** 取消申请被同意 → 用户（驳回一直有，同意这条以前只通知商家） */
+    public void cancelApproved(Order order) {
+        fire(NotifyType.CANCEL_APPROVED, order);
+    }
+
+    /** 代客下单成功 → 用户 */
+    public void proxyCreated(Order order) {
+        fire(NotifyType.PROXY_CREATED, order);
+    }
+
+    /** 供餐日已过仍未接单，系统自动关闭 → 用户 */
+    public void orderExpired(Order order) {
+        fire(NotifyType.ORDER_EXPIRED, order);
+    }
+
+    /**
+     * 过期关闭的商家汇总，每次任务一条，不逐单刷屏。
+     *
+     * <p>这条不挂订单，直接写共享收件箱：商家要的是「昨天有几单没人管」，
+     * 逐单推只会在早上把人淹没。
+     */
+    public void orderExpiredSummary(int count) {
+        if (count <= 0) {
+            return;
+        }
+        try {
+            messageService.recordToMerchant(NotifyType.ORDER_EXPIRED_SUMMARY,
+                    messageTitle(NotifyType.ORDER_EXPIRED_SUMMARY, null),
+                    "昨日 " + count + " 笔订单未接单，已自动关闭");
+        } catch (RuntimeException e) {
+            log.warn("写过期关闭汇总消息失败 count={}", count, e);
+        }
+    }
+
     /* ==================== 内部 ==================== */
 
     /**
@@ -169,6 +223,13 @@ public class NotifyService {
      * 更糟的是事务后续回滚了，通知却已经发出去了。
      */
     private void fire(NotifyType type, Order order) {
+        fire(type, order, null);
+    }
+
+    /**
+     * @param note 要进正文的附加文字（目前只有「收款回退」的原因用），null 表示没有
+     */
+    private void fire(NotifyType type, Order order, String note) {
         if (order == null) {
             return;
         }
@@ -178,7 +239,7 @@ public class NotifyService {
         String source = AuditHelper.source();
         Runnable task = () -> {
             try {
-                doFire(type, order, operatorId, source);
+                doFire(type, order, operatorId, source, note);
             } catch (Exception ex) {
                 // 兜底：这里再漏出去就会影响主流程
                 log.warn("推送 {} 失败 orderNo={}", type.code(), order.getOrderNo(), ex);
@@ -197,11 +258,11 @@ public class NotifyService {
         }
     }
 
-    private void doFire(NotifyType type, Order order, Long operatorId, String source) {
+    private void doFire(NotifyType type, Order order, Long operatorId, String source, String note) {
         // 站内消息先写，且与下面每个分支都无关：模板没配、商家没绑 openid、用户拒绝授权，
         // 这三种情况下推送全部发不出去，但用户打开小程序必须还能看到「单子被接了」。
         // 顺序也重要 —— 放在最前面，后面任何一步抛异常都不影响它已经落库。
-        recordMessage(type, order);
+        recordMessage(type, order, note);
 
         // 只落站内消息的类型到此为止，不往下走推送（原因见 MESSAGE_ONLY）。
         // 判断放在这里而不是调用方，是为了让 OrderAdminService 只表达「订单结束了」
@@ -268,9 +329,9 @@ public class NotifyService {
      * 这里要的是一句人话，而且**必须在 {@code templates()} 之前就能算出来** ——
      * 否则「模板没配」的分支一 return，站内消息也跟着没了。
      */
-    private void recordMessage(NotifyType type, Order order) {
+    private void recordMessage(NotifyType type, Order order, String note) {
         try {
-            messageService.record(order, type, messageTitle(type, order), messageContent(type, order));
+            messageService.record(order, type, messageTitle(type, order), messageContent(type, order, note));
         } catch (RuntimeException e) {
             // MessageService 内部已兜过一次；这里再兜一层，保证不会反过来影响推送
             log.error("写站内消息失败 orderNo={} type={}", order.getOrderNo(), type.code(), e);
@@ -296,10 +357,16 @@ public class NotifyService {
             case CANCEL_REJECTED -> "取消申请未通过";
             case REFUNDED -> "退款已完成";
             case STOCK_RELEASED -> "份数已释放";
+            case PAY_CLAIMED -> "用户声称已付款";
+            case PAY_REVERTED -> "收款状态已改为未收款";
+            case CANCEL_APPROVED -> "取消申请已通过";
+            case PROXY_CREATED -> "商家已代你下单";
+            case ORDER_EXPIRED -> "订单已自动关闭";
+            case ORDER_EXPIRED_SUMMARY -> "订单超时关闭";
         };
     }
 
-    private String messageContent(NotifyType type, Order order) {
+    private String messageContent(NotifyType type, Order order, String note) {
         String summary = summaryOf(order);
         return switch (type) {
             case NEW_ORDER -> yuan(order.getTotalAmount()) + " 元 " + summary + "，" + nicknameOf(order);
@@ -346,13 +413,42 @@ public class NotifyService {
                 // 历史单可能没有 refund_amount（v3.49 之前），回退订单合计
                 Integer amount = order.getRefundAmount() == null
                         ? order.getTotalAmount() : order.getRefundAmount();
-                String note = nvl(order.getRefundRemark());
+                String refundNote = nvl(order.getRefundRemark());
                 yield "已退款 " + yuan(amount) + " 元，已原路退回"
-                        + (note.isEmpty() ? "" : "，备注：" + note);
+                        + (refundNote.isEmpty() ? "" : "，备注：" + refundNote);
             }
             case STOCK_RELEASED ->
                     "订单 " + nvl(order.getOrderNo())
                             + " 仍是待接单，但份数已因超时未申报支付方式被释放，请尽快付款或重新下单";
+            case PAY_CLAIMED -> {
+                String method = nvl(order.getPayMethod());
+                yield "订单 " + nvl(order.getOrderNo()) + "，" + summary
+                        + "，" + yuan(order.getTotalAmount()) + " 元"
+                        + (method.isEmpty() ? "" : "，申报方式：" + method)
+                        + "，请核对后确认收款";
+            }
+            case PAY_REVERTED -> {
+                String reason = note == null ? "" : note.trim();
+                yield "订单 " + nvl(order.getOrderNo()) + " 的收款状态已改为未收款"
+                        + (reason.isEmpty() ? "" : "，原因：" + reason)
+                        + "。请核对后重新点【我已完成付款】或联系商家";
+            }
+            case CANCEL_APPROVED -> "订单 " + nvl(order.getOrderNo()) + " 的取消申请已通过，订单已取消"
+                    + (PayStatus.REFUNDING.equals(order.getPayStatus()) ? "，已付款将安排退款" : "");
+            case PROXY_CREATED -> {
+                String day = order.getServeDate() == null ? "" : order.getServeDate().format(DAY_FMT) + " ";
+                String how = "delivery".equals(order.getDeliveryType())
+                        ? "配送" : "自取" + (nvl(order.getPickupSlot()).isEmpty() ? "" : " " + order.getPickupSlot());
+                yield "商家已代你下单：" + summary + "，" + yuan(order.getTotalAmount()) + " 元，"
+                        + day + how + "。请按与商家约定的方式付款，如需修改请尽快联系商家";
+            }
+            case ORDER_EXPIRED -> {
+                String day = order.getServeDate() == null ? "" : order.getServeDate().format(DAY_FMT) + " ";
+                yield day + "的订单商家未接单，已自动关闭"
+                        + (PayStatus.REFUNDING.equals(order.getPayStatus()) ? "，已付款将安排退款" : "")
+                        + "，如需用餐请重新下单";
+            }
+            case ORDER_EXPIRED_SUMMARY -> "昨日有订单超时未接单，已自动关闭";
         };
     }
 

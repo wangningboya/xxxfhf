@@ -1,0 +1,37 @@
+<view class="page">
+  <view class="tip">
+    已出餐 / 已完成但钱还没到的单，跨供餐日汇总，欠得最久的排最前。收了钱就点「确认收款」。
+  </view>
+
+  <view class="empty" wx:if="{{!loading && !list.length}}">
+    <view class="empty-title">没有待收款的单</view>
+    <view class="empty-desc">已出餐的单都收到钱了</view>
+  </view>
+
+  <view class="item" wx:for="{{list}}" wx:key="orderId" data-id="{{item.order.orderId}}" bindtap="onOpen">
+    <view class="item-head">
+      <text class="no">{{item.order.orderNo}}</text>
+      <text class="late {{item.overdueClass}}">{{item.overdueText}}</text>
+    </view>
+
+    <view class="item-line">
+      <text class="who">{{item.userNickName || '顾客'}}</text>
+      <text class="amount">¥{{item.amountText}}</text>
+    </view>
+
+    <view class="item-line muted">
+      <text>{{item.order.serveDate}} · {{item.order.deliveryType === 'delivery' ? '配送' : '自取'}}</text>
+      <text class="{{item.claimed ? 'pay-claimed' : 'pay-unpaid'}}">{{item.order.payStatusLabel}}</text>
+    </view>
+
+    <view class="item-remark" wx:if="{{item.order.remark}}">备注：{{item.order.remark}}</view>
+
+    <view class="item-actions">
+      <button class="btn-ghost" size="mini" data-id="{{item.order.orderId}}" catchtap="onOpen">查看订单</button>
+      <button class="btn-main" size="mini" data-id="{{item.order.orderId}}" catchtap="onConfirmPay">确认收款</button>
+    </view>
+  </view>
+
+  <view class="loading" wx:if="{{loading}}">加载中…</view>
+  <view class="loading" wx:elif="{{!hasMore && list.length}}">没有更多了</view>
+</view>

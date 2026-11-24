@@ -4,7 +4,7 @@ package com.xxxfhf.meal.notify;
  * 订阅消息与站内消息的类型清单，与需求 4.12「消息通知」一一对应。
  *
  * <p>其中 {@code completed} / {@code cancelRejected} / {@code refunded} / {@code stockReleased}
- * 四类**只落站内消息、不发微信订阅消息**（集合见 {@code NotifyService.MESSAGE_ONLY}）。
+ * 以及 v3.50 补齐的六类，**只落站内消息、不发微信订阅消息**（集合见 {@code NotifyService.MESSAGE_ONLY}）。
  *
  * 不做「截单前 N 小时提醒」：订阅消息是一次性的，每推一条消耗一次授权，
  * 提醒类消息最容易把授权次数耗光，反而让「拒单」这种关键通知发不出去。
@@ -62,7 +62,32 @@ public enum NotifyType {
     REFUNDED("refunded", "退款已完成", Recipient.USER),
 
     /** 份数因超时未申报支付方式被释放 → 用户（订单还在，但那份可能被别人买走） */
-    STOCK_RELEASED("stockReleased", "份数已释放", Recipient.USER);
+    STOCK_RELEASED("stockReleased", "份数已释放", Recipient.USER),
+
+    /* ---------------- v3.50 补齐的六类，全部只落站内消息 ---------------- */
+
+    /** 用户点「我已完成付款」→ 商家。只有工作台角标的话，商家不刷就不知道有人在等核对 */
+    PAY_CLAIMED("payClaimed", "用户声称已付款", Recipient.MERCHANT),
+
+    /**
+     * 商家把「已确认收款」回退为「未收款」→ 用户。
+     *
+     * <p>这是最容易扯皮的一段：用户以为付了、商家说没收到。只改状态不说话，
+     * 用户打开订单只会看到「未收款」，不知道发生了什么。商家填的原因进正文。
+     */
+    PAY_REVERTED("payReverted", "收款状态已改为未收款", Recipient.USER),
+
+    /** 取消申请被商家同意 → 用户（申请驳回已有 CANCEL_REJECTED，同意这条一直缺） */
+    CANCEL_APPROVED("cancelApproved", "取消申请已通过", Recipient.USER),
+
+    /** 代客下单成功 → 用户（代客对象多是不会用小程序的人，更不会自己翻订单） */
+    PROXY_CREATED("proxyCreated", "商家已代你下单", Recipient.USER),
+
+    /** 供餐日已过仍未接单，系统自动关闭 → 用户 */
+    ORDER_EXPIRED("orderExpired", "订单已自动关闭", Recipient.USER),
+
+    /** 同上，给商家的一条汇总（「昨日 N 笔」，不逐单刷屏） */
+    ORDER_EXPIRED_SUMMARY("orderExpiredSummary", "订单超时关闭", Recipient.MERCHANT);
 
     /** 接收方 */
     public enum Recipient {

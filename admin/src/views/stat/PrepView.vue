@@ -20,6 +20,25 @@
       </div>
     </div>
 
+    <!--
+      未接单提示（v3.50 / F-G11）：备菜数字只算「已接单及之后」，而截单之后往往还有一批单
+      挂在待接单。不提示的话，商家照着当前数字备料，第二天一定少做 ——
+      这是这个业务最痛的一种错，必须在主界面上说出来。
+    -->
+    <el-alert
+      v-if="pendingAcceptCount > 0"
+      type="warning"
+      :closable="false"
+      show-icon
+      class="pending-tip"
+    >
+      <template #title>
+        另有 <b>{{ pendingAcceptCount }}</b> 笔待接单（约 <b>{{ pendingAcceptQty }}</b> 份）
+        未计入下方数字，接单后刷新才会增加
+      </template>
+      <el-button type="warning" link @click="$router.push('/order')">去接单</el-button>
+    </el-alert>
+
     <template v-if="tab === 'dish'">
       <el-table v-loading="loading" :data="dishes" border size="small" style="width: 100%">
         <el-table-column prop="name" label="菜品 / 规格项" min-width="180">
@@ -102,6 +121,10 @@ const view = ref({ dishes: [], regions: [], selfPickup: null });
 
 const dishes = computed(() => view.value.dishes || []);
 
+/** 同日仍待接单的笔数与份数：不计入备菜数字，只用于顶部提示 */
+const pendingAcceptCount = computed(() => view.value.pendingAcceptCount || 0);
+const pendingAcceptQty = computed(() => view.value.pendingAcceptQty || 0);
+
 /** 自取栏固定排最后一行，与 Excel 保持一致 */
 const regionsWithPickup = computed(() => {
   const list = (view.value.regions || []).slice();
@@ -149,5 +172,9 @@ onMounted(() => {
 .remark-text {
   color: #a86b00;
   word-break: break-all;
+}
+/* 未接单提示：与表格留出间距，别让人误以为它属于表头 */
+.pending-tip {
+  margin: 12px 0;
 }
 </style>

@@ -121,6 +121,15 @@ const todoCards = computed(() => [
     desc: '钱已收到但要退，还没退完',
     to: '/order?payStatus=refunding',
   },
+  // 第三件资金事（v3.50 / F-F07）：餐已经给了、钱还没到。
+  // 单独一份清单而不是按供餐日筛：要捞的正是往期漏收的单
+  {
+    key: 'collect',
+    label: '待收款',
+    value: data.value.pendingCollect ?? 0,
+    desc: '已出餐/已完成但钱没到，按欠得最久排',
+    to: '/collect',
+  },
 ]);
 
 function load() {

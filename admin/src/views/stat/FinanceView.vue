@@ -31,6 +31,47 @@
       </div>
     </div>
 
+    <!--
+      勾稽校验（v3.50 / F-J14 / 需求 4.16）：六个桶各自看都对、合起来不平，是最难查的一类账。
+      这里给一个能自证的等式，差额不为 0 时点「看是哪几单」直接列出贡献差额的订单。
+    -->
+    <div class="check" :class="checkDiff === 0 ? 'check-ok' : 'check-bad'">
+      <span class="check-eq">
+        净应收 ¥{{ yuan(check.netReceivable) }} − 净已收 ¥{{ yuan(check.netReceived) }}
+        − 未收 ¥{{ yuan((summary.unpaid || {}).amount) }}
+        − 待确认 ¥{{ yuan((summary.claimed || {}).amount) }}
+        =
+      </span>
+      <b>差额 ¥{{ yuan(checkDiff) }}</b>
+      <span class="muted">{{ checkDiff === 0 ? '（账平）' : '（应为 0，说明有单关了但收款状态没跟着改）' }}</span>
+      <el-button v-if="checkDiff !== 0" type="danger" link @click="showCheckRows = !showCheckRows">
+        {{ showCheckRows ? '收起' : '看是哪几单' }}
+      </el-button>
+    </div>
+
+    <el-table
+      v-if="checkDiff !== 0 && showCheckRows"
+      :data="check.rows || []"
+      border
+      size="small"
+      style="width: 100%; margin-bottom: 12px"
+    >
+      <el-table-column prop="orderNo" label="订单号" width="150" />
+      <el-table-column prop="statusLabel" label="订单状态" width="100" />
+      <el-table-column prop="payStatusLabel" label="收款状态" width="110" />
+      <el-table-column label="应计应收" width="110" align="right">
+        <template #default="{ row }">¥{{ yuan(row.receivable) }}</template>
+      </el-table-column>
+      <el-table-column label="应计已收" width="110" align="right">
+        <template #default="{ row }">¥{{ yuan(row.received) }}</template>
+      </el-table-column>
+      <el-table-column label="对差额的贡献" width="130" align="right">
+        <template #default="{ row }">
+          <span class="price">¥{{ yuan(row.contribution) }}</span>
+        </template>
+      </el-table-column>
+    </el-table>
+
     <el-table v-loading="detailLoading" :data="detail" border size="small" style="width: 100%">
       <el-table-column prop="orderNo" label="订单号" width="150" />
       <el-table-column label="顾客" width="120">
@@ -62,7 +103,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import http, { download } from '../../api';
 import { useAuthStore } from '../../stores/auth';
@@ -83,6 +124,11 @@ const summary = ref({});
 const detail = ref([]);
 const detailLoading = ref(false);
 const activeBucket = ref('receivable');
+const showCheckRows = ref(false);
+
+/** 后端算好的勾稽校验：净应收、净已收、差额与贡献差额的订单 */
+const check = computed(() => summary.value.check || { netReceivable: 0, netReceived: 0, difference: 0, rows: [] });
+const checkDiff = computed(() => check.value.difference || 0);
 
 function yuan(cents) {
   return (Number(cents || 0) / 100).toFixed(2);
@@ -138,6 +184,32 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* 勾稽校验：账平时低调，不平时必须一眼看到 —— 这是「自证账平」的唯一一处 */
+.check {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+.check-ok {
+  background: #f0f9eb;
+  border: 1px solid #e1f3d8;
+  color: #529b2e;
+}
+.check-bad {
+  background: #fef0f0;
+  border: 1px solid #fde2e2;
+  color: #c45656;
+}
+.check-eq {
+  color: inherit;
+  opacity: 0.9;
+}
+
 .buckets {
   display: flex;
   gap: 12px;

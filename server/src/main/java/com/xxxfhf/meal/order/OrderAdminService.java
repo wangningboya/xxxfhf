@@ -122,6 +122,158 @@ public class OrderAdminService {
         return toRows(List.of(order)).get(0);
     }
 
+    /**
+     * 催收清单（v3.50 / 需求 4.21 / `F-F07`）：**餐已经给了、钱还没到**的单。
+     *
+     * <p>口径 {@code status ∈ {ready, completed}} 且 {@code pay_status ∈ {unpaid, claimed}}，
+     * **不限供餐日** —— 要捞的正是往期漏收的单，带上默认的「明天」等于先把要找的单排除掉。
+     *
+     * <p>含「出餐（配送中）」而不等「已完成」：现金单是在门口、在取餐那一刻收的钱，
+     * 等他点完「已送达」再催，等于把整天的现金单全堆到晚上。
+     *
+     * <p>按供餐日升序：欠得最久的排最前。同一天按订单号，方便照着顺序一单一单核。
+     */
+    public IPage<AdminOrderRow> collect(int page, int pageSize) {
+        Page<Order> pager = new Page<>(Math.max(page, 1), Math.min(Math.max(pageSize, 1), 100));
+        IPage<Order> result = orderMapper.selectPage(pager, collectQuery());
+
+        Page<AdminOrderRow> mapped = new Page<>(result.getCurrent(), result.getSize(), result.getTotal());
+        mapped.setRecords(toRows(result.getRecords()));
+        return mapped;
+    }
+
+    /** 催收清单的筛选与排序，分页查询与导出共用一份，避免两处口径写出差别。 */
+    private static com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Order> collectQuery() {
+        return Wrappers.<Order>lambdaQuery()
+                .in(Order::getStatus, List.of(OrderStatus.READY, OrderStatus.COMPLETED))
+                .in(Order::getPayStatus, List.of(PayStatus.UNPAID, PayStatus.CLAIMED))
+                .orderByAsc(Order::getServeDate)
+                .orderByAsc(Order::getOrderNo);
+    }
+
+    /**
+     * 导出催收清单（v3.50）。
+     *
+     * <p>不分页：单日几百单的量级，一次写完最省事，也不会出现「导出的比页面少」。
+     * 手机号按掩码导出 —— 这张表常在店里传阅，完整号码没什么用处。
+     */
+    public byte[] exportCollect() {
+        List<Order> orders = orderMapper.selectList(collectQuery());
+        // toRows 会批量补昵称，且**顺序与入参一致**，按下标配对即可，不必再按 ID 回查
+        List<AdminOrderRow> mapped = toRows(orders);
+        List<CollectExcelRow> rows = new ArrayList<>(orders.size());
+        LocalDate today = clock.today();
+        for (int i = 0; i < orders.size(); i++) {
+            Order order = orders.get(i);
+            rows.add(new CollectExcelRow(
+                    order.getOrderNo(),
+                    order.getServeDate() == null ? "" : order.getServeDate().toString(),
+                    mapped.get(i).userNickName(),
+                    mapped.get(i).contactPhone(),
+                    yuan(order.getTotalAmount()),
+                    "delivery".equals(order.getDeliveryType()) ? "配送" : "自取",
+                    PayStatus.label(order.getPayStatus()),
+                    overdueDays(order.getServeDate(), today),
+                    order.getRemark() == null ? "" : order.getRemark()));
+        }
+
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        try (com.alibaba.excel.ExcelWriter writer = com.alibaba.excel.EasyExcel.write(out).build()) {
+            com.alibaba.excel.write.metadata.WriteSheet sheet = com.alibaba.excel.EasyExcel
+                    .writerSheet(0, "待收款").head(CollectExcelRow.class).build();
+            writer.write(rows, sheet);
+        }
+        return out.toByteArray();
+    }
+
+    /** 逾期天数：供餐日到今天是第几天。当天出的餐算 0 天，不算逾期。 */
+    private static int overdueDays(LocalDate serveDate, LocalDate today) {
+        if (serveDate == null) {
+            return 0;
+        }
+        long days = java.time.temporal.ChronoUnit.DAYS.between(serveDate, today);
+        return (int) Math.max(0, days);
+    }
+
+    private static String yuan(Integer fen) {
+        return fen == null ? "0.00" : String.format("%.2f", fen / 100.0);
+    }
+
+    /** 催收清单导出的一行。列顺序即表头顺序，采购 / 收银照着念就行 */
+    public static class CollectExcelRow {
+        @com.alibaba.excel.annotation.ExcelProperty("订单号")
+        private String orderNo;
+        @com.alibaba.excel.annotation.ExcelProperty("供餐日")
+        private String serveDate;
+        @com.alibaba.excel.annotation.ExcelProperty("顾客")
+        private String nickName;
+        @com.alibaba.excel.annotation.ExcelProperty("联系电话")
+        private String phone;
+        @com.alibaba.excel.annotation.ExcelProperty("金额（元）")
+        private String amount;
+        @com.alibaba.excel.annotation.ExcelProperty("取送")
+        private String deliveryType;
+        @com.alibaba.excel.annotation.ExcelProperty("收款状态")
+        private String payStatus;
+        @com.alibaba.excel.annotation.ExcelProperty("逾期天数")
+        private int overdueDays;
+        @com.alibaba.excel.annotation.ExcelProperty("整单备注")
+        private String remark;
+
+        public CollectExcelRow() {
+        }
+
+        public CollectExcelRow(String orderNo, String serveDate, String nickName, String phone,
+                               String amount, String deliveryType, String payStatus,
+                               int overdueDays, String remark) {
+            this.orderNo = orderNo;
+            this.serveDate = serveDate;
+            this.nickName = nickName;
+            this.phone = phone;
+            this.amount = amount;
+            this.deliveryType = deliveryType;
+            this.payStatus = payStatus;
+            this.overdueDays = overdueDays;
+            this.remark = remark;
+        }
+
+        public String getOrderNo() {
+            return orderNo;
+        }
+
+        public String getServeDate() {
+            return serveDate;
+        }
+
+        public String getNickName() {
+            return nickName;
+        }
+
+        public String getPhone() {
+            return phone;
+        }
+
+        public String getAmount() {
+            return amount;
+        }
+
+        public String getDeliveryType() {
+            return deliveryType;
+        }
+
+        public String getPayStatus() {
+            return payStatus;
+        }
+
+        public int getOverdueDays() {
+            return overdueDays;
+        }
+
+        public String getRemark() {
+            return remark;
+        }
+    }
+
     /* ==================== 状态流转 ==================== */
 
     /**
@@ -497,9 +649,21 @@ public class OrderAdminService {
      *
      * 用在「用户说付了但商家查不到」的场景：状态与事实不符时必须能改回去，
      * 否则商家只能一直挂着一笔不存在的钱。
+     *
+     * <p><b>v3.50 起必须填原因</b>（≤200 字），原因写进时间轴并原样进用户站内消息：
+     * 用户端只会看到「未收款」，不告诉他为什么，等于让他再来问一遍。
+     *
+     * @param reason 回退原因，必填
      */
     @Transactional
-    public OrderService.OrderView revertPayment(Long operatorId, Long orderId) {
+    public OrderService.OrderView revertPayment(Long operatorId, Long orderId, String reason) {
+        String trimmed = reason == null ? "" : reason.trim();
+        if (trimmed.isEmpty()) {
+            throw BizException.param("回退收款必须填写原因，用户端会直接看到");
+        }
+        if (trimmed.length() > 200) {
+            throw BizException.param("回退原因最多 200 字");
+        }
         Order order = orderService.require(orderId);
         int affected = orderMapper.update(null, Wrappers.<Order>lambdaUpdate()
                 .set(Order::getPayStatus, PayStatus.UNPAID)
@@ -510,10 +674,13 @@ public class OrderAdminService {
             throw BizException.conflict("只有「已确认收款」可以回退，当前状态是「"
                     + PayStatus.label(order.getPayStatus()) + "」");
         }
-        log.info("收款回退 orderNo={} 操作人={}", order.getOrderNo(), operatorId);
+        log.info("收款回退 orderNo={} 操作人={} 原因={}", order.getOrderNo(), operatorId, trimmed);
         statusLogService.record(orderId, OrderLogActions.PAY_REVERT,
-                PayStatus.PAID, PayStatus.UNPAID, null, LocalDateTime.now());
-        return orderService.toView(orderService.require(orderId));
+                PayStatus.PAID, PayStatus.UNPAID, trimmed, LocalDateTime.now());
+        // 只改状态不说话，是这类纠纷里最糟的一步：用户以为付了、系统显示未收，却没人解释
+        Order reverted = orderService.require(orderId);
+        notifyService.payReverted(reverted, trimmed);
+        return orderService.toView(reverted);
     }
 
     /**
@@ -670,6 +837,8 @@ public class OrderAdminService {
         if (approve) {
             // 同意了就等于这单没了，商家要及时知道，别再排进备菜
             notifyService.cancelled(handledOrder);
+            // 用户提交申请后一直在等结果：只改状态等于让他自己刷页面（v3.50）
+            notifyService.cancelApproved(handledOrder);
         } else {
             // 驳回必须告诉用户：他申请完一直在等结果，不通知等于让他反复刷页面。
             // 只落站内消息，不占订阅消息额度（见 NotifyService.MESSAGE_ONLY）

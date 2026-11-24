@@ -5,6 +5,7 @@ import com.xxxfhf.meal.audit.AuditActions;
 import com.xxxfhf.meal.audit.AuditService;
 import com.xxxfhf.meal.common.BizException;
 import com.xxxfhf.meal.invite.InviteCodeMapper;
+import com.xxxfhf.meal.message.MessageService;
 import com.xxxfhf.meal.order.OrderMapper;
 import com.xxxfhf.meal.user.AuditAction;
 import com.xxxfhf.meal.user.AuditStatus;
@@ -53,6 +54,10 @@ class UserAuditServiceTest {
     /** 留痕是审核动作的副作用，这里 mock 掉；有专门一行断言确认它确实被调用了 */
     @Mock
     private AuditService auditService;
+
+    /** 审核结果会写一条站内消息（v3.50）。这里 mock 掉：本用例只关心状态机与留痕 */
+    @Mock
+    private MessageService messageService;
 
     @InjectMocks
     private UserAuditService service;

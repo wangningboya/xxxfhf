@@ -60,6 +60,11 @@
       <view class="stat-num {{pendingRefund > 0 ? 'stat-warn' : ''}}">{{pendingRefund}}</view>
       <view class="stat-label">待退款</view>
     </view>
+    <!-- 第三件资金事（v3.50 / F-F07）：餐已经给了、钱还没到，跨供餐日按欠得最久排 -->
+    <view class="stat" data-url="/pages/merchant/collect" bindtap="onGo">
+      <view class="stat-num {{pendingCollect > 0 ? 'stat-warn' : ''}}">{{pendingCollect}}</view>
+      <view class="stat-label">待收款</view>
+    </view>
     <view class="stat" data-url="/pages/merchant/menu" bindtap="onGo">
       <view class="stat-num">{{comboCount}}</view>
       <view class="stat-label">明日盒饭</view>

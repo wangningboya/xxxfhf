@@ -124,7 +124,13 @@ public class OrderService {
     @Transactional
     public OrderView createForUser(Long targetUserId, CreateCommand cmd, boolean force) {
         accessGuard.requireApproved(targetUserId);
-        return doCreate(targetUserId, cmd, true, force);
+        OrderView view = doCreate(targetUserId, cmd, true, force);
+        // 代客下单的对象多半是不会用小程序的人：不主动说一声，他既不知道单已下上，
+        // 也不知道几点取、多少钱。只落站内消息，不推订阅（多半没授权）—— v3.50
+        if (view != null && view.orderId() != null) {
+            notifyService.proxyCreated(orderMapper.selectById(view.orderId()));
+        }
+        return view;
     }
 
     private OrderView doCreate(Long userId, CreateCommand cmd, boolean skipCutoff, boolean force) {
@@ -513,6 +519,8 @@ public class OrderService {
                 PayStatus.UNPAID, PayStatus.CLAIMED, null, payMethod, now);
         log.info("用户声称已付款 orderNo={} userId={} 方式={}",
                 order.getOrderNo(), userId, payMethod);
+        // 只有工作台角标的话，商家不主动刷新就不知道有人在等核对（v3.50）
+        notifyService.payClaimed(require(orderId));
         return toView(require(orderId));
     }
 
@@ -592,6 +600,51 @@ public class OrderService {
         // 通知商家：不推的话这条申请只会躺在订单列表里等人翻（工作台角标是第二道保险）
         notifyService.cancelRequested(requested);
         return toView(requested);
+    }
+
+    /**
+     * 供餐日已过、仍是待接单 → 系统关单（v3.50 / 需求 4.9 / `F-E11`）。
+     *
+     * <p>待接单不是终态，但供餐日过去以后它已经不可能被履约。不关的话它会永远挂在
+     * 「待接单」、永远计入应收，工作台待办也永远不归零（这是真正的错账来源）。
+     *
+     * <p>复用 {@code cancelled} 而不是新增「已过期」状态：差异用动作码
+     * {@link OrderLogActions#ORDER_EXPIRE} 与消息文案表达，状态机、字典、对账、
+     * 备菜、两端页签都不必再为第七个状态改一遍。
+     *
+     * <p>钱的处置与取消完全同一条规则：`claimed` / `paid` 一律转「待退款」——
+     * 否则单子关了、钱还记在已收上，对账会凭空多出一笔。
+     *
+     * @return 是否真的关闭（已被接单 / 还没到供餐日次日 / 并发下已被别人改过，都返回 false）
+     */
+    @Transactional
+    public boolean expirePending(Long orderId) {
+        Order order = require(orderId);
+        if (!OrderStatus.PENDING_ACCEPT.equals(order.getStatus())) {
+            return false;
+        }
+        // 只关「供餐日 < 今天」的单：供餐日当天全天都允许商家补接单，
+        // 0 点刚过就关会把当天要送的餐全废掉
+        if (order.getServeDate() == null || !order.getServeDate().isBefore(clock.today())) {
+            return false;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        int affected = orderMapper.update(null, Wrappers.<Order>lambdaUpdate()
+                .set(Order::getStatus, OrderStatus.CANCELLED)
+                .set(Order::getCancelRequested, false)
+                .eq(Order::getId, orderId)
+                .eq(Order::getStatus, OrderStatus.PENDING_ACCEPT));
+        if (affected == 0) {
+            return false;
+        }
+        statusLogService.record(orderId, OrderLogActions.ORDER_EXPIRE,
+                OrderStatus.PENDING_ACCEPT, OrderStatus.CANCELLED, "供餐日已过且未接单", now);
+        releaseStock(order);
+        moveToRefundingIfPaid(orderId);
+        log.info("过期未接单关闭 orderNo={} serveDate={}", order.getOrderNo(), order.getServeDate());
+        // 事务提交后才真正写入，写失败也不影响关单本身
+        notifyService.orderExpired(require(orderId));
+        return true;
     }
 
     /**

@@ -19,7 +19,47 @@ const STYLES = {
   cancelled: { icon: '🚫', tone: 'muted' },
   newOrder: { icon: '📦', tone: 'warn' },
   cancelRequest: { icon: '↩️', tone: 'warn' },
+  // v3.50 补齐的类型。不补这里不报错，但会退化成默认铃铛，看不出是什么事
+  cancelRejected: { icon: '🙅', tone: 'muted' },
+  refunded: { icon: '💰', tone: 'ok' },
+  stockReleased: { icon: '⏳', tone: 'warn' },
+  payClaimed: { icon: '💳', tone: 'warn' },
+  payReverted: { icon: '↩️', tone: 'danger' },
+  cancelApproved: { icon: '✅', tone: 'muted' },
+  proxyCreated: { icon: '🧾', tone: 'ok' },
+  orderExpired: { icon: '⌛', tone: 'danger' },
+  orderExpiredSummary: { icon: '⌛', tone: 'warn' },
+  // 非订单类（NoticeType）：审核与地址
+  userApproved: { icon: '🎉', tone: 'ok' },
+  userRejected: { icon: '📝', tone: 'danger' },
+  addressRejected: { icon: '📍', tone: 'danger' },
+  addressRevoked: { icon: '📍', tone: 'warn' },
 };
+
+/**
+ * 没有订单的消息点进去该去哪。
+ *
+ * 审核类 → 「我的」（能看到审核状态与重新提交）；
+ * 地址类 → 地址列表（用户到那儿才知道要改哪一条）。
+ * 点了没反应是最糟的一种，所以这里给每类都留了落点。
+ */
+const NO_ORDER_TARGETS = {
+  userApproved: '/pages/index/index',
+  userRejected: '/pages/mine/index',
+  addressRejected: '/pages/address/list',
+  addressRevoked: '/pages/address/list',
+};
+
+/** tabBar 页只能用 switchTab 打开，navigateTo 会直接失败 */
+const TAB_PAGES = ['/pages/index/index', '/pages/home/index', '/pages/mine/index'];
+
+function go(url) {
+  if (TAB_PAGES.indexOf(url) >= 0) {
+    wx.switchTab({ url });
+    return;
+  }
+  wx.navigateTo({ url });
+}
 
 function decorate(item) {
   const style = STYLES[item.msgType] || { icon: '🔔', tone: 'muted' };
@@ -121,7 +161,14 @@ Page({
         this.setData({ ['items[' + index + '].unread']: false });
       }
       if (!item.orderId) {
-        wx.showToast({ title: '这条消息没有关联订单', icon: 'none' });
+        // 非订单类消息（审核 / 地址）没有订单可跳，给它们各自的落点；
+        // 实在没有落点才提示，别让用户点了没反应
+        const target = NO_ORDER_TARGETS[item.msgType];
+        if (target) {
+          go(target);
+        } else {
+          wx.showToast({ title: '这条消息没有关联订单', icon: 'none' });
+        }
         return;
       }
       const url =

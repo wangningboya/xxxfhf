@@ -9,6 +9,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.NotEmpty;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -27,6 +28,10 @@ import java.util.List;
 @RestController
 @RequestMapping("/admin/order")
 public class OrderAdminController {
+
+    /** xlsx 的媒体类型。导出接口只有这一个返回形式 */
+    private static final MediaType XLSX =
+            MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
 
     private final OrderAdminService orderAdminService;
     private final OrderService orderService;
@@ -58,6 +63,42 @@ public class OrderAdminController {
             @RequestParam(defaultValue = "20") int pageSize) {
         return ApiResponse.ok(PageResult.of(orderAdminService.list(
                 serveDate, status, keyword, cancelRequested, payStatus, page, pageSize)));
+    }
+
+    /**
+     * 催收清单（v3.50 / 需求 4.21 / `F-F07`）：已出餐或已完成、但钱还没到的单。
+     *
+     * <p>单独一个接口而不是给 {@code /list} 再加参数：它的排序是「供餐日升序，欠得最久的在前」，
+     * 与订单列表的「待接单优先」正好相反，混在一个接口里迟早会被改回去。
+     *
+     * <p>权限同订单查看与收款：这份清单里每一行都要能直接点「确认收款」。
+     */
+    @GetMapping("/collect")
+    @RequirePerm({Perms.ORDER_PAYMENT, Perms.ORDER_VIEW})
+    public ApiResponse<PageResult<OrderAdminService.AdminOrderRow>> collect(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int pageSize) {
+        return ApiResponse.ok(PageResult.of(orderAdminService.collect(page, pageSize)));
+    }
+
+    /**
+     * 导出催收清单（xlsx）。
+     *
+     * <p>用 {@code prep.export} 而不是 {@code order.view}：这张表带顾客与电话，
+     * 与备菜表同属「能把明细拿走」的一类，权限口径保持一致。
+     */
+    @GetMapping("/collect/export")
+    @RequirePerm(Perms.PREP_EXPORT)
+    public org.springframework.http.ResponseEntity<byte[]> exportCollect() {
+        byte[] body = orderAdminService.exportCollect();
+        return org.springframework.http.ResponseEntity.ok()
+                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
+                        org.springframework.http.ContentDisposition.attachment()
+                                .filename("待收款_" + java.time.LocalDate.now() + ".xlsx",
+                                        java.nio.charset.StandardCharsets.UTF_8)
+                                .build().toString())
+                .contentType(XLSX)
+                .body(body);
     }
 
     @GetMapping("/detail")
@@ -145,7 +186,8 @@ public class OrderAdminController {
         return switch (request.action()) {
             case "confirm" -> ApiResponse.ok(orderAdminService.confirmPayment(
                     operatorId, request.orderId(), request.payMethod()));
-            case "revert" -> ApiResponse.ok(orderAdminService.revertPayment(operatorId, request.orderId()));
+            case "revert" -> ApiResponse.ok(orderAdminService.revertPayment(
+                    operatorId, request.orderId(), request.reason()));
             default -> throw com.xxxfhf.meal.common.BizException.param("action 只能是 confirm 或 revert");
         };
     }
@@ -247,11 +289,15 @@ public class OrderAdminController {
      * <p>{@code payMethod} 只在 {@code action = confirm} 时必填（校验在
      * {@code DictService.requireValue} 里按字典 {@code pay_method} 做，不在这里加
      * {@code @NotBlank} —— {@code revert} 不需要方式，加了会让回退也跟着失败）。
+     *
+     * <p>v3.50 起 {@code action = revert} 必须带 {@code reason}：原因会原样进用户的
+     * 站内消息。校验放在 Service 里（按 action 分支），不在这里加 {@code @NotBlank}。
      */
     public record PaymentRequest(
             @NotNull(message = "缺少订单 ID") Long orderId,
             @NotBlank(message = "缺少操作类型") String action,
-            String payMethod) {
+            String payMethod,
+            String reason) {
     }
 
     public record IdRequest(@NotNull(message = "缺少订单 ID") Long orderId) {

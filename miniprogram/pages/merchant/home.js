@@ -54,6 +54,8 @@ Page({
     /** 资金类待办（v1.53 / F-J09）：不限供餐日，与其余待办同口径 */
     pendingCheck: 0,
     pendingRefund: 0,
+    /** 已出餐/已完成但钱没到（v3.50 / F-F07）：与上面两项同为不限供餐日的资金待办 */
+    pendingCollect: 0,
     comboCount: 0,
     acceptLabel: '待接单',
     auditLabel: '待审核',
@@ -107,6 +109,7 @@ Page({
             pendingAddress: d.pendingAddress || 0,
             pendingCheck: d.pendingCheck || 0,
             pendingRefund: d.pendingRefund || 0,
+            pendingCollect: d.pendingCollect || 0,
           })
         )
         // 只有备菜 / 对账权限的角色拿不到工作台数字，不该因此整页报错

@@ -96,7 +96,10 @@ public class PrepService {
             regions.add(agg.toRow());
         }
         // 自取固定排最后一行：它不属于任何区域，混在中间会让人以为是某个小区
-        return new PrepView(date, dishes, regions, selfPickup.toRow(), orders.size());
+        // 未接单的单独统计，只用于顶部提示，不混进任何一张汇总表（口径见 3.4 / 4.14）
+        List<Order> pending = pendingOrdersOf(date);
+        return new PrepView(date, dishes, regions, selfPickup.toRow(), orders.size(),
+                pending.size(), totalQtyOf(pending));
     }
 
     /**
@@ -113,6 +116,13 @@ public class PrepService {
             dishRows.add(new DishExcelRow(
                     "dish".equals(row.kind()) ? "菜品" : "规格",
                     row.name(), row.groupName(), row.qty(), String.join("、", row.comboNames())));
+        }
+        // 采购拿到的是一张表，看不到页面顶部的提示；未接单的缺口必须跟着表走
+        if (view.pendingAcceptCount() > 0) {
+            dishRows.add(new DishExcelRow("提示",
+                    "另有 " + view.pendingAcceptCount() + " 笔待接单（约 "
+                            + view.pendingAcceptQty() + " 份）未计入本表",
+                    null, 0, ""));
         }
 
         List<RegionExcelRow> regionRows = new ArrayList<>();
@@ -139,6 +149,31 @@ public class PrepService {
         return orderMapper.selectList(Wrappers.<Order>lambdaQuery()
                 .eq(Order::getServeDate, serveDate)
                 .in(Order::getStatus, OrderStatus.PREP_INCLUDED));
+    }
+
+    /**
+     * 同一天、仍待接单的订单。
+     *
+     * <p>它们**不计入**备菜数字（接单后才算），但必须让商家看见 —— 截单后打开备菜页，
+     * 很可能还有一批单挂在待接单，不看提示就照当前数字备料，第二天一定少做。
+     */
+    private List<Order> pendingOrdersOf(LocalDate serveDate) {
+        return orderMapper.selectList(Wrappers.<Order>lambdaQuery()
+                .eq(Order::getServeDate, serveDate)
+                .eq(Order::getStatus, OrderStatus.PENDING_ACCEPT));
+    }
+
+    private static int totalQtyOf(List<Order> orders) {
+        int total = 0;
+        for (Order order : orders) {
+            if (order.getItems() == null) {
+                continue;
+            }
+            for (OrderItem item : order.getItems()) {
+                total += Math.max(0, item.qtyOrZero());
+            }
+        }
+        return total;
     }
 
     /** 自取单没有区域；区域为空的配送单（历史脏数据）也归到自取栏，绝不丢弃。 */
@@ -346,10 +381,13 @@ public class PrepService {
 
     /**
      * @param orderCount 计入备菜的订单数（已接单及之后，不含待接单）
+     * @param pendingAcceptCount 同一供餐日仍待接单的订单数，**不计入**上面的数字，只用于提示
+     * @param pendingAcceptQty   这些待接单订单的盒饭份数合计
      * @param selfPickup 自取栏，固定排在区域汇总最后一行
      */
     public record PrepView(LocalDate serveDate, List<DishRow> dishes, List<RegionRow> regions,
-                           RegionRow selfPickup, int orderCount) {
+                           RegionRow selfPickup, int orderCount,
+                           int pendingAcceptCount, int pendingAcceptQty) {
     }
 
     /* ==================== Excel 行 ==================== */

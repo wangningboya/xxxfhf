@@ -78,6 +78,13 @@ const routes = [
         meta: { title: '对账视图', perm: 'finance.view' },
       },
       {
+        // 催收清单（v3.50 / 需求 4.21）：跨供餐日的「已交付未收款」待办。
+        // 与对账分开放：对账是某一天的账，催收是跨天的活，混在一起六个数会被带歪
+        path: 'collect',
+        component: () => import('../views/order/CollectList.vue'),
+        meta: { title: '催收清单', perms: ['order.payment', 'order.view'] },
+      },
+      {
         path: 'role',
         component: () => import('../views/role/RoleList.vue'),
         meta: { title: '角色权限', perm: 'role.manage' },

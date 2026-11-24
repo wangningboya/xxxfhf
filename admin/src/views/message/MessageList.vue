@@ -78,10 +78,19 @@ const router = useRouter();
  *
  * 未知类型不吞掉：直接把 code 当标签文字显示，将来后端加了类型也不会变成空白。
  */
+/**
+ * 消息类型 → 标签与配色。后台这份收件箱只装商家侧的消息（用户视角的那几类在
+ * 小程序里），所以标签按「要不要马上动手」分色：钱的事 warning、结果通知 info。
+ *
+ * 新增类型必须在这里补一行，否则会退化成默认铃铛（不报错，但看不出是什么事）。
+ */
 const TYPES = {
   newOrder: { label: '新订单', tag: 'warning' },
   cancelRequest: { label: '取消申请', tag: 'warning' },
   cancelled: { label: '订单取消', tag: 'info' },
+  // v3.50 补齐的商家侧消息
+  payClaimed: { label: '声称已付款', tag: 'warning' },
+  orderExpiredSummary: { label: '超时关单', tag: 'info' },
 };
 
 const rows = ref([]);

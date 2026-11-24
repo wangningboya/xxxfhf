@@ -20,6 +20,27 @@
     </view>
   </view>
 
+  <!--
+    勾稽校验（v3.50 / F-J14）：净应收 − 净已收 − 未收 − 待确认 = 差额，应恒为 0。
+    六个数字各自看都对、合起来不平，是最难查的一类账，这一行就是用来自证的。
+  -->
+  <view class="check {{checkDiff === 0 ? 'check-ok' : 'check-bad'}}">
+    <view class="check-eq">
+      净应收 ¥{{checkText.netReceivable}} − 净已收 ¥{{checkText.netReceived}}
+      − 未收 ¥{{checkText.unpaid}} − 待确认 ¥{{checkText.claimed}}
+    </view>
+    <view class="check-diff">
+      差额 ¥{{checkText.difference}}
+      <text class="check-note">{{checkDiff === 0 ? '账平' : '应为 0'}}</text>
+    </view>
+    <view wx:if="{{checkDiff !== 0}}" class="check-rows">
+      <view class="check-row" wx:for="{{checkRows}}" wx:key="orderNo">
+        <text>{{item.orderNo}} · {{item.statusLabel}} / {{item.payStatusLabel}}</text>
+        <text>¥{{item.contributionText}}</text>
+      </view>
+    </view>
+  </view>
+
   <view wx:if="{{detailBucket}}" class="card">
     <view class="card-title">{{detailTitle}}</view>
     <view wx:if="{{detailLoading}}" class="muted">加载中…</view>

@@ -111,6 +111,7 @@ const MENU_GROUPS = [
     items: [
       { path: '/prep', title: '备菜统计', perm: 'prep.view' },
       { path: '/finance', title: '对账视图', perm: 'finance.view' },
+      { path: '/collect', title: '催收清单', perm: 'order.payment' },
     ],
   },
   {

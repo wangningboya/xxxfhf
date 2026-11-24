@@ -32,6 +32,13 @@ public final class OrderLogActions {
     public static final String ORDER_COMPLETE = "order.complete";
     public static final String ORDER_PICKUP = "order.pickup";
     public static final String ORDER_CANCEL = "order.cancel";
+    /**
+     * 供餐日已过、仍没人接单 → 系统自动关闭（v3.50）。
+     *
+     * <p>与 {@code order.cancel} 分开：目标状态同为「已取消」，但「谁关的、为什么关」
+     * 是两件事。合成一个码之后，事后想知道「有多少单是被系统关掉的」只能靠猜。
+     */
+    public static final String ORDER_EXPIRE = "order.expire";
 
     /* ---------------- 收款状态线 ---------------- */
 
@@ -64,6 +71,7 @@ public final class OrderLogActions {
             new Action(ORDER_COMPLETE, "完成订单"),
             new Action(ORDER_PICKUP, "取餐核销"),
             new Action(ORDER_CANCEL, "取消订单"),
+            new Action(ORDER_EXPIRE, "超时未接单关闭"),
             new Action(PAY_CLAIM, "用户声称已付款"),
             new Action(PAY_CONFIRM, "确认收款"),
             new Action(PAY_REVERT, "收款回退"),

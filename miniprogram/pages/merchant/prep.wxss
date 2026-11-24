@@ -145,3 +145,29 @@
   display: block;
   color: #a86b00;
 }
+
+/* 未接单提示（v3.50）：与「计入订单」卡片区分开，走警示色，别被当成普通说明文字 */
+.pending-tip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fff3e0;
+  border-radius: 14rpx;
+  padding: 20rpx 24rpx;
+  margin: 0 0 18rpx;
+}
+
+.pending-main {
+  font-size: 25rpx;
+  color: #a86b00;
+  line-height: 1.5;
+  flex: 1;
+}
+
+.pending-go {
+  font-size: 25rpx;
+  color: #ff9f1c;
+  font-weight: 600;
+  margin-left: 16rpx;
+  white-space: nowrap;
+}
