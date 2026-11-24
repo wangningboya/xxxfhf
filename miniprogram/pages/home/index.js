@@ -1,6 +1,8 @@
 const app = getApp();
 const { request } = require('../../utils/request');
-const { dateStr, addDays } = require('../../utils/format');
+const { dateStr, addDays, yuan, assetUrl } = require('../../utils/format');
+const dict = require('../../utils/dict');
+const cartUtil = require('../../utils/cart');
 const share = require('../../utils/share');
 
 Page({
@@ -21,6 +23,12 @@ Page({
     unreadCount: 0,
     unreadBadge: '',
     noticeItems: [],
+    /** 明日菜单预览：横向滑动卡片，数据直接来自已请求的次日菜单（需求 4.5 / F-D11） */
+    previewItems: [],
+    /** 明日进行中的订单（待接单 / 已接单 / 待取餐）取最新一笔，没有则为 null 不渲染 */
+    orderBar: null,
+    /** 购物车份数：车里有货才显示悬浮球（与点餐页同款，需求 4.5 / D-15） */
+    cartCount: 0,
   },
 
   onLoad(options) {
@@ -39,6 +47,8 @@ Page({
     if (shareEntry) {
       this.shareOptions = shareEntry;
     }
+    // 每次显示都重读购物车：从盒饭详情加完货返回首页时正好落在这里，球数才是新的
+    this.refreshCartBar();
     this.init();
   },
 
@@ -81,6 +91,7 @@ Page({
       .then((menu) => {
         if (menu) {
           this.applyMenuStatus(menu);
+          this.applyMenuPreview(menu);
         }
       })
       .catch((err) => {
@@ -91,8 +102,97 @@ Page({
         this.loadingNow = false;
       });
 
-    // 消息与菜单并行：它慢或失败都不该拖住「开始点餐」按钮
+    // 消息与订单状态条并行：它们慢或失败都不该拖住「开始点餐」按钮
     this.loadMessages();
+    this.loadOrderBar();
+  },
+
+  /**
+   * 明日菜单预览：与点餐页完全同口径地渲染次日菜单（封面 / 价格 / 剩余份数）。
+   * 数据就是上面那次 /menu 请求的返回，不再单独发请求。
+   */
+  applyMenuPreview(menu) {
+    const previewItems = (menu.items || []).map((item) => ({
+      comboId: item.comboId,
+      name: item.name,
+      coverUrl: assetUrl(item.cover),
+      priceText: yuan(item.price),
+      // 口径与点餐页一致：remainQty 为 null / undefined 表示不限量
+      remainText: item.remainQty === null || item.remainQty === undefined
+        ? '不限量'
+        : (item.remainQty > 0 ? '剩 ' + item.remainQty + ' 份' : '已售完'),
+      soldOut: item.remainQty !== null && item.remainQty !== undefined && item.remainQty <= 0,
+    }));
+    this.setData({ previewItems });
+  },
+
+  /**
+   * 订单状态条：明天那笔还在进行中的单（待接单 / 已接单 / 待取餐）。
+   *
+   * 复用订单列表的 /order/mine 取第一页再前端过滤，不给后端加接口；
+   * 多笔命中取列表里最新的一条；失败静默 —— 首页的第一件事是点餐，
+   * 订单接口挂了不该顶一个红色提示出来。
+   */
+  loadOrderBar() {
+    const serveDate = this.data.serveDate;
+    request({ url: '/order/mine?page=1&pageSize=20' })
+      .then((result) => {
+        const ACTIVE = ['pending_accept', 'accepted', 'ready'];
+        const hit = (result.list || []).find(
+          (o) => o.serveDate === serveDate && ACTIVE.indexOf(o.status) !== -1
+        );
+        if (!hit) {
+          this.setData({ orderBar: null });
+          return;
+        }
+        this.setData({
+          orderBar: {
+            orderId: hit.orderId,
+            statusLabel: hit.statusLabel || dict.label('order_status', hit.status),
+            // 配色优先用服务端下发的 statusTag，本地字典没加载时也能正确上色
+            tagClass: 'tag-' + (hit.statusTag || dict.tagType('order_status', hit.status)),
+            qty: (hit.items || []).reduce((s, it) => s + (it.qty || 0), 0),
+            summary: (hit.items || []).map((it) => it.name + '×' + it.qty).join('、'),
+          },
+        });
+      })
+      .catch(() => {});
+  },
+
+  onOpenOrder() {
+    if (!this.data.orderBar) {
+      return;
+    }
+    wx.navigateTo({ url: '/pages/order/detail?orderId=' + this.data.orderBar.orderId });
+  },
+
+  /** 点预览卡片进盒饭详情，与点餐页行为一致（需求 4.5） */
+  onOpenCombo(e) {
+    const comboId = e.currentTarget.dataset.id;
+    if (!comboId) {
+      return;
+    }
+    wx.navigateTo({
+      url: '/pages/combo/detail?comboId=' + comboId + '&serveDate=' + this.data.serveDate,
+    });
+  },
+
+  /**
+   * 悬浮购物车球：口径与点餐页完全一致 —— 先作废跨 0 点的过期车，再读份数。
+   * 车里有货才渲染，空车不占位置（需求 4.5 / D-15）。
+   */
+  refreshCartBar() {
+    cartUtil.expireIfStale();
+    const cart = cartUtil.load();
+    this.setData({ cartCount: cartUtil.count(cart) });
+  },
+
+  onOpenCart() {
+    if (!this.data.cartCount) {
+      wx.showToast({ title: '还没有选餐', icon: 'none' });
+      return;
+    }
+    wx.navigateTo({ url: '/pages/cart/index' });
   },
 
   /**

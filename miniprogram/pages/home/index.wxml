@@ -33,11 +33,46 @@
     </view>
   </view>
 
-  <!-- 店招 -->
+  <!-- 订单状态条：明天那笔还在进行中的单，没有就不渲染 -->
+  <view class="order-bar" wx:if="{{orderBar}}" bindtap="onOpenOrder">
+    <view class="order-bar-main">
+      <view class="order-bar-title">明天的午餐 · {{orderBar.qty}} 份</view>
+      <view class="order-bar-sub">{{orderBar.summary}}</view>
+    </view>
+    <view class="order-bar-tag {{orderBar.tagClass}}">{{orderBar.statusLabel}}</view>
+  </view>
+
+  <!-- 店招：公告只在顶部通知栏显示一处，这里只留店名与欢迎语 -->
   <view class="hero">
     <view class="hero-name">{{shopName}}</view>
-    <view class="hero-notice" wx:if="{{shopNotice}}">{{shopNotice}}</view>
-    <view class="hero-notice hero-notice-empty" wx:else>欢迎光临，今天想吃点什么</view>
+    <view class="hero-welcome">欢迎光临，今天想吃点什么</view>
+  </view>
+
+  <!-- 明日菜单预览：横向滑动，字段与点餐页同口径；停业或空菜单不渲染 -->
+  <view class="menu-preview" wx:if="{{previewItems.length}}">
+    <view class="preview-head">
+      <text class="preview-title">明日菜单（{{serveDate}}）</text>
+      <text class="preview-hint">点击查看详情</text>
+    </view>
+    <scroll-view class="preview-scroll" scroll-x enhanced show-scrollbar="{{false}}">
+      <view
+        class="preview-card {{item.soldOut ? 'preview-soldout' : ''}}"
+        wx:for="{{previewItems}}"
+        wx:key="comboId"
+        data-id="{{item.comboId}}"
+        bindtap="onOpenCombo"
+      >
+        <image class="preview-cover" src="{{item.coverUrl}}" mode="aspectFill" wx:if="{{item.coverUrl}}"></image>
+        <view class="preview-cover preview-cover-empty" wx:else>
+          <text>暂无图</text>
+        </view>
+        <view class="preview-name">{{item.name}}</view>
+        <view class="preview-meta">
+          <text class="preview-price">{{item.priceText}}</text>
+          <text class="preview-remain">{{item.remainText}}</text>
+        </view>
+      </view>
+    </scroll-view>
   </view>
 
   <!-- 营业状态：取次日菜单，与点餐页同源 -->
@@ -68,10 +103,10 @@
     {{loading ? '加载中…' : '开始点餐'}}
   </view>
 
-  <view class="tips">
-    <view class="tips-line">· 下单统一在「点餐」页，明天午饭前配送到手或到店自取</view>
-    <view class="tips-line">· 未接单可自行取消；已接单在截单前也能自行取消，截单后需申请商家同意</view>
-    <view class="tips-line" wx:if="{{shopAddress}}">· 到店自取请到：{{shopAddress}}（长按可复制）</view>
+  <!-- 悬浮购物车球：车里有货才出现，样式与点餐页同款（需求 4.5 / D-15） -->
+  <view class="cart-fab" wx:if="{{cartCount > 0}}" bindtap="onOpenCart">
+    <image class="cart-fab-icon" src="/assets/tabbar/cart.png" mode="aspectFit" />
+    <view class="cart-fab-badge">{{cartCount > 99 ? '99+' : cartCount}}</view>
   </view>
 
   <!-- 预留位：后续推销位叠在这里，本期不渲染任何内容 -->

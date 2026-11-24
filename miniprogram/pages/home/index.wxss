@@ -110,15 +110,187 @@ page {
   letter-spacing: 2rpx;
 }
 
-.hero-notice {
+.hero-welcome {
   margin-top: 20rpx;
   font-size: 26rpx;
-  color: #fff6e8;
-  line-height: 1.6;
+  color: #fff0d9;
 }
 
-.hero-notice-empty {
-  color: #fff0d9;
+/* ---------- 订单状态条 ---------- */
+
+.order-bar {
+  display: flex;
+  align-items: center;
+  background: #ffffff;
+  border-left: 8rpx solid #ff9f1c;
+  border-radius: 16rpx;
+  padding: 20rpx 24rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+}
+
+.order-bar-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.order-bar-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.order-bar-sub {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: #9a9a9a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.order-bar-tag {
+  flex: none;
+  margin-left: 16rpx;
+  font-size: 22rpx;
+}
+
+/* ---------- 明日菜单预览 ---------- */
+
+.menu-preview {
+  margin-bottom: 24rpx;
+}
+
+.preview-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 4rpx 8rpx 16rpx;
+}
+
+.preview-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.preview-hint {
+  font-size: 22rpx;
+  color: #b0b0b0;
+}
+
+.preview-scroll {
+  width: 100%;
+  white-space: nowrap;
+}
+
+.preview-card {
+  display: inline-block;
+  width: 240rpx;
+  margin-right: 20rpx;
+  background: #ffffff;
+  border-radius: 16rpx;
+  padding: 16rpx;
+  box-sizing: border-box;
+  vertical-align: top;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+}
+
+.preview-card:last-child {
+  margin-right: 0;
+}
+
+.preview-cover {
+  width: 208rpx;
+  height: 160rpx;
+  border-radius: 12rpx;
+  background: #f2f2f2;
+}
+
+.preview-cover-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-cover-empty text {
+  font-size: 22rpx;
+  color: #c0c0c0;
+}
+
+.preview-name {
+  margin-top: 14rpx;
+  font-size: 26rpx;
+  color: #1a1a1a;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.preview-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-top: 8rpx;
+}
+
+.preview-price {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #ff9f1c;
+}
+
+.preview-remain {
+  font-size: 22rpx;
+  color: #9a9a9a;
+}
+
+.preview-soldout .preview-cover {
+  opacity: 0.4;
+}
+
+.preview-soldout .preview-name,
+.preview-soldout .preview-remain {
+  color: #c0c0c0;
+}
+
+/* ---------- 悬浮购物车球（与点餐页同款） ---------- */
+
+.cart-fab {
+  position: fixed;
+  right: 32rpx;
+  bottom: calc(env(safe-area-inset-bottom) + 140rpx);
+  width: 100rpx;
+  height: 100rpx;
+  border-radius: 50%;
+  background: #ff9f1c;
+  box-shadow: 0 8rpx 24rpx rgba(255, 159, 28, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.cart-fab-icon {
+  width: 52rpx;
+  height: 52rpx;
+}
+
+.cart-fab-badge {
+  position: absolute;
+  top: -6rpx;
+  right: -6rpx;
+  min-width: 36rpx;
+  height: 36rpx;
+  padding: 0 8rpx;
+  border-radius: 18rpx;
+  background: #e8442e;
+  color: #ffffff;
+  font-size: 22rpx;
+  line-height: 36rpx;
+  text-align: center;
+  box-sizing: border-box;
 }
 
 /* ---------- 营业状态 ---------- */
@@ -187,17 +359,4 @@ page {
 .start-btn-disabled {
   background: #e6e6e6;
   color: #a8a8a8;
-}
-
-/* ---------- 说明 ---------- */
-
-.tips {
-  margin-top: 40rpx;
-  padding: 0 8rpx;
-}
-
-.tips-line {
-  font-size: 24rpx;
-  color: #9a9a9a;
-  line-height: 1.9;
 }
