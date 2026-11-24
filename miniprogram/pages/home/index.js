@@ -1,6 +1,7 @@
 const app = getApp();
 const { request } = require('../../utils/request');
 const { dateStr, addDays } = require('../../utils/format');
+const share = require('../../utils/share');
 
 Page({
   data: {
@@ -27,11 +28,26 @@ Page({
   },
 
   onShow() {
+    // 每次显示都要重开：分享菜单不跨页面状态，从别的页返回后不调会退回默认（不带 shareTicket）
+    share.enableShareMenu();
     if (this.loadingNow) {
       return;
     }
     this.loadingNow = true;
+    // 热启动从群卡片进来时 onLoad 不会重跑，用 App.onShow 接住的那份参数覆盖 onLoad 留下的旧参数
+    const shareEntry = app.takeShareEntryOptions();
+    if (shareEntry) {
+      this.shareOptions = shareEntry;
+    }
     this.init();
+  },
+
+  /**
+   * 转发到群。商家把这张卡片发到服务群，群成员点进来才带得到群信息（群准入的主路径）；
+   * 没有这个方法，右上角连「转发」按钮都不会出现。
+   */
+  onShareAppMessage() {
+    return share.buildShareCard(this.data.shopName, '/pages/home/index');
   },
 
   init() {

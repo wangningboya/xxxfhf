@@ -228,7 +228,7 @@
             :value="item.value"
           />
         </el-select>
-        <span class="muted">作废只对「未使用」的码有效；已使用的码作废会误导对方以为准入被撤销</span>
+        <span class="muted">作废只对还有剩余次数的码有效；已用完的码作废会让人以为准入被撤销</span>
       </div>
       <el-table v-loading="inviteLoading" :data="invites" border size="small" style="width: 100%">
         <el-table-column prop="code" label="邀请码" width="170">
@@ -244,13 +244,9 @@
             <el-tag size="small" :type="inviteTag(row.status)">{{ inviteLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="使用者" min-width="150">
+        <el-table-column label="已用次数" width="110">
           <template #default="{ row }">
-            <template v-if="row.usedByName">
-              <div>{{ row.usedByName }}</div>
-              <div v-if="row.usedByPhone" class="muted">{{ row.usedByPhone }}</div>
-            </template>
-            <span v-else class="muted">—</span>
+            <span :class="{ muted: !row.usedCount }">{{ row.usedCount }} / {{ row.maxUses }}</span>
           </template>
         </el-table-column>
         <el-table-column label="生成人" width="110">
@@ -261,45 +257,52 @@
         <el-table-column label="有效期至" width="150">
           <template #default="{ row }">{{ (row.expireAt || '').replace('T', ' ').slice(0, 16) }}</template>
         </el-table-column>
-        <el-table-column label="使用时间" width="150">
-          <template #default="{ row }">{{ (row.usedAt || '—').replace('T', ' ').slice(0, 16) }}</template>
+        <el-table-column label="最近使用" width="150">
+          <template #default="{ row }">{{ (row.lastUsedAt || '—').replace('T', ' ').slice(0, 16) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="90">
+        <el-table-column label="操作" width="150">
           <template #default="{ row }">
             <el-button
-              v-if="row.status === 'unused'"
+              v-if="canRevokeInvite(row)"
               link
               type="danger"
               @click="onRevoke(row)"
             >
               作废
             </el-button>
-            <span v-else class="muted">—</span>
+            <el-button
+              link
+              type="primary"
+              :disabled="!row.usedCount"
+              @click="openInviteUses(row)"
+            >
+              使用者
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
     </el-dialog>
 
-    <!-- 生成表单：数量 1~20，一次给一个小群发完 -->
+    <!-- 生成表单：一个码带次数，填 20 次就是这张码能被 20 个人各用一次 -->
     <el-dialog v-model="inviteFormVisible" title="生成邀请码" width="440px">
       <el-form label-width="80px">
-        <el-form-item label="数量">
-          <el-input-number v-model="inviteForm.count" :min="1" :max="20" :step="1" />
-          <span class="muted form-hint">最多 20 张</span>
+        <el-form-item label="可用次数">
+          <el-input-number v-model="inviteForm.uses" :min="1" :step="1" />
+          <span class="muted form-hint">这张码可被多少人各用一次</span>
         </el-form-item>
         <el-form-item label="有效期">
           <el-input-number v-model="inviteForm.expireHours" :min="1" :max="720" :step="24" />
           <span class="muted form-hint">小时（1-720）</span>
         </el-form-item>
       </el-form>
-      <div class="muted">一次性使用；用户凭码进入后直接通过审核。</div>
+      <div class="muted">只生成 1 个码；用户凭码进入后直接通过审核。</div>
       <template #footer>
         <el-button @click="inviteFormVisible = false">取消</el-button>
         <el-button type="primary" :loading="inviteCreating" @click="onSubmitInvites">生成</el-button>
       </template>
     </el-dialog>
 
-    <!-- 生成结果逐张展示：每张旁边一个复制，多张再给「全部复制」 -->
+    <!-- 生成结果：只有一个码，确认键直接当复制用 -->
     <el-dialog
       v-model="inviteCreatedVisible"
       title="邀请码已生成"
@@ -310,27 +313,42 @@
         <div
           v-for="item in inviteCreatedList"
           :key="item.code"
-          class="invite-created-row"
-          :class="{ single: inviteCreatedList.length === 1 }"
+          class="invite-created-row single"
         >
           <code class="invite-created-code">{{ item.code }}</code>
           <div class="muted invite-created-exp">
+            可用 {{ item.maxUses }} 次，已用 {{ item.usedCount }} 次
+          </div>
+          <div class="muted invite-created-exp">
             有效期至 {{ (item.expireAt || '').replace('T', ' ').slice(0, 16) }}
           </div>
-          <el-button link type="primary" @click="onCopyInviteCode(item.code)">复制</el-button>
         </div>
       </div>
-      <div class="muted">一次性使用；用户凭码进入后直接通过审核。</div>
+      <div class="muted">用户凭码进入后直接通过审核；谁用过可在「邀请码管理 → 使用者」里看。</div>
       <template #footer>
         <el-button @click="inviteCreatedVisible = false">关闭</el-button>
-        <el-button
-          v-if="inviteCreatedList.length > 1"
-          type="primary"
-          @click="onCopyAllInvites"
-        >
-          全部复制（{{ inviteCreatedList.length }}）
-        </el-button>
+        <el-button type="primary" @click="onCopyAllInvites">复制</el-button>
       </template>
+    </el-dialog>
+
+    <!-- 使用者名单：一个码对应多人，只在网页后台看，小程序端只显示已用 X/N -->
+    <el-dialog
+      v-model="inviteUsesVisible"
+      :title="'使用者 — ' + inviteUsesCode"
+      width="520px"
+    >
+      <el-table v-loading="inviteUsesLoading" :data="inviteUses" border size="small" style="width: 100%">
+        <el-table-column label="使用者" min-width="160">
+          <template #default="{ row }">
+            <div>{{ row.name }}</div>
+            <div v-if="row.phone" class="muted">{{ row.phone }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="使用时间" width="160">
+          <template #default="{ row }">{{ (row.usedAt || '').replace('T', ' ').slice(0, 16) }}</template>
+        </el-table-column>
+      </el-table>
+      <div class="muted invite-uses-foot">共 {{ inviteUses.length }} 人用过这张码</div>
     </el-dialog>
 
     <!-- 代填 / 修改手机号：接口早就有了，之前两端都只能看不能改 -->
@@ -482,7 +500,8 @@ const FALLBACK_AUDIT = [
 ];
 const FALLBACK_INVITE = [
   { value: 'unused', label: '未使用' },
-  { value: 'used', label: '已使用' },
+  { value: 'partial', label: '部分使用' },
+  { value: 'used', label: '已用完' },
   { value: 'expired', label: '已过期' },
   { value: 'revoked', label: '已作废' },
 ];
@@ -684,23 +703,23 @@ async function onBatchApprove() {
 
 const inviteFormVisible = ref(false);
 const inviteCreating = ref(false);
-const inviteForm = ref({ count: 1, expireHours: 168 });
+const inviteForm = ref({ uses: 1, expireHours: 168 });
 const inviteCreatedVisible = ref(false);
 const inviteCreatedList = ref([]);
 const inviteUnread = ref(0);
 let invitePollTimer = null;
 
 function onCreateInvite() {
-  inviteForm.value = { count: 1, expireHours: 168 };
+  inviteForm.value = { uses: 1, expireHours: 168 };
   inviteFormVisible.value = true;
 }
 
 function onSubmitInvites() {
-  const count = Number(inviteForm.value.count);
+  const uses = Number(inviteForm.value.uses);
   const expireHours = Number(inviteForm.value.expireHours);
   // 与服务端同一套边界，先给一句人话，省一次往返
-  if (!(count >= 1 && count <= 20)) {
-    ElMessage.warning('数量需在 1 到 20 之间');
+  if (!Number.isInteger(uses) || uses < 1) {
+    ElMessage.warning('可用次数需为 1 以上的整数');
     return;
   }
   if (!(expireHours >= 1 && expireHours <= 720)) {
@@ -709,9 +728,9 @@ function onSubmitInvites() {
   }
   inviteCreating.value = true;
   http
-    .post('/admin/invite/batch', { count, expireHours })
-    .then((list) => {
-      inviteCreatedList.value = list || [];
+    .post('/admin/invite/create', { uses, expireHours })
+    .then((code) => {
+      inviteCreatedList.value = code ? [code] : [];
       inviteFormVisible.value = false;
       inviteCreatedVisible.value = true;
     })
@@ -764,11 +783,11 @@ async function onCopyInviteCode(code) {
 }
 
 async function onCopyAllInvites() {
-  // 一张一行：粘到群里或记事本里逐行对得上人
+  // 只有一个码，按钮就叫「复制」；方法名保留，省得再改模板
   const text = inviteCreatedList.value.map((item) => item.code).join('\n');
   const ok = await copyText(text);
   if (ok) {
-    ElMessage.success('已复制 ' + inviteCreatedList.value.length + ' 个邀请码');
+    ElMessage.success('已复制，发给用户即可');
   } else {
     ElMessage.warning('复制失败，请手动选中邀请码复制');
   }
@@ -821,7 +840,7 @@ function loadInvites() {
 
 function inviteLabel(status) {
   const fallback =
-    { unused: '未使用', used: '已使用', expired: '已过期', revoked: '已作废' }[status] || status;
+    { unused: '未使用', partial: '部分使用', used: '已用完', expired: '已过期', revoked: '已作废' }[status] || status;
   return dict.label('invite_status', status, fallback);
 }
 
@@ -829,8 +848,39 @@ function inviteTag(status) {
   return dict.tagType('invite_status', status);
 }
 
+/** 还有剩余次数的码才能作废；服务端同样按这个条件兜底 */
+function canRevokeInvite(row) {
+  return row.status === 'unused' || row.status === 'partial';
+}
+
+const inviteUsesVisible = ref(false);
+const inviteUsesLoading = ref(false);
+const inviteUsesCode = ref('');
+const inviteUses = ref([]);
+
+/** 使用者名单按需拉：不塞进列表接口，否则一页码要连带几百行明细 */
+function openInviteUses(row) {
+  inviteUsesCode.value = row.code;
+  inviteUses.value = [];
+  inviteUsesVisible.value = true;
+  inviteUsesLoading.value = true;
+  http
+    .get('/admin/invite/uses', { params: { code: row.code } })
+    .then((list) => {
+      inviteUses.value = list || [];
+    })
+    .catch(() => {})
+    .finally(() => {
+      inviteUsesLoading.value = false;
+    });
+}
+
 function onRevoke(row) {
-  ElMessageBox.confirm(`作废后邀请码 ${row.code} 立刻失效，确定吗？`, '作废邀请码')
+  const left = Math.max((row.maxUses || 0) - (row.usedCount || 0), 0);
+  ElMessageBox.confirm(
+    `作废后邀请码 ${row.code} 剩余 ${left} 次立即失效，已凭它进来的人不受影响，确定吗？`,
+    '作废邀请码',
+  )
     .then(() => {
       http
         .post('/admin/invite/revoke', { code: row.code })
@@ -1125,5 +1175,9 @@ onUnmounted(() => {
 
 .invite-created-exp {
   flex: 1;
+}
+
+.invite-uses-foot {
+  margin-top: 8px;
 }
 </style>

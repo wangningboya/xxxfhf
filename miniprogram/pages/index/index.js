@@ -3,6 +3,7 @@ const { request } = require('../../utils/request');
 const privacy = require('../../utils/privacy');
 const { yuan, dateStr, addDays, dayLabel, assetUrl } = require('../../utils/format');
 const cartUtil = require('../../utils/cart');
+const share = require('../../utils/share');
 
 Page({
   data: {
@@ -44,13 +45,27 @@ Page({
   },
 
   onShow() {
+    // 与首页一致：分享菜单要在每次显示时重开，否则 shareTicket 拿不到
+    share.enableShareMenu();
     this.refreshCartBar();
     this.scheduleMidnight();
     if (this.loadingNow) {
       return;
     }
     this.loadingNow = true;
+    // 热启动从群卡片进来时 onLoad 不会重跑，用 App.onShow 接住的那份参数覆盖 onLoad 留下的旧参数
+    const shareEntry = app.takeShareEntryOptions();
+    if (shareEntry) {
+      this.shareOptions = shareEntry;
+    }
     this.init();
+  },
+
+  /**
+   * 从点餐页转发：落地页也用点餐页，群里的人点开直接看菜，少一次跳转。
+   */
+  onShareAppMessage() {
+    return share.buildShareCard(this.data.shopName, '/pages/index/index');
   },
 
   onHide() {

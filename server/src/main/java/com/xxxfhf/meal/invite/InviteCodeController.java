@@ -4,6 +4,7 @@ import com.xxxfhf.meal.auth.Perms;
 import com.xxxfhf.meal.auth.RequirePerm;
 import com.xxxfhf.meal.auth.UserContext;
 import com.xxxfhf.meal.common.ApiResponse;
+import com.xxxfhf.meal.common.BizException;
 import com.xxxfhf.meal.common.MaskUtil;
 import com.xxxfhf.meal.common.PageResult;
 import com.xxxfhf.meal.user.User;
@@ -11,6 +12,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -26,6 +28,8 @@ import java.util.Map;
  * 邀请码管理（商家端）。
  *
  * 发码等于「放人进来」，所以用审核权限 user.audit 控制。
+ *
+ * <p>一次生成**一个**码，码上带可用次数；使用者名单只在网页后台看（小程序只显示已用 X/N）。
  */
 @RestController
 @RequestMapping("/admin/invite")
@@ -37,14 +41,17 @@ public class InviteCodeController {
         this.inviteCodeService = inviteCodeService;
     }
 
-    /** 生成一次性邀请码。expireHours 不传按 24 小时。 */
+    /** 生成一个邀请码。uses 必填（可用次数），expireHours 不传按 24 小时。 */
     @PostMapping("/create")
     @RequirePerm(Perms.USER_AUDIT)
     public ApiResponse<InviteCodeView> create(@Valid @RequestBody CreateRequest request) {
         // expireHours 允许不传（null），此处兜住拆箱，Service 侧统一按 24 小时处理
         int hours = request.expireHours() == null ? 24 : request.expireHours();
-        InviteCode code = inviteCodeService.create(hours, UserContext.userId());
-        return ApiResponse.ok(InviteCodeView.of(code));
+        Long operatorId = UserContext.userId();
+        InviteCode code = inviteCodeService.create(request.uses(), hours, operatorId);
+        // 回显生成人：不回的话列表里是「已删除用户 #id」，商家会以为账号出问题了
+        Map<Long, User> creators = inviteCodeService.usersByIds(List.of(operatorId));
+        return ApiResponse.ok(InviteCodeView.of(code, creators.get(operatorId)));
     }
 
     /** 邀请码列表，可按状态筛。 */
@@ -55,25 +62,32 @@ public class InviteCodeController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
         var result = inviteCodeService.list(status, page, pageSize);
-        // 使用者与生成人各一次批量查，避免每行再查一次用户
-        Map<Long, User> used = inviteCodeService.usersUsedBy(result.getRecords());
+        // 生成人一次批量查，避免每行再查一次用户
         Map<Long, User> creators = inviteCodeService.usersCreatedBy(result.getRecords());
         return ApiResponse.ok(PageResult.of(
-                result.convert(code -> InviteCodeView.of(code,
-                        used.get(code.getUsedBy()), creators.get(code.getCreatedBy())))));
+                result.convert(code -> InviteCodeView.of(code, creators.get(code.getCreatedBy())))));
     }
 
-    /** 批量生成 1~20 张一次性邀请码。每张码单独记一条审计，事后能对上是哪次发的。 */
-    @PostMapping("/batch")
+    /**
+     * 某个码的使用者名单（谁、什么时候用的）。
+     *
+     * 只在网页后台「使用者」抽屉里调；不塞进列表接口，否则一页邀请码要连带拉几百行明细。
+     */
+    @GetMapping("/uses")
     @RequirePerm(Perms.USER_AUDIT)
-    public ApiResponse<List<InviteCodeView>> batch(@Valid @RequestBody BatchCreateRequest request) {
-        int count = request.count() == null ? 1 : request.count();
-        int hours = request.expireHours() == null ? 24 : request.expireHours();
-        List<InviteCode> codes = inviteCodeService.createBatch(count, hours, UserContext.userId());
-        return ApiResponse.ok(codes.stream().map(InviteCodeView::of).toList());
+    public ApiResponse<List<InviteUseView>> uses(@RequestParam String code) {
+        InviteCode invite = inviteCodeService.findByCode(code);
+        if (invite == null) {
+            throw BizException.notFound("邀请码不存在");
+        }
+        List<InviteUse> uses = inviteCodeService.usesOf(invite.getId());
+        Map<Long, User> users = inviteCodeService.usersByIds(uses.stream().map(InviteUse::getUserId).toList());
+        return ApiResponse.ok(uses.stream()
+                .map(use -> InviteUseView.of(use, users.get(use.getUserId())))
+                .toList());
     }
 
-    /** 后台红点：多少张码被用了但商家还没点开看过。 */
+    /** 后台红点：多少张码被用过但商家还没点开看过（按码数，不按次数）。 */
     @GetMapping("/unread-count")
     @RequirePerm(Perms.USER_AUDIT)
     public ApiResponse<Long> unreadCount() {
@@ -87,24 +101,25 @@ public class InviteCodeController {
         return ApiResponse.ok(inviteCodeService.markRead());
     }
 
-    /** 作废邀请码。发错群、发错人时用，只能作废未使用的码。 */
+    /** 作废邀请码。发错群、发错人时用，只能作废还有剩余次数的码。 */
     @PostMapping("/revoke")
     @RequirePerm(Perms.USER_AUDIT)
     public ApiResponse<InviteCodeView> revoke(@Valid @RequestBody RevokeRequest request) {
-        return ApiResponse.ok(InviteCodeView.of(inviteCodeService.revoke(request.code())));
+        InviteCode code = inviteCodeService.revoke(request.code());
+        if (code == null) {
+            // 作废成功后又被人删掉这种极端并发，按不存在处理，别把 null 丢给视图
+            throw BizException.notFound("邀请码不存在");
+        }
+        Long creator = code.getCreatedBy();
+        Map<Long, User> creators = creator == null ? Map.of() : inviteCodeService.usersByIds(List.of(creator));
+        return ApiResponse.ok(InviteCodeView.of(code, creators.get(creator)));
     }
 
+    /** 生成请求：次数必填且 ≥ 1（不设上限），有效期 1~720 小时。 */
     public record CreateRequest(
-            @Min(value = 1, message = "有效期至少 1 小时")
-            @Max(value = 720, message = "有效期最长 720 小时（30 天）")
-            Integer expireHours) {
-    }
-
-    /** 批量生成：数量 1~20，有效期同单张。 */
-    public record BatchCreateRequest(
-            @Min(value = 1, message = "至少生成 1 个邀请码")
-            @Max(value = 20, message = "一次最多生成 20 个邀请码")
-            Integer count,
+            @NotNull(message = "请填写可用次数")
+            @Min(value = 1, message = "可用次数至少 1 次")
+            Integer uses,
             @Min(value = 1, message = "有效期至少 1 小时")
             @Max(value = 720, message = "有效期最长 720 小时（30 天）")
             Integer expireHours) {
@@ -115,40 +130,16 @@ public class InviteCodeController {
 
     /**
      * 对外视图。code 明文要给商家，他得复制发给用户；
-     * 使用者/生成人只回昵称 + 脱敏手机号（生成人不回手机号）。
+     * 生成人只回昵称。
      */
-    public record InviteCodeView(String code, String status, LocalDateTime expireAt,
-                                 LocalDateTime usedAt, LocalDateTime createdAt,
-                                 Long usedByUserId, String usedByName, String usedByPhone,
+    public record InviteCodeView(String code, String status, Integer maxUses, Integer usedCount,
+                                 LocalDateTime expireAt, LocalDateTime lastUsedAt, LocalDateTime createdAt,
                                  Long createdByUserId, String createdByName) {
 
-        static InviteCodeView of(InviteCode code) {
-            return of(code, null, null);
-        }
-
-        static InviteCodeView of(InviteCode code, User usedBy) {
-            return of(code, usedBy, null);
-        }
-
         /**
-         * @param usedBy    使用者行；码还没被使用就传 null。使用者已被删除时也是 null，
-         *                  此时只能靠 usedByUserId 表明「确实有人用过」。
          * @param createdBy 生成人行；系统生成（created_by=0）或查不到时按 created_by 兜底显示。
          */
-        static InviteCodeView of(InviteCode code, User usedBy, User createdBy) {
-            String name = null;
-            String phone = null;
-            if (code.getUsedBy() != null) {
-                if (usedBy == null) {
-                    // 人删了但码上还留着 used_by：不能让商家误以为这张码没人用过
-                    name = "已删除用户 #" + code.getUsedBy();
-                } else {
-                    String nickName = usedBy.getNickName();
-                    name = nickName == null || nickName.isBlank() ? "未填昵称" : nickName;
-                    phone = MaskUtil.phone(usedBy.getPhone());
-                }
-            }
-
+        static InviteCodeView of(InviteCode code, User createdBy) {
             Long createdByUserId = code.getCreatedBy();
             String createdByName = null;
             if (createdByUserId != null) {
@@ -162,9 +153,9 @@ public class InviteCodeController {
                 }
             }
 
-            return new InviteCodeView(code.getCode(), code.getStatus(), code.getExpireAt(),
-                    code.getUsedAt(), code.getCreatedAt(),
-                    code.getUsedBy(), name, phone,
+            return new InviteCodeView(code.getCode(), code.getStatus(),
+                    code.getMaxUses(), code.getUsedCount(),
+                    code.getExpireAt(), code.getLastUsedAt(), code.getCreatedAt(),
                     createdByUserId, createdByName);
         }
 
@@ -179,6 +170,26 @@ public class InviteCodeController {
                 return username;
             }
             return "用户 #" + user.getId();
+        }
+    }
+
+    /**
+     * 使用者一行。只回昵称 + 脱敏手机号；使用者已被删除时昵称回「已删除用户 #id」。
+     */
+    public record InviteUseView(Long userId, String name, String phone, LocalDateTime usedAt) {
+
+        static InviteUseView of(InviteUse use, User user) {
+            String name;
+            String phone = null;
+            if (user == null) {
+                // 人删了但明细还在：不能让商家误以为这条是空记录
+                name = "已删除用户 #" + use.getUserId();
+            } else {
+                String nickName = user.getNickName();
+                name = nickName == null || nickName.isBlank() ? "未填昵称" : nickName;
+                phone = MaskUtil.phone(user.getPhone());
+            }
+            return new InviteUseView(use.getUserId(), name, phone, use.getUsedAt());
         }
     }
 }

@@ -7,7 +7,10 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import java.time.LocalDateTime;
 
 /**
- * 邀请码。一次性使用 + 有效期双重限制（见《需求文档》3.1 邀请码兜底）。
+ * 邀请码。**一个码可被多人各用一次** + 有效期双重限制（见《需求文档》3.1 邀请码兜底）。
+ *
+ * <p>「谁用过」不再记在本表上：一张码对应多人，明细在 {@link InviteUse}。
+ * 本表只留 {@code usedCount} 这个计数，核销时靠它判断还有没有剩余次数。
  */
 @TableName("invite_code")
 public class InviteCode {
@@ -15,16 +18,22 @@ public class InviteCode {
     @TableId(type = IdType.AUTO)
     private Long id;
 
+    /** 6 位数字，含前导 0（存字符串，避免 012345 变成 12345） */
     private String code;
 
-    /** unused / used / expired，见 InviteStatus */
+    /** unused / partial / used / expired / revoked，见 InviteStatus */
     private String status;
+
+    /** 可用次数：生成时定，正整数，不设上限 */
+    private Integer maxUses;
+
+    /** 已用次数 */
+    private Integer usedCount;
 
     private LocalDateTime expireAt;
 
-    private Long usedBy;
-
-    private LocalDateTime usedAt;
+    /** 最近一次核销时间；一次没用过时为 null */
+    private LocalDateTime lastUsedAt;
 
     private Long createdBy;
 
@@ -54,6 +63,22 @@ public class InviteCode {
         this.status = status;
     }
 
+    public Integer getMaxUses() {
+        return maxUses;
+    }
+
+    public void setMaxUses(Integer maxUses) {
+        this.maxUses = maxUses;
+    }
+
+    public Integer getUsedCount() {
+        return usedCount;
+    }
+
+    public void setUsedCount(Integer usedCount) {
+        this.usedCount = usedCount;
+    }
+
     public LocalDateTime getExpireAt() {
         return expireAt;
     }
@@ -62,20 +87,12 @@ public class InviteCode {
         this.expireAt = expireAt;
     }
 
-    public Long getUsedBy() {
-        return usedBy;
+    public LocalDateTime getLastUsedAt() {
+        return lastUsedAt;
     }
 
-    public void setUsedBy(Long usedBy) {
-        this.usedBy = usedBy;
-    }
-
-    public LocalDateTime getUsedAt() {
-        return usedAt;
-    }
-
-    public void setUsedAt(LocalDateTime usedAt) {
-        this.usedAt = usedAt;
+    public void setLastUsedAt(LocalDateTime lastUsedAt) {
+        this.lastUsedAt = lastUsedAt;
     }
 
     public Long getCreatedBy() {

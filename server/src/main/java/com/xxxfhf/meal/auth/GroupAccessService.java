@@ -28,7 +28,7 @@ import java.util.List;
  *
  * 两条准入路径：
  * 1. 群卡片（主路径）：解出 openGId → 校验在本店登记的群白名单内 → 绑定到 user.groupOpenId
- * 2. 邀请码（正式路径）：一次性核销 → 记 invite_code.used_by
+ * 2. 邀请码（正式路径）：核销扣一次次数 → 记 invite_use 明细
  *
  * 「准入」与「审核」是两件事：
  * - 准入 = 是不是本店群里的人（决定能不能进小程序、能不能看到菜单）
@@ -117,9 +117,17 @@ public class GroupAccessService {
             throw BizException.forbidden("当前账号不是微信用户，无法校验群");
         }
 
-        String sessionKey = sessionKeyStore.get(user.getOpenid())
-                .orElseThrow(() -> BizException.unauthorized("登录状态已过期，请重新进入小程序"));
+        String sessionKey = sessionKeyStore.get(user.getOpenid()).orElse(null);
+        if (sessionKey == null) {
+            // session_key 只存在服务端内存（7 天 TTL）：服务一重启就没了。
+            // 这是「群卡片点了没反应」最常见的原因，必须留一条能对照的日志
+            log.warn("群凭证解析失败：session_key 已失效（服务可能重启过，重新进入小程序即可） userId={}",
+                    user.getId());
+            throw BizException.unauthorized("登录状态已过期，请重新进入小程序");
+        }
 
+        log.info("收到群卡片凭证 userId={} 密文长度={}",
+                user.getId(), encryptedData == null ? 0 : encryptedData.length());
         String openGId = wxCrypto.requireOpenGId(sessionKey, encryptedData, iv);
 
         List<String> allowed = configService.getStringList(ConfigKey.GROUP_OPEN_IDS);
@@ -157,7 +165,7 @@ public class GroupAccessService {
     /**
      * 同 {@link #bindByInvite(Long, String)}，直接作用于一个用户行。
      *
-     * <p>给 {@link AuthService#join} 用：邀请码核销要写 {@code used_by}，必须先有 userId，
+     * <p>给 {@link AuthService#join} 用：邀请码核销要写使用明细，必须先有 userId，
      * 所以首次进入的顺序是「先插入 pending 行拿 id → 再核销 → 核销失败整个事务回滚」。
      * 反过来的话，一张无效的码就会在库里留下一条谁也用不上的待审核记录。
      */

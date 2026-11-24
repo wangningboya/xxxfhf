@@ -17,6 +17,28 @@ function unregistered() {
   return { registered: false, accessGranted: false, accessVia: null };
 }
 
+/**
+ * 群链路观测：打印本次进入的群相关参数（v3.53）。
+ *
+ * 为什么不复用 group-entry.js 里那行「进入参数」：那行只在真正去取群密文时才打，
+ * 而老号（已登记且已准入）在 bootstrap 末尾是直接返回的，取密文那步根本走不到。
+ * 群里有几百个已登记用户，他们才是「从群卡片点进来」的主要人群 ——
+ * 日志挂在取密文的分支上，等于把这批人全漏掉。
+ *
+ * 所以提到 bootstrap 入口无条件打：只要打开小程序就有一行，与登录状态、审核状态无关。
+ * shareTicket 只打长度不打内容，与 group-entry.js 的约定一致。
+ *
+ * @param {object} options 页面 onLoad 的 options（含 scene / shareTicket）
+ */
+function logEnter(options) {
+  const opts = options || {};
+  const scene = opts.scene === undefined ? '-' : opts.scene;
+  const ticket = opts.shareTicket ? '有(长度 ' + opts.shareTicket.length + ')' : '无';
+  // 与 group-entry.js 的「进入参数」刻意区分文案：那两个在群卡片建号/绑定时会各打一次，
+  // 文案一样的话，看日志分不清是页面进入时打的还是取密文时打的
+  console.log('[group] 进入小程序 scene=' + scene + ' shareTicket=' + ticket);
+}
+
 App({
   globalData: {
     /** 当前用户的准入与审核状态，结构同服务端 /auth/me */
@@ -26,6 +48,11 @@ App({
     configLoaded: false,
     /** 登录中的 Promise，避免多个页面同时触发重复 wx.login */
     loginPromise: null,
+    /**
+     * 热启动时 App.onShow 接住的分享进入参数（含 scene / shareTicket）。
+     * 只放「确实带 shareTicket 的那一次」，页面 onShow 用 takeShareEntryOptions() 取走，取完即清。
+     */
+    shareEntryOptions: null,
   },
 
   /** 上次全局错误提示的时间戳，用于节流，避免连续报错时 toast 刷屏 */
@@ -74,6 +101,43 @@ App({
         // 启动期登录失败不阻塞渲染，页面会再试一次并给出提示
         dict.load();
       });
+  },
+
+  /**
+   * 热启动时接住分享卡片的参数（v3.53）。
+   *
+   * 冷启动从群卡片进来：App.onShow → Page.onLoad(options) → Page.onShow，页面在 onLoad 里就拿到了参数。
+   * 热启动（小程序还在后台，用户先逛过小程序、再回群里点卡片）：首页与点餐页都是 tabBar 页，
+   * 微信用 switchTab 回到已有页面实例，onLoad 不重跑、Page.onShow 又不带参数 ——
+   * 到页面这一层时参数已经没有了，只剩这里一份。
+   *
+   * 只认带 shareTicket 的调用：普通「从后台切回前台」也会触发 onShow，但那不是一次新的分享进入；
+   * 把它当成新参数，页面会拿着一份过期 shareTicket 反复去换群标识。
+   */
+  onShow(options) {
+    const opts = options || {};
+    if (!opts.shareTicket) {
+      return;
+    }
+    this.globalData.shareEntryOptions = opts;
+    console.log('[group] App.onShow 接住分享进入 scene='
+      + (opts.scene === undefined ? '-' : opts.scene)
+      + ' shareTicket=有(长度 ' + opts.shareTicket.length + ')');
+  },
+
+  /**
+   * 取走 App.onShow 接住的分享参数，取完即清。
+   *
+   * 页面在 onShow 里调：拿到说明这次是热启动从分享卡片进来的，要用它覆盖 onLoad 留下的旧参数；
+   * 拿到 null 就保持原样。清空是为了让同一份参数只被消费一次 ——
+   * 否则用户在几个 tab 之间来回切，每次 onShow 都会拿同一份旧密文再试一遍绑定。
+   *
+   * @return {object|null} 本次新的分享进入参数
+   */
+  takeShareEntryOptions() {
+    const opts = this.globalData.shareEntryOptions;
+    this.globalData.shareEntryOptions = null;
+    return opts;
   },
 
   /**
@@ -283,10 +347,13 @@ App({
    * @return {Promise<object>} 最新的用户状态
    */
   bootstrap(options) {
+    // 参数日志必须在入口、与身份无关：老号会直接跳过群绑定，不在这里打就没有任何 [group] 输出
+    logEnter(options);
     return this.ensureLogin()
       .then((me) => {
         if (me && !me.registered) {
           // 明确知道没登记（没有令牌）：试试这次是不是从群卡片进来的
+          console.log('[group] 身份判定：未登记 → 走群卡片建号');
           return this.tryJoinByGroup(options, me);
         }
         // me 为空说明有令牌但内存里还没状态，照旧拉一次
@@ -300,7 +367,14 @@ App({
           throw err;
         });
       })
-      .then((me) => (me && me.accessGranted ? me : this.tryBindGroup(options, me)));
+      .then((me) => {
+        if (me && me.accessGranted) {
+          // 老号走这里，tryBindGroup 不会执行，所以那里面解释「取密文失败」的日志也打不出来
+          console.log('[group] 身份判定：已登记且已准入（老号）→ 跳过群绑定');
+          return me;
+        }
+        return this.tryBindGroup(options, me);
+      });
   },
 
   /**
@@ -310,14 +384,26 @@ App({
    * 这两种情况都该安静地落到引导页走邀请码。
    */
   tryJoinByGroup(options, currentMe) {
+    console.log('[group] 尚未登记，尝试用群卡片直接建号');
     return getGroupEncrypted(options).then((encrypted) => {
       if (!encrypted) {
+        console.log('[group] 这次没有群密文，跳过群卡片建号');
         return currentMe;
       }
       return this.joinRequest({
         encryptedData: encrypted.encryptedData,
         iv: encrypted.iv,
-      }).catch(() => currentMe);
+      })
+        .then((me) => {
+          console.log('[group] 群卡片建号成功');
+          return me;
+        })
+        .catch((err) => {
+          // 群不在白名单、白名单未配置、密文解不开都到这里；静默放行到邀请码，
+          // 但必须留日志：服务端那条 WARN 带 openGId，客户端这条带错误码，两头对得上才查得动
+          console.warn('[group] 群卡片建号被拒', err && err.code, err && err.message);
+          return currentMe;
+        });
     });
   },
 
@@ -332,8 +418,10 @@ App({
       // 未登记的号没有令牌，调不到 /auth/bind-group，该走的是 join
       return Promise.resolve(currentMe);
     }
+    console.log('[group] 已登记但未准入，尝试用群卡片绑定群');
     return getGroupEncrypted(options).then((encrypted) => {
       if (!encrypted) {
+        console.log('[group] 这次没有群密文，跳过绑定');
         return currentMe;
       }
       return request({
@@ -342,11 +430,15 @@ App({
         data: { encryptedData: encrypted.encryptedData, iv: encrypted.iv },
       })
         .then((state) => {
+          console.log('[group] 群绑定成功');
           const merged = Object.assign({}, currentMe, state);
           this.globalData.me = merged;
           return merged;
         })
-        .catch(() => currentMe);
+        .catch((err) => {
+          console.warn('[group] 群绑定被拒', err && err.code, err && err.message);
+          return currentMe;
+        });
     });
   },
 

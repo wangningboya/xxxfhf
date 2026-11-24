@@ -222,25 +222,42 @@ CREATE TABLE IF NOT EXISTS `order` (
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT ='订单';
 
 -- -----------------------------------------------------------------------------
--- 9. 邀请码 invite_code（一次性 + 有效期，群卡片走不通时的正式兜底路径）
+-- 9. 邀请码 invite_code（6 位数字 + 可用次数 + 有效期，群卡片走不通时的正式兜底路径）
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `invite_code` (
-    `id`         BIGINT      NOT NULL AUTO_INCREMENT COMMENT '主键',
-    `code`       VARCHAR(32) NOT NULL COMMENT '邀请码',
-    `status`     VARCHAR(16) NOT NULL DEFAULT 'unused' COMMENT 'unused/used/expired',
-    `expire_at`  DATETIME    NOT NULL COMMENT '过期时间',
-    `used_by`    BIGINT               DEFAULT NULL COMMENT '使用者 userId',
-    `used_at`    DATETIME             DEFAULT NULL COMMENT '使用时间',
-    -- 已用未读 = used_by 非空且 read_at 为空，后台靠它亮红点；打开邀请码管理时写 NOW()
-    `read_at`    DATETIME             DEFAULT NULL COMMENT '商家查看使用提醒的时间；NULL=还没看过',
-    `created_by` BIGINT               DEFAULT NULL COMMENT '生成人 userId；系统生成写 0',
-    `created_at` DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `id`           BIGINT      NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `code`         VARCHAR(16) NOT NULL COMMENT '邀请码：6 位数字，含前导 0',
+    `status`       VARCHAR(16) NOT NULL DEFAULT 'unused' COMMENT 'unused 未使用 / partial 部分使用 / used 已用完 / expired 已过期 / revoked 已作废',
+    `max_uses`     INT         NOT NULL DEFAULT 1 COMMENT '可用次数（生成时定，正整数，不设上限）',
+    `used_count`   INT         NOT NULL DEFAULT 0 COMMENT '已用次数，与 invite_use 行数一致',
+    `expire_at`    DATETIME    NOT NULL COMMENT '过期时间；到期时剩余次数一并作废',
+    `last_used_at` DATETIME             DEFAULT NULL COMMENT '最近一次核销时间',
+    -- 有人用过但 read_at 为空 = 商家还没看过，后台靠它亮红点；打开邀请码管理时写 NOW()
+    `read_at`      DATETIME             DEFAULT NULL COMMENT '商家查看使用提醒的时间；NULL=还没看过',
+    `created_by`   BIGINT               DEFAULT NULL COMMENT '生成人 userId；系统生成写 0',
+    `created_at`   DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     PRIMARY KEY (`id`),
+    -- 生成时靠它兜住撞码：命中重复键就换一个重试，不做「先查后插」
     UNIQUE KEY `uk_invite_code` (`code`),
     KEY `idx_invite_status_expire` (`status`, `expire_at`),
-    -- 登录时判「这个用户是否靠邀请码进来的」要按 used_by 反查，必须走索引
-    KEY `idx_invite_used_by` (`used_by`)
+    -- 红点：used_count > 0 AND read_at IS NULL
+    KEY `idx_invite_read` (`read_at`, `used_count`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT ='邀请码';
+
+-- -----------------------------------------------------------------------------
+-- 9.1 邀请码使用明细 invite_use（一个码对应多人，一人一条）
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `invite_use` (
+    `id`             BIGINT      NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `invite_code_id` BIGINT      NOT NULL COMMENT 'invite_code.id',
+    `user_id`        BIGINT      NOT NULL COMMENT '使用者 userId；用户被删除后保留原值',
+    `used_at`        DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '使用时间',
+    PRIMARY KEY (`id`),
+    -- 同一个人不能靠同一张码进两次；也保证重放请求不会多扣一次
+    UNIQUE KEY `uk_invite_use_code_user` (`invite_code_id`, `user_id`),
+    -- 登录时判「这个人是不是靠邀请码进来的」，按 user_id 反查必须走索引
+    KEY `idx_invite_use_user` (`user_id`)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT ='邀请码使用明细';
 
 -- -----------------------------------------------------------------------------
 -- 10. 角色 role（内置「商家」角色 builtin = 1，权限不可被改）

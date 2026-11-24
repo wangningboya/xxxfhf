@@ -11,8 +11,8 @@ import com.xxxfhf.meal.auth.PasswordService;
 import com.xxxfhf.meal.common.BizException;
 import com.xxxfhf.meal.common.MaskUtil;
 import com.xxxfhf.meal.common.PhoneValidator;
-import com.xxxfhf.meal.invite.InviteCode;
-import com.xxxfhf.meal.invite.InviteCodeMapper;
+import com.xxxfhf.meal.invite.InviteUse;
+import com.xxxfhf.meal.invite.InviteUseMapper;
 import com.xxxfhf.meal.message.MessageService;
 import com.xxxfhf.meal.message.NoticeType;
 import com.xxxfhf.meal.order.Order;
@@ -43,7 +43,7 @@ public class UserAuditService {
     private static final Logger log = LoggerFactory.getLogger(UserAuditService.class);
 
     private final UserMapper userMapper;
-    private final InviteCodeMapper inviteCodeMapper;
+    private final InviteUseMapper inviteUseMapper;
     private final AddressMapper addressMapper;
     private final OrderMapper orderMapper;
     private final AuditService auditService;
@@ -51,12 +51,12 @@ public class UserAuditService {
     private final RoleMapper roleMapper;
     private final MessageService messageService;
 
-    public UserAuditService(UserMapper userMapper, InviteCodeMapper inviteCodeMapper,
+    public UserAuditService(UserMapper userMapper, InviteUseMapper inviteUseMapper,
                             AddressMapper addressMapper, OrderMapper orderMapper,
                             AuditService auditService, PasswordService passwordService,
                             RoleMapper roleMapper, MessageService messageService) {
         this.userMapper = userMapper;
-        this.inviteCodeMapper = inviteCodeMapper;
+        this.inviteUseMapper = inviteUseMapper;
         this.addressMapper = addressMapper;
         this.orderMapper = orderMapper;
         this.auditService = auditService;
@@ -96,7 +96,7 @@ public class UserAuditService {
     }
 
     /**
-     * 批量查本页用户里谁用过邀请码，避免逐行查 invite_code（N+1）。
+     * 批量查本页用户里谁用过邀请码，避免逐行查邀请码明细（N+1）。
      *
      * 这里用字符串列名而不是 Lambda：本方法在单元测试里也会被触达，
      * Lambda 需要 MyBatis-Plus 的 TableInfo 已初始化，纯单测环境拿不到。
@@ -106,13 +106,13 @@ public class UserAuditService {
         if (ids.isEmpty()) {
             return Set.of();
         }
-        List<InviteCode> codes = inviteCodeMapper.selectList(Wrappers.<InviteCode>query()
-                .select("used_by")
-                .in("used_by", ids));
-        Set<Long> set = new HashSet<>(codes.size());
-        for (InviteCode code : codes) {
-            if (code.getUsedBy() != null) {
-                set.add(code.getUsedBy());
+        List<InviteUse> uses = inviteUseMapper.selectList(Wrappers.<InviteUse>query()
+                .select("user_id")
+                .in("user_id", ids));
+        Set<Long> set = new HashSet<>(uses.size());
+        for (InviteUse use : uses) {
+            if (use.getUserId() != null) {
+                set.add(use.getUserId());
             }
         }
         return set;
@@ -275,8 +275,8 @@ public class UserAuditService {
      * <ul>
      *   <li><b>有订单就拒删</b>：订单里的 userId 是对账与客诉追溯的线索，删了就断链。已取消、已拒单同样算，<br>
      *       因为它们仍是凭证。要收回权限请走「停用」。</li>
-     *   <li><b>不把邀请码退回去</b>：{@code invite_code.used_by} 保留原值不置空。置空会让这个码<br>
-     *       变回「未使用」而能被第二个人再用一遍。</li>
+     *   <li><b>不把邀请码退回去</b>：{@code invite_use} 里那条明细保留，码的已用次数不减。<br>
+     *       退回去等于让这张码凭空多出一个名额。</li>
      * </ul>
      *
      * <p>删地址不会误伤历史订单：订单里存的是下单那一刻的 {@code addressSnapshot} JSON 副本，<br>

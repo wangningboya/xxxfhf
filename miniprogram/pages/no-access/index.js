@@ -32,8 +32,8 @@ Page({
   },
 
   onCodeInput(e) {
-    // 邀请码统一大写，用户手输常是小写
-    this.setData({ code: (e.detail.value || '').toUpperCase() });
+    // 6 位纯数字，没有大小写问题；只去空格
+    this.setData({ code: (e.detail.value || '').trim() });
   },
 
   onSubmit() {

@@ -18,7 +18,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,48 +27,56 @@ import java.util.Objects;
  * 邀请码：生成、列表、核销。
  *
  * 邀请码是准入的**正式路径**（不是降级方案）：群卡片被刷走、用户换号、卡片被转给个人时都靠它。
+ *
+ * <p>一个码可被**多个人各用一次**（次数在生成时定）。所以「谁用过」记在 {@link InviteUse} 明细里，
+ * 本表只留计数与最近使用时间。
  */
 @Service
 public class InviteCodeService {
 
     private static final Logger log = LoggerFactory.getLogger(InviteCodeService.class);
 
+    /** 码是 6 位纯数字：数字键盘就能输，不用切大小写，也不会出现 0/O 这类手抄易错字符 */
+    private static final int CODE_LENGTH = 6;
+    private static final int CODE_SPACE = 1_000_000;
+
     /**
-     * 去掉了 0/O/1/I/L 这类手抄易错的字符。用户是从商家那儿口头或文字拿到码再手输，
-     * 少一个易混字符就少一批「码没错但提示不存在」的客诉。
+     * 撞码重试次数。6 位数字只有 100 万种组合，比 8 位字母码更容易撞；
+     * 连续 20 次都撞说明号段接近用尽，这时候应该报错而不是继续空转。
      */
-    private static final char[] ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789".toCharArray();
-    private static final int CODE_LENGTH = 8;
-    private static final int MAX_GENERATE_RETRY = 5;
+    private static final int MAX_GENERATE_RETRY = 20;
 
     /** 有效期上限 30 天，防止「永不过期」的码在群里长期流传 */
     private static final int MAX_EXPIRE_HOURS = 24 * 30;
 
-    /** 一次最多生成 20 张：够一次给一个小群发，又不至于让商家手滑刷出几百张码 */
-    private static final int MAX_BATCH = 20;
-
     private static final DateTimeFormatter MINUTE = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     private final InviteCodeMapper inviteCodeMapper;
+    private final InviteUseMapper inviteUseMapper;
     private final UserMapper userMapper;
     private final AuditService auditService;
     private final SecureRandom random = new SecureRandom();
 
-    public InviteCodeService(InviteCodeMapper inviteCodeMapper, UserMapper userMapper,
-                             AuditService auditService) {
+    public InviteCodeService(InviteCodeMapper inviteCodeMapper, InviteUseMapper inviteUseMapper,
+                             UserMapper userMapper, AuditService auditService) {
         this.inviteCodeMapper = inviteCodeMapper;
+        this.inviteUseMapper = inviteUseMapper;
         this.userMapper = userMapper;
         this.auditService = auditService;
     }
 
     /**
-     * 生成一次性邀请码。
+     * 生成一个邀请码。
      *
+     * @param uses        可用次数（正整数，不设上限）：这张码能被多少个人各用一次
      * @param expireHours 有效期（小时），1 ~ 720
      * @param createdBy   生成人 userId
      */
     @Transactional
-    public InviteCode create(int expireHours, Long createdBy) {
+    public InviteCode create(int uses, int expireHours, Long createdBy) {
+        if (uses < 1) {
+            throw BizException.param("可用次数至少 1 次");
+        }
         int hours = expireHours <= 0 ? 24 : expireHours;
         if (hours > MAX_EXPIRE_HOURS) {
             throw BizException.param("有效期最长 " + MAX_EXPIRE_HOURS + " 小时（30 天）");
@@ -79,6 +86,8 @@ public class InviteCodeService {
             InviteCode code = new InviteCode();
             code.setCode(randomCode());
             code.setStatus(InviteStatus.UNUSED);
+            code.setMaxUses(uses);
+            code.setUsedCount(0);
             code.setExpireAt(LocalDateTime.now().plusHours(hours));
             code.setCreatedBy(createdBy);
             code.setCreatedAt(LocalDateTime.now());
@@ -86,34 +95,18 @@ public class InviteCodeService {
                 inviteCodeMapper.insert(code);
                 // 发码等于放人进来，必须留痕：记到 invite_code 上，操作人/来源由当前请求上下文自动取
                 auditService.record(AuditActions.TABLE_INVITE, code.getId(), AuditActions.INVITE_CREATE,
-                        "生成邀请码 " + code.getCode() + "（有效期 " + hours + " 小时，至 "
+                        "生成邀请码 " + code.getCode() + "（" + uses + " 次，有效期 " + hours + " 小时，至 "
                                 + MINUTE.format(code.getExpireAt()) + "）");
-                log.info("生成邀请码 code={} 有效期={}h 生成人={}", code.getCode(), hours, createdBy);
+                log.info("生成邀请码 code={} 次数={} 有效期={}h 生成人={}",
+                        code.getCode(), uses, hours, createdBy);
                 return code;
             } catch (DuplicateKeyException ex) {
-                // 撞上已存在的码，换一个再试。8 位 31 字符组合撞车概率极低，重试 5 次足够。
+                // 撞上已经存在的码（含已用完 / 已过期 / 已作废的，号码不复用），换一个再试
                 log.warn("邀请码随机冲突，重试第 {} 次", attempt + 1);
             }
         }
-        throw new BizException(ErrorCode.SERVER_ERROR, "邀请码生成失败，请重试");
-    }
-
-    /**
-     * 批量生成。单张与批量走同一条 create，审计、撞码重试、有效期校验都只有一份规则。
-     *
-     * @param count 1 ~ 20，超出直接拒绝，不静默截断
-     */
-    @Transactional
-    public List<InviteCode> createBatch(int count, int expireHours, Long createdBy) {
-        if (count < 1 || count > MAX_BATCH) {
-            throw BizException.param("一次最多生成 " + MAX_BATCH + " 个邀请码");
-        }
-        List<InviteCode> codes = new ArrayList<>(count);
-        for (int i = 0; i < count; i++) {
-            codes.add(create(expireHours, createdBy));
-        }
-        log.info("批量生成邀请码 {} 个 生成人={}", count, createdBy);
-        return codes;
+        log.error("邀请码连续 {} 次撞码，号段可能接近用尽", MAX_GENERATE_RETRY);
+        throw new BizException(ErrorCode.SERVER_ERROR, "邀请码号段接近用尽，请先清理旧码后再试");
     }
 
     public IPage<InviteCode> list(String status, int page, int pageSize) {
@@ -126,8 +119,16 @@ public class InviteCodeService {
                 .orderByDesc(InviteCode::getCreatedAt));
     }
 
+    public InviteCode findByCode(String rawCode) {
+        String code = normalize(rawCode);
+        if (code.isEmpty()) {
+            return null;
+        }
+        return inviteCodeMapper.selectOne(Wrappers.<InviteCode>query().eq("code", code));
+    }
+
     /**
-     * 批量查用户行：一页邀请码里的使用者、生成人合并成一次 in 查询，避免列表逐行查用户（N+1）。
+     * 批量查用户行：生成人、某一页码的使用者名单合并成一次 in 查询，避免逐行查用户（N+1）。
      *
      * @return userId → 用户行；null / 0 这类无效 id 会被过滤，查不到的人（已删除）不在结果里
      */
@@ -148,87 +149,105 @@ public class InviteCodeService {
         return map;
     }
 
-    /** 本页邀请码里被谁用了。未使用的码不会出现在结果里，使用者已被删除的也查不到。 */
-    public Map<Long, User> usersUsedBy(List<InviteCode> codes) {
-        return usersByIds(codes.stream().map(InviteCode::getUsedBy).toList());
-    }
-
     /** 本页邀请码分别是谁生成的。系统生成的 created_by=0 不会出现在结果里。 */
     public Map<Long, User> usersCreatedBy(List<InviteCode> codes) {
         return usersByIds(codes.stream().map(InviteCode::getCreatedBy).toList());
     }
 
+    /** 某个码的使用明细，按使用时间正序（先用的排前面）。 */
+    public List<InviteUse> usesOf(Long inviteCodeId) {
+        if (inviteCodeId == null) {
+            return List.of();
+        }
+        return inviteUseMapper.selectList(Wrappers.<InviteUse>lambdaQuery()
+                .eq(InviteUse::getInviteCodeId, inviteCodeId)
+                .orderByAsc(InviteUse::getUsedAt));
+    }
+
     /**
      * 核销邀请码，成功即返回。
      *
-     * 失败时再查一次原因——判定权始终在那条带条件的 UPDATE 上，
-     * 先查后改在并发下会让同一个码被两个人用掉。
+     * 判定权始终在那条带条件的 UPDATE 上：先查后改在并发下会让剩余次数被超发。
+     * 扣次数成功后补一条使用明细；两步在同一个事务里，明细写不进去就整笔回滚，不会出现「次数扣了没人」。
      */
     @Transactional
     public void consume(String rawCode, Long userId) {
-        String code = rawCode == null ? "" : rawCode.trim().toUpperCase();
+        String code = normalize(rawCode);
         if (code.isEmpty()) {
             throw BizException.param("请输入邀请码");
         }
 
-        int affected = inviteCodeMapper.consume(code, userId);
+        int affected = inviteCodeMapper.consume(code);
         if (affected == 1) {
-            log.info("邀请码核销成功 code={} userId={}", code, userId);
+            // 上面刚更新成功，这一行一定在；取 id 是为了写明细
+            InviteCode row = inviteCodeMapper.selectOne(Wrappers.<InviteCode>query().eq("code", code));
+            InviteUse use = new InviteUse();
+            use.setInviteCodeId(row.getId());
+            use.setUserId(userId);
+            use.setUsedAt(LocalDateTime.now());
+            inviteUseMapper.insert(use);
+            log.info("邀请码核销成功 code={} userId={} 已用 {}/{}",
+                    code, userId, row.getUsedCount(), row.getMaxUses());
             return;
         }
 
-        InviteCode existing = inviteCodeMapper.selectOne(
-                Wrappers.<InviteCode>query().eq("code", code));
+        InviteCode existing = inviteCodeMapper.selectOne(Wrappers.<InviteCode>query().eq("code", code));
         if (existing == null) {
             throw BizException.notFound("邀请码不存在，请核对后重新输入");
-        }
-        if (InviteStatus.USED.equals(existing.getStatus())) {
-            throw BizException.conflict("该邀请码已被使用，请联系商家重新获取");
         }
         if (InviteStatus.REVOKED.equals(existing.getStatus())) {
             throw BizException.conflict("该邀请码已被商家作废，请联系商家重新获取");
         }
-        throw BizException.conflict("该邀请码已过期，请联系商家重新获取");
+        if (isExpired(existing)) {
+            throw BizException.conflict("该邀请码已过期，请联系商家重新获取");
+        }
+        if (isUsedUp(existing)) {
+            throw BizException.conflict("该邀请码次数已用完，请联系商家重新获取");
+        }
+        // 走到这里说明条件更新被并发抢先（别人刚把最后一次用掉），按用完提示即可
+        throw BizException.conflict("该邀请码刚刚被用完，请联系商家重新获取");
     }
 
     /**
      * 作废邀请码。
      *
-     * 只作废未使用的码：已经被人用掉的码作废没有意义，反而会让人误以为那个人的准入被撤销。
+     * 只作废**还有剩余次数**的码（未使用或部分使用）：已经用完的码作废没有意义，
+     * 反而会让人误以为那个人的准入被撤销。
      * 用条件更新而不是「先查后改」，避免与同一瞬间的核销打架（核销也是带条件的 UPDATE）。
      */
     @Transactional
     public InviteCode revoke(String rawCode) {
-        String code = rawCode == null ? "" : rawCode.trim().toUpperCase();
+        String code = normalize(rawCode);
         if (code.isEmpty()) {
             throw BizException.param("请选择要作废的邀请码");
         }
         int affected = inviteCodeMapper.update(null, Wrappers.<InviteCode>lambdaUpdate()
                 .set(InviteCode::getStatus, InviteStatus.REVOKED)
                 .eq(InviteCode::getCode, code)
-                .eq(InviteCode::getStatus, InviteStatus.UNUSED));
+                .in(InviteCode::getStatus, InviteStatus.UNUSED, InviteStatus.PARTIAL));
         if (affected == 0) {
             InviteCode existing = inviteCodeMapper.selectOne(
                     Wrappers.<InviteCode>lambdaQuery().eq(InviteCode::getCode, code));
             if (existing == null) {
                 throw BizException.notFound("邀请码不存在");
             }
-            if (InviteStatus.USED.equals(existing.getStatus())) {
-                throw BizException.conflict("该邀请码已被使用，作废会让人误以为取消了他的准入，已阻止");
+            if (isUsedUp(existing)) {
+                throw BizException.conflict("该邀请码次数已用完，无需作废（已凭此码进来的人不受影响）");
             }
-            throw BizException.conflict("该邀请码已是「" + existing.getStatus() + "」状态，无需重复作废");
+            throw BizException.conflict("该邀请码已是「" + existing.getStatus() + "」状态，无法作废");
         }
         log.info("邀请码已作废 code={}", code);
         InviteCode revoked = inviteCodeMapper.selectOne(
                 Wrappers.<InviteCode>lambdaQuery().eq(InviteCode::getCode, code));
         if (revoked != null) {
             auditService.record(AuditActions.TABLE_INVITE, revoked.getId(), AuditActions.INVITE_REVOKE,
-                    "作废邀请码 " + code + "（原状态：未使用）");
+                    "作废邀请码 " + code + "（已用 " + revoked.getUsedCount() + "/"
+                            + revoked.getMaxUses() + " 次）");
         }
         return revoked;
     }
 
-    /** 后台红点数：码被用了但商家还没点开过邀请码管理。 */
+    /** 后台红点数：码被用过但商家还没点开过邀请码管理。口径是「码」不是「次」。 */
     public long unreadCount() {
         return inviteCodeMapper.countUnread();
     }
@@ -244,22 +263,38 @@ public class InviteCodeService {
         if (userId == null) {
             return false;
         }
-        Long count = inviteCodeMapper.selectCount(
-                Wrappers.<InviteCode>query().eq("used_by", userId));
+        Long count = inviteUseMapper.selectCount(
+                Wrappers.<InviteUse>query().eq("user_id", userId));
         return count != null && count > 0;
     }
 
-    /** 把过期未用的码标成 expired，仅为了让后台列表看起来准。核销判定不依赖这个状态。 */
+    /** 把过期未用尽的码标成 expired，仅为了让后台列表看起来准。核销判定不依赖这个状态。 */
     @Transactional
     public int markExpired() {
         return inviteCodeMapper.markExpired();
     }
 
-    private String randomCode() {
-        StringBuilder sb = new StringBuilder(CODE_LENGTH);
-        for (int i = 0; i < CODE_LENGTH; i++) {
-            sb.append(ALPHABET[random.nextInt(ALPHABET.length)]);
+    private boolean isExpired(InviteCode code) {
+        LocalDateTime expireAt = code.getExpireAt();
+        return expireAt != null && !expireAt.isAfter(LocalDateTime.now());
+    }
+
+    private boolean isUsedUp(InviteCode code) {
+        Integer used = code.getUsedCount();
+        Integer max = code.getMaxUses();
+        if (InviteStatus.USED.equals(code.getStatus())) {
+            return true;
         }
-        return sb.toString();
+        return used != null && max != null && used >= max;
+    }
+
+    /** 统一去空格。6 位数字没有大小写，不再做大写转换。 */
+    private String normalize(String rawCode) {
+        return rawCode == null ? "" : rawCode.trim();
+    }
+
+    /** 随机 6 位数字，保留前导 0（012345 也是合法码）。 */
+    private String randomCode() {
+        return String.format("%06d", random.nextInt(CODE_SPACE));
     }
 }

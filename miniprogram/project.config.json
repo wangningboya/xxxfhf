@@ -37,7 +37,19 @@
   "appid": "wx9b4dc7e1a055988f",
   "__usePrivacyCheck__": true,
   "projectname": "meal-order",
-  "condition": {},
+  "condition": {
+    "miniprogram": {
+      "list": [
+        {
+          "name": "群卡片进入（1044 模拟）",
+          "pathName": "pages/home/index",
+          "query": "from=share",
+          "scene": 1044,
+          "shareTicket": "mock_share_ticket_1044"
+        }
+      ]
+    }
+  },
   "simulatorPluginLibVersion": {},
   "editorSetting": {}
 }

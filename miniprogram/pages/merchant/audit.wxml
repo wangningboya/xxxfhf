@@ -3,7 +3,7 @@
     <view class="invite-head">
       <text class="invite-title" bindtap="onToggleInvite">邀请码</text>
       <view class="invite-head-right">
-        <!-- 批量发出去后一次性复制：只复制未使用的，已用/作废的复制了也没用 -->
+        <!-- 全部复制：只复制还有剩余次数的，已用完/已作废的复制了也没用 -->
         <text
           class="invite-copy-all"
           wx:if="{{showInvite && inviteCodes.length}}"
@@ -15,7 +15,7 @@
       </view>
     </view>
     <view class="invite-body" wx:if="{{showInvite}}">
-      <view class="invite-desc">群里没有群卡片、或者对方不在群里时，用邀请码放行。一次性、有有效期。</view>
+      <view class="invite-desc">群里没有群卡片、或者对方不在群里时，用邀请码放行。6 位数字，可设使用次数与有效期。</view>
       <view class="invite-list" wx:if="{{inviteCodes.length}}">
         <view class="invite-item" wx:for="{{inviteCodes}}" wx:key="code">
           <view class="invite-line">
@@ -25,17 +25,15 @@
             <text class="invite-action" data-code="{{item.code}}" bindtap="onCopyCode">复制</text>
             <text
               class="invite-revoke"
-              wx:if="{{item.status === 'unused'}}"
+              wx:if="{{item.canRevoke}}"
               data-code="{{item.code}}"
               catchtap="onRevokeCode"
             >
               作废
             </text>
           </view>
-          <!-- 用过的码要能对上人：谁用的、手机尾号 -->
-          <view class="invite-user" wx:if="{{item.usedByName}}">
-            使用者：{{item.usedByName}}{{item.usedByPhone ? '（' + item.usedByPhone + '）' : ''}}
-          </view>
+          <!-- 小程序端只看进度；完整使用者名单在网页后台「邀请码管理 → 使用者」 -->
+          <view class="invite-user">已用 {{item.usedCount}} / {{item.maxUses}} 次</view>
         </view>
       </view>
       <view class="btn" bindtap="onCreateInvite">{{creating ? '生成中…' : '生成邀请码'}}</view>

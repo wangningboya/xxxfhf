@@ -13,7 +13,8 @@ const FALLBACK_AUDIT = [
 /** 邀请码状态兜底。作废是商家主动撤销，与「过期」不是一回事，要分开显示 */
 const FALLBACK_INVITE = {
   unused: '未使用',
-  used: '已使用',
+  partial: '部分使用',
+  used: '已用完',
   expired: '已过期',
   revoked: '已作废',
 };
@@ -114,6 +115,8 @@ Page({
           inviteCodes: (result.list || []).map((item) => ({
             ...item,
             statusText: inviteStatusText(item.status),
+            // 还有剩余次数的码才能作废；服务端同样按这个条件兜底
+            canRevoke: item.status === 'unused' || item.status === 'partial',
           })),
         })
       )
@@ -122,9 +125,11 @@ Page({
 
   onRevokeCode(e) {
     const code = e.currentTarget.dataset.code;
+    const item = (this.data.inviteCodes || []).find((row) => row.code === code);
+    const left = item ? Math.max((item.maxUses || 0) - (item.usedCount || 0), 0) : 0;
     wx.showModal({
       title: '作废邀请码',
-      content: '作废后 ' + code + ' 立刻失效，已用它进来的人不受影响。确定吗？',
+      content: '作废后 ' + code + ' 剩余 ' + left + ' 次立即失效，已凭它进来的人不受影响。确定吗？',
       confirmText: '作废',
       confirmColor: '#d93026',
       success: (res) => {
@@ -320,36 +325,36 @@ Page({
     if (this.data.creating) {
       return;
     }
-    // 张数让商家自己选：默认 1 张，边界与网页后台一致（1-20）
+    // 次数让商家自己填：一个码能被多少人各用一次，边界与服务端一致（≥1，不设上限）
     wx.showModal({
       title: '生成邀请码',
       editable: true,
-      placeholderText: '生成几张？1-20',
+      placeholderText: '这张码可被多少人使用？',
       content: '1',
       confirmText: '生成',
       success: (res) => {
         if (!res.confirm) {
           return;
         }
-        const count = parseInt((res.content || '1').trim(), 10);
-        if (!(count >= 1 && count <= 20)) {
-          wx.showToast({ title: '数量需在 1-20 之间', icon: 'none' });
+        const uses = parseInt((res.content || '1').trim(), 10);
+        if (!(uses >= 1)) {
+          wx.showToast({ title: '次数需为 1 以上的整数', icon: 'none' });
           return;
         }
-        this.createInvites(count);
+        this.createInvite(uses);
       },
     });
   },
 
-  createInvites(count) {
+  createInvite(uses) {
     this.setData({ creating: true });
     // 默认 48 小时：够群主把卡片发出去、对方隔天打开
-    request({ url: '/admin/invite/batch', method: 'POST', data: { count, expireHours: 48 } })
-      .then((codes) => {
-        if (!codes || !codes.length) {
+    request({ url: '/admin/invite/create', method: 'POST', data: { uses, expireHours: 48 } })
+      .then((code) => {
+        if (!code || !code.code) {
           return;
         }
-        this.showCreatedInvites(codes);
+        this.showCreatedInvite(code);
         this.loadInvites();
       })
       .catch((err) => app.toastError(err))
@@ -357,30 +362,28 @@ Page({
   },
 
   /** 生成完的下一步就是发给对方，所以确认键直接当「复制」用 */
-  showCreatedInvites(codes) {
-    const text = codes.map((item) => item.code).join('\n');
-    const expireAt = (codes[0].expireAt || '').replace('T', ' ').slice(0, 16);
-    const single = codes.length === 1;
+  showCreatedInvite(code) {
+    const expireAt = (code.expireAt || '').replace('T', ' ').slice(0, 16);
     wx.showModal({
-      title: single ? '邀请码已生成' : '已生成 ' + codes.length + ' 个邀请码',
-      content: text + '\n有效期至 ' + expireAt + '，一次性使用',
-      confirmText: single ? '复制' : '全部复制',
+      title: '邀请码已生成',
+      content: code.code + '\n可用 ' + code.maxUses + ' 次，有效期至 ' + expireAt,
+      confirmText: '复制',
       cancelText: '关闭',
       success: (res) => {
         if (res.confirm) {
-          this.copyCode(text);
+          this.copyCode(code.code);
         }
       },
     });
   },
 
-  /** 列表里的「全部复制」：只复制还没用掉的，已用/作废的发给别人也没用 */
+  /** 列表里的「全部复制」：只复制还有剩余次数的，已用完/已作废的发给别人也没用 */
   onCopyAllCodes() {
     const codes = (this.data.inviteCodes || [])
-      .filter((item) => item.status === 'unused')
+      .filter((item) => item.canRevoke)
       .map((item) => item.code);
     if (!codes.length) {
-      wx.showToast({ title: '没有未使用的邀请码', icon: 'none' });
+      wx.showToast({ title: '没有还能用的邀请码', icon: 'none' });
       return;
     }
     this.copyCode(codes.join('\n'));

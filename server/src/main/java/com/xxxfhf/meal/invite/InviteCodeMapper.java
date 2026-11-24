@@ -10,39 +10,54 @@ import org.apache.ibatis.annotations.Update;
 public interface InviteCodeMapper extends BaseMapper<InviteCode> {
 
     /**
-     * 原子核销。
+     * 原子核销：扣一次次数。
      *
-     * 条件里同时带 status='unused' 与 expire_at > NOW()，由 MySQL 单条语句保证「同一码只有一个人能用」：
-     * 两个用户同时提交，只有一个能拿到 affectedRows = 1，另一个返回 0 后按「已失效」提示。
-     * 禁止「先查再改」，那会并发双开。
+     * 条件里同时带「状态还能用」「未过期」「还有剩余次数」，由 MySQL 单条语句保证不会超发：
+     * 二十个人同时提交，只有剩余次数够的那几个能拿到 affectedRows = 1，其余返回 0 后按失效提示。
+     * 禁止「先查再改」，那会并发超发。
+     *
+     * 扣完最后一次时状态直接落 used，避免出现「used_count 已到上限但状态还是 partial」的中间态。
+     *
+     * <p><b>赋值顺序不能调</b>：MySQL 单表 UPDATE 的 SET 子句从左到右依次求值，
+     * 后面的赋值会读到前面已经改过的列。所以 `status` 必须写在 `used_count` 之前，
+     * 它读到的才是「本次核销之前」的次数；反过来写（先 used_count 再加 1，CASE 里又 +1）
+     * 会多加一次，3 次的码用 2 次就被标成用完。
      */
     @Update("""
             UPDATE invite_code
-               SET status = 'used', used_by = #{userId}, used_at = NOW()
+               SET status = CASE WHEN used_count + 1 >= max_uses THEN 'used' ELSE 'partial' END,
+                   used_count = used_count + 1,
+                   last_used_at = NOW()
              WHERE code = #{code}
-               AND status = 'unused'
+               AND status IN ('unused', 'partial')
                AND expire_at > NOW()
+               AND used_count < max_uses
             """)
-    int consume(@Param("code") String code, @Param("userId") Long userId);
+    int consume(@Param("code") String code);
 
-    /** 把已过有效期但仍标 unused 的码批量标成 expired。由扫描任务调用，不影响核销判定。 */
+    /**
+     * 把已过有效期但仍标 unused / partial 的码批量标成 expired。由扫描任务与列表查询调用。
+     *
+     * 只改状态不动次数：剩余次数随过期一起作废，但「用过几次」是历史事实，不能抹掉。
+     */
     @Update("""
             UPDATE invite_code
                SET status = 'expired'
-             WHERE status = 'unused'
+             WHERE status IN ('unused', 'partial')
                AND expire_at <= NOW()
             """)
     int markExpired();
 
     /**
-     * 商家还没查看过的「码被用了」条数，用于后台红点。
+     * 商家还没查看过的「码被用过」条数，用于后台红点。
      *
-     * 已用未读 = used_by 非空且 read_at 为空；只数不扫表内容，走 idx_invite_used_by。
+     * 口径是「码」不是「次」：一个码被 20 个人用也只算 1 条，否则商家一打开就是 20 个红点。
+     * 走 idx_invite_read。
      */
     @Select("""
             SELECT COUNT(*)
               FROM invite_code
-             WHERE used_by IS NOT NULL
+             WHERE used_count > 0
                AND read_at IS NULL
             """)
     long countUnread();
@@ -51,7 +66,7 @@ public interface InviteCodeMapper extends BaseMapper<InviteCode> {
     @Update("""
             UPDATE invite_code
                SET read_at = NOW()
-             WHERE used_by IS NOT NULL
+             WHERE used_count > 0
                AND read_at IS NULL
             """)
     int markRead();

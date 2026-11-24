@@ -4,7 +4,7 @@ import com.xxxfhf.meal.address.AddressMapper;
 import com.xxxfhf.meal.audit.AuditActions;
 import com.xxxfhf.meal.audit.AuditService;
 import com.xxxfhf.meal.common.BizException;
-import com.xxxfhf.meal.invite.InviteCodeMapper;
+import com.xxxfhf.meal.invite.InviteUseMapper;
 import com.xxxfhf.meal.message.MessageService;
 import com.xxxfhf.meal.order.OrderMapper;
 import com.xxxfhf.meal.user.AuditAction;
@@ -43,7 +43,7 @@ class UserAuditServiceTest {
     private UserMapper userMapper;
 
     @Mock
-    private InviteCodeMapper inviteCodeMapper;
+    private InviteUseMapper inviteUseMapper;
 
     @Mock
     private AddressMapper addressMapper;

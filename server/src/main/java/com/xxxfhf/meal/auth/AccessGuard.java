@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 /**
  * 准入与审核的守门人。**准入与审核是两件事，分别判定**（技术文档 4.9）：
  *
- * - 准入：`group_open_id` 非空，或 invite_code.used_by 命中该用户 → 能进小程序、能看菜单
+ * - 准入：`group_open_id` 非空，或 invite_use 里有该用户的使用明细 → 能进小程序、能看菜单
  * - 审核：`audit_status` → 能下单
  *
  * 所以「已准入但待审核」的用户看得到菜单、下不了单，这是需求里明确要的行为。
