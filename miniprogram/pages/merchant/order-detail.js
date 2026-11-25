@@ -30,6 +30,12 @@ Page({
     totalCount: 0,
     progressPercent: 0,
     printError: '',
+    /** 打印前预览：截图 + 「共 N 张」+ 关闭 / 开始打印 */
+    previewVisible: false,
+    previewSrc: '',
+    previewTotal: 0,
+    previewPages: [],
+    previewing: false,
   },
 
   onLoad(options) {
@@ -390,22 +396,16 @@ Page({
    * 而「A×2 + B×1 只错了 B」这种场景用列表勾选那单批量打印也能解决 ——
    * 多费两张纸比多一个按钮划算。
    */
-  onPrintLabel() {
-    if (this.data.printing || !this.data.orderId) {
+  async onPrintLabel() {
+    // busy 也要挡：ensureConnected 最多等 3 秒，这段时间连点会发两次 /labels
+    if (this.data.printing || this.data.busy || !this.data.orderId) {
       return;
     }
     const printer = require('../../utils/print/printer');
-    if (!printer.isConnected()) {
-      wx.showModal({
-        title: '打印机未连接',
-        content: '先连接打印机，再回来打印。',
-        confirmText: '去连接',
-        success: (res) => {
-          if (res.confirm) {
-            wx.navigateTo({ url: '/pages/merchant/printer' });
-          }
-        },
-      });
+    // 先静默试连一次（需求 14.4）：断线后紧接着点打印很常见，直接弹「去连接」会让人多跑一趟
+    const ready = await printer.ensureConnected();
+    if (!ready) {
+      this.showConnectModal();
       return;
     }
     this.setData({ busy: true });
@@ -437,11 +437,84 @@ Page({
       });
   },
 
+  showConnectModal() {
+    wx.showModal({
+      title: '打印机未连接',
+      content: '先连接打印机，再回来打印。',
+      confirmText: '去连接',
+      success: (res) => {
+        if (res.confirm) {
+          wx.navigateTo({ url: '/pages/merchant/printer' });
+        }
+      },
+    });
+  },
+
+  /**
+   * 打印前预览（需求 14.6）：只渲染第一张并截图，不上报打印记录。
+   *
+   * 截图落在本地用户目录，微信随时可能回收临时文件，落盘后才能跨天查看和统一清理。
+   */
+  async onPreviewLabel() {
+    if (this.data.printing || this.data.previewing || !this.data.orderId) {
+      return;
+    }
+    this.setData({ previewing: true });
+    try {
+      const data = await request({
+        url: '/admin/print/labels',
+        method: 'POST',
+        data: { orderIds: [Number(this.data.orderId)] },
+      });
+      const pages = (data && data.pages) || [];
+      const skipped = (data && data.skipped) || [];
+      if (!pages.length) {
+        const { skipText } = require('../../utils/print/error-text');
+        wx.showModal({
+          title: '无法预览',
+          content: skipped.length
+            ? '这单不可打印：' + skipText(skipped[0].reason)
+            : '这单没有可打印的内容',
+          showCancel: false,
+        });
+        this.setData({ previewing: false });
+        return;
+      }
+      wx.showLoading({ title: '生成预览', mask: true });
+      const { previewPage } = require('../../utils/print/print-runner');
+      const result = await previewPage(pages[0], this, 'test');
+      wx.hideLoading();
+      this.setData({
+        previewing: false,
+        previewVisible: true,
+        previewSrc: (result && result.previewPath) || '',
+        previewTotal: pages.length,
+        previewPages: pages,
+      });
+    } catch (err) {
+      wx.hideLoading();
+      this.setData({ previewing: false });
+      app.toastError(err);
+    }
+  },
+
+  onClosePreview() {
+    this.setData({ previewVisible: false, previewSrc: '', previewPages: [] });
+  },
+
+  onPreviewPrint() {
+    const pages = this.data.previewPages || [];
+    this.setData({ previewVisible: false, previewSrc: '' });
+    if (pages.length) {
+      this.startPrint(pages);
+    }
+  },
+
   startPrint(pages) {
     const printer = require('../../utils/print/printer');
     const { runJob } = require('../../utils/print/print-runner');
 
-    const device = printer.loadDevice();
+    const device = printer.loadDevice() || printer.loadLastDevice();
     const settings = Object.assign(printer.loadSettings(device), {
       deviceName: printer.deviceName(device),
     });

@@ -2,6 +2,8 @@ const app = getApp();
 const printer = require('../../utils/print/printer');
 const capability = require('../../utils/print/capability');
 const sample = require('../../utils/print/sample');
+const linkState = require('../../utils/print/link-state');
+const preview = require('../../utils/print/preview');
 const { flushPending } = require('../../utils/print/print-runner');
 const { errorText } = require('../../utils/print/error-text');
 
@@ -17,6 +19,10 @@ const { errorText } = require('../../utils/print/error-text');
 Page({
   data: {
     connected: false,
+    /** 断线后正在第几次自动重连（1/3、2/3、3/3），0 表示没在重连 */
+    reconnecting: 0,
+    /** 三次都失败：保留设备名，等用户点「重连」或直接点打印由 ensureConnected 兜底 */
+    lost: false,
     deviceName: '',
     devices: [],
     scanning: false,
@@ -41,29 +47,49 @@ Page({
     });
     // 断开要即时反映到页面：打印中走远了、打印机没电了都会走到这里
     this.offDisconnect = printer.onDisconnect(() => {
-      this.setData({ connected: false, deviceName: '' });
+      this.setData({ connected: false });
       if (this.data.printing) {
         this.stopJob();
         wx.showToast({ title: '打印机断开了', icon: 'none' });
       }
     });
+    // 连接状态由 printer 统一广播：断开 → 正在重连(n/3) → 失败停止，都在这里刷新
+    this.offState = printer.onStateChange((state) => this.applyLinkState(state));
+  },
+
+  applyLinkState(state) {
+    // 名字取「当前设备」或「上次的设备」：扫描会清当前设备，但页面不该因此变空白
+    const device = printer.loadDevice() || printer.loadLastDevice();
+    this.setData({
+      connected: !!state.connected,
+      reconnecting: state.reconnecting || 0,
+      lost: !!state.lost,
+      deviceName: printer.deviceName(device),
+    });
   },
 
   onShow() {
     // 每次进来都问一次 SDK，不用本地标志：本地标志很容易停在「已连接」
-    const connected = printer.isConnected();
-    this.setData({ connected });
-    if (connected) {
-      const device = printer.loadDevice();
-      this.setData({ deviceName: printer.deviceName(device) });
-    }
+    const state = linkState.read();
+    const device = printer.loadDevice() || printer.loadLastDevice();
+    this.setData({
+      connected: printer.isConnected(),
+      reconnecting: state.reconnecting || 0,
+      lost: !!state.lost,
+      deviceName: printer.deviceName(device),
+    });
     // 补传上次没报成功的打印记录（最多 50 条、7 天）
     flushPending();
+    // 每天首次进设置页也清一次过期预览图（另一个入口是 App.onLaunch）
+    preview.cleanDaily();
   },
 
   onUnload() {
     if (this.offDisconnect) {
       this.offDisconnect();
+    }
+    if (this.offState) {
+      this.offState();
     }
     this.stopJob();
   },
@@ -140,7 +166,27 @@ Page({
     wx.showLoading({ title: '断开中', mask: true });
     printer.disconnect().then(() => {
       wx.hideLoading();
-      this.setData({ connected: false, deviceName: '' });
+      this.setData({ connected: false, reconnecting: 0, lost: false, deviceName: '' });
+    });
+  },
+
+  /** 三次自动重连都失败后，让商家自己再试一次（用记住的设备，不必重新搜索） */
+  onRetryConnect() {
+    if (this.data.reconnecting) {
+      return;
+    }
+    wx.showLoading({ title: '重连中', mask: true });
+    printer.ensureConnected(5000).then((ok) => {
+      wx.hideLoading();
+      if (ok) {
+        wx.showToast({ title: '已连接', icon: 'success' });
+        return;
+      }
+      wx.showModal({
+        title: '还是连不上',
+        content: '确认打印机已开机、在 3 米内；也可以在「附近设备」里重新搜索一次。',
+        showCancel: false,
+      });
     });
   },
 
@@ -176,11 +222,13 @@ Page({
    * 其余流程与正式标签完全一致，包括进度和暂停处理 —— 打样能打出问题，
    * 正式打印就会是同样的问题。
    */
-  startSample(mode, count) {
+  async startSample(mode, count) {
     if (this.data.printing) {
       return;
     }
-    if (!printer.isConnected()) {
+    // 与正式打印一致：先静默试连一次，别让「刚断线」变成「先搜索再连接」两步
+    const ready = await printer.ensureConnected();
+    if (!ready) {
       wx.showModal({
         title: '打印机未连接',
         content: '先搜索并连接打印机。',

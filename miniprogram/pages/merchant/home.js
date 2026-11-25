@@ -1,7 +1,9 @@
 const app = getApp();
 const { request } = require('../../utils/request');
-const { dateStr, addDays } = require('../../utils/format');
+const { dateStr, addDays, relativeTime } = require('../../utils/format');
 const dict = require('../../utils/dict');
+// 只读纯 storage 的链路状态，绝不 require utils/print/printer（那会拉进整套蓝牙 SDK）
+const linkState = require('../../utils/print/link-state');
 
 const MERCHANT_KEY = 'meal_merchant';
 
@@ -68,6 +70,9 @@ Page({
     can: {},
     /** 本机记住的打印机名，空串表示没连过 */
     printerName: '',
+    /** 链路状态：绿点「已连接」/ 灰点「上次打印 N 分钟前」 */
+    printerOnline: false,
+    printerStatus: '',
     /** 消息：只统计「发给商家」的那一侧，与用户首页各算各的 */
     unreadCount: 0,
     unreadBadge: '',
@@ -99,15 +104,26 @@ Page({
   },
 
   /**
-   * 读本机记住的打印机名。
+   * 读本机记住的打印机名与链路状态。
    *
    * 直接用 storage 而不是 utils/print/printer.js：那个模块会连带 require 整套 JCAPI，
    * 工作台首屏不该为一行卡片付这个代价。storage 键名与 printer.js 的 DEVICE_KEY 保持一致。
+   *
+   * 状态以 print_link_state 为准，并且只认 10 分钟内的「已连接」：
+   * 小程序进程被系统杀掉后状态会停在旧值，不能拿它声称现在还能打。
    */
   refreshPrinterName() {
-    const device = wx.getStorageSync('print_device');
+    // 扫描时会清掉 print_device，所以名字还要退回「上次的设备」，否则搜一次就变空白
+    const device = wx.getStorageSync('print_device') || wx.getStorageSync('print_last_device');
     const name = device && (device.name || device.localName || device.deviceId);
-    this.setData({ printerName: name || '' });
+    const state = linkState.read();
+    const online = linkState.isFresh(state);
+    this.setData({
+      printerName: name || '',
+      printerOnline: online,
+      // 从没打印过也没有新鲜状态时留空，卡片退回「连接蓝牙标签机」
+      printerStatus: online ? '已连接' : (state.lastPrintAt ? '上次打印 ' + relativeTime(new Date(state.lastPrintAt)) : ''),
+    });
   },
 
   onUnload() {

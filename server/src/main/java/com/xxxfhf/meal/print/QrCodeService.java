@@ -99,6 +99,20 @@ public class QrCodeService {
         });
     }
 
+    /**
+     * 删除超过保留期的码文件（由 {@code QrCleanupTask} 定时调用）。
+     *
+     * <p>为什么敢删：码的内容只有订单号（{@code scene}），同一单重打时再调一次微信接口
+     * 就能拿回同一张码，代价只是那一张标签先走一次无码降级布局。留着不清则只增不减，
+     * 一年下来几千个文件，空间不算大但没人看着。
+     *
+     * @param keepDays 保留天数，来自 {@code app.qr.keep-days}
+     * @return 删除与剩余统计
+     */
+    public FileStorageService.CleanResult cleanup(int keepDays) {
+        return storage.deleteOlderThan(SUB_DIR, keepDays);
+    }
+
     private static String fileName(String orderNo) {
         // 订单号只会是数字；仍然过一遍白名单，防止将来换成别的编号规则后拼出穿越路径
         return orderNo.replaceAll("[^A-Za-z0-9_-]", "") + ".png";

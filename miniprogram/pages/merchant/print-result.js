@@ -159,8 +159,10 @@ Page({
    * 连接检查、设置读取、进度回调三处完全一样，抽出来是因为补打与续打的**唯一**差别
    * 在结果怎么合并 —— 其余各写一遍，迟早有一处漏掉暂停提示。
    */
-  runPages(pages, onDone) {
-    if (!printer.isConnected()) {
+  async runPages(pages, onDone) {
+    // 先静默试连一次（需求 14.4）：结果页补打时刚断线很常见，直接弹「去连接」会打断节奏
+    const ready = await printer.ensureConnected();
+    if (!ready) {
       wx.showModal({
         title: '打印机未连接',
         content: '先连接打印机再打印。',
@@ -174,7 +176,7 @@ Page({
       return;
     }
 
-    const device = printer.loadDevice();
+    const device = printer.loadDevice() || printer.loadLastDevice();
     const settings = Object.assign(loadSettings(device), { deviceName: deviceName(device) });
 
     this.runner = runJob({

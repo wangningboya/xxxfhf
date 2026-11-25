@@ -16,9 +16,11 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 /**
  * 图片落本地磁盘（服务器中转上传，非浏览器直传）。
@@ -170,6 +172,58 @@ public class FileStorageService {
      */
     public String pathOf(String subDir, String fileName) {
         return urlPrefix() + "/" + subDir + "/" + fileName;
+    }
+
+    /**
+     * 删除子目录下超期的文件，只扫这一层、不进下级目录。
+     *
+     * <p>给「文件名固定、只增不删」的小程序码用：码按订单号命名、一单一张，
+     * 删掉不影响已经打出去的纸，重打时按需重新生成。
+     *
+     * <p>按文件的**最后修改时间**判断，不解析文件名里的日期 —— 将来换命名规则不用改这里。
+     * 单个文件删失败只记日志并继续，不让一个坏文件挡住整批清理。
+     *
+     * @param subDir   相对子目录，如 {@code qr}
+     * @param keepDays 保留天数，必须 ≥ 1
+     * @return 删除张数、剩余张数与剩余字节数
+     */
+    public CleanResult deleteOlderThan(String subDir, int keepDays) {
+        if (keepDays < 1) {
+            throw BizException.param("保留天数必须大于 0");
+        }
+        Path dir = root.resolve(subDir).normalize();
+        if (!dir.startsWith(root) || !Files.isDirectory(dir)) {
+            return new CleanResult(0, 0, 0);
+        }
+        long cutoff = System.currentTimeMillis() - keepDays * 24L * 60 * 60 * 1000;
+        List<Path> files;
+        try (Stream<Path> stream = Files.list(dir)) {
+            files = stream.filter(Files::isRegularFile).toList();
+        } catch (IOException ex) {
+            log.warn("扫描清理目录失败 dir={}：{}", dir, ex.getMessage());
+            return new CleanResult(0, 0, 0);
+        }
+        int deleted = 0;
+        int remaining = 0;
+        long remainingBytes = 0;
+        for (Path file : files) {
+            try {
+                if (Files.getLastModifiedTime(file).toMillis() < cutoff) {
+                    Files.deleteIfExists(file);
+                    deleted++;
+                } else {
+                    remaining++;
+                    remainingBytes += Files.size(file);
+                }
+            } catch (IOException ex) {
+                log.warn("清理过期文件失败 path={}：{}", file, ex.getMessage());
+            }
+        }
+        return new CleanResult(deleted, remaining, remainingBytes);
+    }
+
+    /** @param deleted 本次删除的文件数；@param remaining 未到期仍保留的文件数；@param remainingBytes 保留文件的字节数 */
+    public record CleanResult(int deleted, int remaining, long remainingBytes) {
     }
 
     private static String resolveExtension(String originalFilename) {

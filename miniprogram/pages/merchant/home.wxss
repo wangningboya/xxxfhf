@@ -172,6 +172,21 @@
   color: #9a9a9a;
 }
 
+/* 打印机链路状态点：绿=10 分钟内确认连着，灰=只有历史记录 */
+.printer-dot {
+  display: inline-block;
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 50%;
+  margin-right: 8rpx;
+  background: #c8c9cc;
+  vertical-align: middle;
+}
+
+.printer-dot-on {
+  background: #2e9e5b;
+}
+
 .logout {
   margin-top: 24rpx;
   text-align: center;

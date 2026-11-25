@@ -2,6 +2,8 @@ const { request, setToken, getToken, toastError } = require('./utils/request');
 const { getGroupEncrypted } = require('./utils/group-entry');
 const dict = require('./utils/dict');
 const privacy = require('./utils/privacy');
+// 只读纯 storage 的链路状态，不含蓝牙 SDK
+const linkState = require('./utils/print/link-state');
 
 /** 微信登录拿不到 code 时的统一文案：两种情况对用户是同一件事 */
 const LOGIN_FAILED = '微信登录失败，请重新进入小程序';
@@ -92,6 +94,15 @@ App({
 
   onLaunch() {
     this.registerPrivacyListener();
+    // 冷启动时蓝牙连接一定已经断了（进程被杀），把展示用的「已连接」复位：
+    // 不复位的话工作台会拿 10 分钟内的旧状态显示绿灯，点打印才发现打不出来
+    linkState.write({ connected: false, reconnecting: 0, lost: false });
+    // 每天首次冷启动清一次过期预览截图：小程序没有常驻定时器，只能惰性清理（见需求 14.7）
+    try {
+      require('./utils/print/preview').cleanDaily();
+    } catch (e) {
+      console.warn('[打印] 预览清理失败', e);
+    }
     this.ensureLogin()
       .then(() => {
         // 字典与登录无关（接口不鉴权），但排在登录后发，少一次并发首屏请求

@@ -118,6 +118,24 @@
   </view>
 </view>
 
+<!-- 批量首张预览：确认版式后再出 30 张纸 -->
+<view class="mask" wx:if="{{previewVisible}}">
+  <view class="dialog preview-dialog">
+    <view class="dialog-title">首张预览</view>
+    <image wx:if="{{previewSrc}}" class="preview-img" src="{{previewSrc}}" mode="widthFix"></image>
+    <view class="preview-tip" wx:elif="{{previewLoading}}">正在生成预览…</view>
+    <view class="preview-tip" wx:else>预览图生成失败，可直接打印。</view>
+    <view class="preview-content">
+      <view class="preview-line" wx:for="{{previewLines}}" wx:key="*this">{{item}}</view>
+    </view>
+    <view class="dialog-msg">打印期间不要切出小程序，切到后台会中断。</view>
+    <view class="dialog-actions">
+      <view class="btn btn-ghost" bindtap="onClosePreview">关闭</view>
+      <view class="btn" bindtap="onConfirmPreview">开始打印 {{previewTotal}} 张</view>
+    </view>
+  </view>
+</view>
+
 <!-- 打印进度层：打印期间必须留在页面上，切后台会丢数据 -->
 <view class="mask" wx:if="{{printing}}">
   <view class="dialog">

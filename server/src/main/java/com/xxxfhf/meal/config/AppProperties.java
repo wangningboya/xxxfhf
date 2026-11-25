@@ -21,6 +21,7 @@ public class AppProperties {
     private final Schedule schedule = new Schedule();
     private final Web web = new Web();
     private final Admin admin = new Admin();
+    private final Qr qr = new Qr();
 
     @PostConstruct
     void validate() {
@@ -57,6 +58,9 @@ public class AppProperties {
         if (upload.getJpegQuality() <= 0.1f || upload.getJpegQuality() > 1.0f) {
             throw new IllegalStateException("APP_UPLOAD_JPEG_QUALITY 必须在 0.1~1.0 之间");
         }
+        if (qr.getKeepDays() < 1) {
+            throw new IllegalStateException("APP_QR_KEEP_DAYS 必须 ≥ 1（0 或负数会让清理任务删掉刚生成的码）");
+        }
     }
 
     public Jwt getJwt() {
@@ -83,7 +87,30 @@ public class AppProperties {
         return admin;
     }
 
+    public Qr getQr() {
+        return qr;
+    }
+
     /* ------------------------------------------------------------------ */
+
+    /** 标签小程序码的存储策略。 */
+    public static class Qr {
+        /**
+         * 保留天数：超过这个天数的 {@code qr/*.png} 由定时任务删除。
+         *
+         * <p>删掉不丢东西：码的内容只有订单号，重打时会再调一次微信接口拿回同一张码，
+         * 代价仅是那一张标签走一次无码降级布局。
+         */
+        private int keepDays = 180;
+
+        public int getKeepDays() {
+            return keepDays;
+        }
+
+        public void setKeepDays(int keepDays) {
+            this.keepDays = keepDays;
+        }
+    }
 
     public static class Jwt {
         /** HS256 密钥，至少 32 字节。生产必须换成随机值，且不入库不入代码库。 */

@@ -322,3 +322,34 @@
   left: 100%;
   top: 0;
 }
+
+/* ==================== 批量首张预览 ==================== */
+
+.preview-dialog {
+  width: 640rpx;
+}
+
+.preview-img {
+  width: 100%;
+  margin: 20rpx 0 4rpx;
+  border-radius: 12rpx;
+  background: #ffffff;
+  box-shadow: 0 0 0 2rpx #e6e8eb;
+}
+
+.preview-tip {
+  margin: 24rpx 0 4rpx;
+  font-size: 24rpx;
+  color: #8a8a8a;
+  text-align: center;
+}
+
+.preview-content {
+  margin-top: 20rpx;
+}
+
+.preview-line {
+  font-size: 24rpx;
+  color: #555555;
+  line-height: 1.7;
+}

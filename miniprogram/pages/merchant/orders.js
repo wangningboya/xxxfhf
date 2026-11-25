@@ -89,6 +89,15 @@ Page({
     progressPercent: 0,
     printError: '',
     printText: '打印标签',
+    /** 批量首张预览（需求 14.6）：出 30 张纸之前先看一眼版式 */
+    previewVisible: false,
+    previewSrc: '',
+    previewLoading: false,
+    previewLines: [],
+    previewTotal: 0,
+    previewRest: 0,
+    previewPages: [],
+    previewRestPages: [],
   },
 
   onLoad(options) {
@@ -478,16 +487,59 @@ Page({
       content += '\n本次先打前 ' + kept.length + ' 张，还剩 ' + rest + ' 张下次再打';
     }
 
+    // 先出首张预览，再把「开始打印」交给商家点（需求 14.6）：
+    // 30 张纸打出去之前，至少让他在本机看一眼版式是不是这单的。
+    this.openPreview(kept, allPages.slice(kept.length), content);
+  },
+
+  /**
+   * 批量首张预览。只渲染第一张并截图，不上报打印记录。
+   * 预览失败不阻断打印：弹层里退化成纯文案，按钮照常可点。
+   */
+  openPreview(kept, restPages, content) {
+    const lines = String(content || '').split('\n').filter((line) => line);
+    this.setData({
+      previewVisible: true,
+      previewSrc: '',
+      previewLoading: true,
+      previewLines: lines,
+      previewTotal: kept.length,
+      previewRest: restPages.length,
+      previewPages: kept,
+      previewRestPages: restPages,
+    });
+    const { previewPage } = require('../../utils/print/print-runner');
+    previewPage(kept[0], this, 'test')
+      .then((result) => {
+        this.setData({ previewLoading: false, previewSrc: (result && result.previewPath) || '' });
+      })
+      .catch((err) => {
+        console.warn('[打印] 首张预览失败', err);
+        this.setData({ previewLoading: false });
+      });
+  },
+
+  onClosePreview() {
+    this.setData({ previewVisible: false, previewSrc: '', previewPages: [], previewRestPages: [] });
+  },
+
+  onConfirmPreview() {
+    const pages = this.data.previewPages || [];
+    const restPages = this.data.previewRestPages || [];
+    this.setData({ previewVisible: false, previewSrc: '' });
+    if (pages.length) {
+      this.startPrint(pages, restPages);
+    }
+  },
+
+  showConnectModal() {
     wx.showModal({
-      title: '确认打印',
-      content,
-      confirmText: '开始打印',
+      title: '打印机未连接',
+      content: '先连接打印机，再回来打印。',
+      confirmText: '去连接',
       success: (res) => {
         if (res.confirm) {
-          // 被上限截掉的那些要带给结果页：商家打完 30 张后在那里点「继续打印剩余」。
-          // 不落地成持久队列（需求 7.3 第 6 条）：超出 30 张本身是异常操作，
-          // 关掉小程序就该重新勾选，而不是下次打开冒出几十张不明来历的标签。
-          this.startPrint(kept, allPages.slice(kept.length));
+          wx.navigateTo({ url: '/pages/merchant/printer' });
         }
       },
     });
@@ -499,26 +551,19 @@ Page({
    * 打印相关依赖在这里才 require：订单列表是最高频页面，不该为了一个可能不点的按钮
    * 在首屏同步加载三百多 KB 的蓝牙 SDK。
    */
-  startPrint(pages, restPages) {
+  async startPrint(pages, restPages) {
     const printer = require('../../utils/print/printer');
     const { runJob } = require('../../utils/print/print-runner');
     const { errorText } = require('../../utils/print/error-text');
 
-    if (!printer.isConnected()) {
-      wx.showModal({
-        title: '打印机未连接',
-        content: '先连接打印机，再回来打印。',
-        confirmText: '去连接',
-        success: (res) => {
-          if (res.confirm) {
-            wx.navigateTo({ url: '/pages/merchant/printer' });
-          }
-        },
-      });
+    // 先静默试连一次（需求 14.4）：断线后紧接着点打印很常见，直接弹「去连接」会让人多跑一趟
+    const ready = await printer.ensureConnected();
+    if (!ready) {
+      this.showConnectModal();
       return;
     }
 
-    const device = printer.loadDevice();
+    const device = printer.loadDevice() || printer.loadLastDevice();
     const settings = Object.assign(printer.loadSettings(device), {
       deviceName: printer.deviceName(device),
     });

@@ -132,9 +132,31 @@
     <view
       class="btn btn-ghost"
       wx:if="{{printable}}"
+      bindtap="onPreviewLabel"
+    >
+      {{previewing ? '生成中…' : '预览'}}
+    </view>
+    <view
+      class="btn btn-ghost"
+      wx:if="{{printable}}"
       bindtap="onPrintLabel"
     >
       {{busy ? '准备中…' : (printRecords.length ? '重打标签' : '打印标签')}}
+    </view>
+  </view>
+</view>
+
+<!-- 打印前预览 -->
+<view class="mask" wx:if="{{previewVisible}}">
+  <view class="dialog preview-dialog">
+    <view class="dialog-title">打印预览</view>
+    <image wx:if="{{previewSrc}}" class="preview-img" src="{{previewSrc}}" mode="widthFix"></image>
+    <view class="preview-tip" wx:else>预览图生成失败，可直接打印。</view>
+    <view class="progress-text">共 {{previewTotal}} 张</view>
+    <view class="dialog-msg">看到的就是要打的，差别只有打印机浓度。</view>
+    <view class="dialog-actions">
+      <view class="btn btn-ghost" bindtap="onClosePreview">关闭</view>
+      <view class="btn" bindtap="onPreviewPrint">开始打印 {{previewTotal}} 张</view>
     </view>
   </view>
 </view>

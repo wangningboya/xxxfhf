@@ -131,11 +131,16 @@
       <view class="grid-title">配置</view>
       <view class="grid-desc">截单时间、配送费等</view>
     </view>
-    <!-- 打印机：只读本地记住的设备名，不在这里加载 SDK —— 工作台是最高频页面，
+    <!-- 打印机：只读本地记住的设备名与链路状态，不在这里加载 SDK —— 工作台是最高频页面，
          为了显示一行状态同步初始化整套蓝牙栈不划算 -->
     <view wx:if="{{can.printTag}}" class="grid-item" data-url="/pages/merchant/printer" bindtap="onGo">
       <view class="grid-title">打印机</view>
-      <view class="grid-desc">{{printerName ? '已记住：' + printerName : '连接蓝牙标签机'}}</view>
+      <view class="grid-desc">
+        <text class="printer-dot {{printerOnline ? 'printer-dot-on' : ''}}"></text>
+        <text wx:if="{{printerStatus}}">{{printerStatus}}</text>
+        <text wx:elif="{{printerName}}">已记住：{{printerName}}</text>
+        <text wx:else>连接蓝牙标签机</text>
+      </view>
     </view>
   </view>
 

@@ -4,15 +4,19 @@
     <view class="card-title">打印机</view>
     <view class="conn">
       <view class="conn-state {{connected ? 'conn-on' : 'conn-off'}}">
-        {{connected ? '已连接' : '未连接'}}
+        {{connected ? '已连接' : (reconnecting ? '正在重连 (' + reconnecting + '/3)' : (lost ? '已断开' : '未连接'))}}
       </view>
       <view class="conn-name">{{deviceName || '还没有连接过打印机'}}</view>
     </view>
     <view class="note">
       标签 70×40mm 间隙纸。同一台手机连过之后会记住，换手机需要重新连。
     </view>
+    <view class="note" wx:if="{{!connected && deviceName}}">
+      记住了这台机器，但现在没连上。掉线后会自动重连，不用手动搜索。
+    </view>
     <view class="actions">
       <view class="btn btn-ghost" bindtap="onScan">{{scanning ? '搜索中…' : '搜索打印机'}}</view>
+      <view class="btn btn-ghost" wx:if="{{!connected && deviceName}}" bindtap="onRetryConnect">重连</view>
       <view class="btn btn-ghost" wx:if="{{connected}}" bindtap="onDisconnect">断开</view>
     </view>
   </view>

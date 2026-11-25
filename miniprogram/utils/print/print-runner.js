@@ -18,6 +18,8 @@ const { buildPageModel } = require('./label-layout');
 const { assetUrl } = require('../format');
 const { LOCAL_ERROR } = require('./error-text');
 const { reportPage, flushPending } = require('./pending');
+const preview = require('./preview');
+const printer = require('./printer');
 
 /** 缓存上限：一单最多三四个套餐，3 条足够；不做全局 LRU，一批打完直接清空 */
 const CACHE_LIMIT = 3;
@@ -95,9 +97,10 @@ function drawElement(element) {
  * @param {object} model     页面模型（毫米坐标）
  * @param {object} component 页面实例，SDK 用它找 canvas
  * @param {string} canvasId  与 wxml 里 canvas 的 canvas-id 一致
- * @return {Promise<{data: string, width: number, height: number}>}
+ * @param {object} [opts]    `{snapshot: true}` 时在 endDrawLabel 前多截一张预览图
+ * @return {Promise<{data: string, width: number, height: number, previewPath: string}>}
  */
-function renderPage(model, component, canvasId) {
+function renderPage(model, component, canvasId, opts) {
   return enqueueCanvas(async () => {
     const start = new JCAPICommon.SDKDrawLabelTemplate();
     start.canvasId = canvasId || 'test';
@@ -113,11 +116,33 @@ function renderPage(model, component, canvasId) {
       await drawElement(elements[i]);
     }
 
+    // 截图必须在 endDrawLabel 之前：SDK 取完像素收尾时可能清画布，之后再截容易拿到白图。
+    // 截图失败只降级成空路径，绝不阻断后面的打印。
+    let previewPath = '';
+    if (opts && opts.snapshot) {
+      const tempPath = await preview.snapshot(component, canvasId || 'test');
+      previewPath = preview.persist(tempPath, model.pageKey);
+    }
+
     const result = await JCAPI.endDrawLabel(model.gapType || 1);
     if (!result || !result.data) {
       throw new Error('标签像素读取失败');
     }
-    return result;
+    return Object.assign({}, result, { previewPath });
+  });
+}
+
+/**
+ * 预览一张标签：与打印走完全相同的绘制路径，唯一差别是 endDrawLabel 前多截一张图。
+ *
+ * 不产生打印记录，也不要求打印机已连接（画布是本地渲染）；二维码仍按打印时的方式
+ * 预取一次，否则预览里不会有码，看到的不等于要打的。
+ */
+function previewPage(page, component, canvasId) {
+  return prefetchQr([page]).then((paths) => {
+    const qrPath = page.qrImageUrl ? (paths && paths[page.qrImageUrl]) || '' : '';
+    const model = buildPageModel(page, { qrPath });
+    return renderPage(model, component, canvasId, { snapshot: true });
   });
 }
 
@@ -217,6 +242,9 @@ function runJob(options) {
     settle = resolve;
   });
 
+  // 作业期间不让自动重连来抢 SDK：cancelPrint 与 connectWithDeviceId 同时跑会互相干扰
+  printer.setJobActive(true);
+
   function emitProgress(page) {
     if (typeof options.onProgress === 'function') {
       options.onProgress({ printed: completedCount(), total, page });
@@ -265,14 +293,18 @@ function runJob(options) {
       }
     }
     const results = state.results.slice();
-    settle({
+    const summary = {
       batchNo,
       total,
       successCount: results.filter((item) => item && item.result === 'success').length,
       failCount: results.filter((item) => item && item.result === 'fail').length,
       results,
       cancelled: state.cancelled,
-    });
+    };
+    settle(summary);
+    // 作业收口：释放「打印中不抢连接」的闸门，并记下这次结果供工作台卡片展示
+    printer.setJobActive(false);
+    printer.notePrintResult(summary);
   }
 
   function failCurrent(errCode) {
@@ -463,4 +495,4 @@ function runJob(options) {
   };
 }
 
-module.exports = { runJob, renderPage, prefetchQr, flushPending, buildPageModel };
+module.exports = { runJob, renderPage, previewPage, prefetchQr, flushPending, buildPageModel };
