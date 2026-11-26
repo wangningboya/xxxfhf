@@ -21,8 +21,13 @@ public class Dish {
     /** 菜名，如「红烧肉」 */
     private String name;
 
-    /** 预留分类字段。本版不提供维护入口，也不参与前端分组展示（需求 4.3） */
-    private Long categoryId;
+    /**
+     * 原料分类存值，见字典 {@code dish_category}（自定义类型，本期不预置项、不做界面）。
+     *
+     * <p>与「商品分类」是两个正交维度：这里只是把菜归类（将来做备菜分组用），
+     * **不影响盒饭组成与售卖**。存值口径与 {@link Combo#getCategoryCode()} 一致。
+     */
+    private String categoryCode;
 
     /** enabled / disabled，见 GoodsStatus */
     private String status;
@@ -47,12 +52,12 @@ public class Dish {
         this.name = name;
     }
 
-    public Long getCategoryId() {
-        return categoryId;
+    public String getCategoryCode() {
+        return categoryCode;
     }
 
-    public void setCategoryId(Long categoryId) {
-        this.categoryId = categoryId;
+    public void setCategoryCode(String categoryCode) {
+        this.categoryCode = categoryCode;
     }
 
     public String getStatus() {

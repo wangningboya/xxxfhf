@@ -103,7 +103,7 @@ CREATE TABLE IF NOT EXISTS `address` (
 CREATE TABLE IF NOT EXISTS `dish` (
     `id`          BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
     `name`        VARCHAR(64)  NOT NULL COMMENT '菜名',
-    `category_id` BIGINT                DEFAULT NULL COMMENT '菜品分类',
+    `category_code` VARCHAR(64)         DEFAULT NULL COMMENT '原料分类存值，见字典 dish_category',
     `status`      VARCHAR(16)  NOT NULL DEFAULT 'enabled' COMMENT 'enabled/disabled',
     `sort`        INT          NOT NULL DEFAULT 0 COMMENT '排序',
     PRIMARY KEY (`id`),
@@ -123,10 +123,11 @@ CREATE TABLE IF NOT EXISTS `combo` (
     `dishes`         JSON                  DEFAULT NULL COMMENT '组成菜品 [{dishId,name,qty}]',
     `spec_group_ids` JSON                  DEFAULT NULL COMMENT '启用的规格组 ID 数组',
     `status`         VARCHAR(16)  NOT NULL DEFAULT 'off' COMMENT 'on/off',
-    `category_id`    BIGINT                DEFAULT NULL COMMENT '预留分类，本版不参与展示分组',
+    `category_code`  VARCHAR(64)           DEFAULT NULL COMMENT '商品分类存值，见字典 combo_category（bento 盒饭 / homemade 自制菜）',
     `sort`           INT          NOT NULL DEFAULT 0 COMMENT '排序',
     PRIMARY KEY (`id`),
-    KEY `idx_combo_status_sort` (`status`, `sort`)
+    KEY `idx_combo_status_sort` (`status`, `sort`),
+    KEY `idx_combo_category` (`category_code`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT ='盒饭（售卖单元）';
 
 -- -----------------------------------------------------------------------------

@@ -6,6 +6,25 @@ const cartUtil = require('../../utils/cart');
 const SELECTED_ADDRESS_KEY = 'meal_selected_address';
 
 /**
+ * 在菜单快照里按 optionId 找规格选项。
+ *
+ * 找的是「这份菜单」的快照，不是实时规格组 —— 后者可能已经把选项删了/改了差价，
+ * 拿它校准会得到和下单（服务端按快照校验）不一致的结果。
+ */
+function findSpecOption(menuItem, optionId) {
+  const groups = menuItem.specGroups || [];
+  for (let i = 0; i < groups.length; i += 1) {
+    const options = groups[i].options || [];
+    for (let j = 0; j < options.length; j += 1) {
+      if (String(options[j].optionId) === String(optionId)) {
+        return options[j];
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * 用户侧订阅消息模板：接单、拒单，第三个按取送方式二选一。
  *
  * 微信一次最多请求 3 个模板，而用户侧一共需要 4 个（自取取餐码 / 配送进度各一个），
@@ -97,19 +116,7 @@ Page({
       return;
     }
 
-    const lines = cart.items.map((item) => {
-      const specDelta = (item.specDeltas || []).reduce((s, v) => s + Number(v || 0), 0);
-      const unit = Number(item.price || 0) + specDelta;
-      return {
-        key: cartUtil.lineKey(item.comboId, item.optionIds),
-        name: item.name,
-        specText: item.specText,
-        qty: item.qty,
-        optionIds: item.optionIds || [],
-        comboId: item.comboId,
-        lineText: yuan(unit * item.qty),
-      };
-    });
+    const lines = this.buildLines(cart);
 
     app.loadConfig().then((config) => {
       const slots = parseList(config.pickupSlots);
@@ -132,10 +139,16 @@ Page({
   },
 
   /**
-   * 截单检测：过了截单点不能提交（判定以服务端为准，这里只做前置提示）。
+   * 截单检测 + 价格校准：过了截单点不能提交（判定以服务端为准，这里只做前置提示）。
    *
    * 无参请求 /menu —— 服务端按自己的「明天」返回。日期对不上说明跨天了，
    * 车内餐已不可能下单：清车、提示、退回购物车。
+   *
+   * 同一个响应顺手把价格校准一遍（需求 4.6「价格口径」）：
+   * 购物车里的 price 只是加购那一刻抄下的副本，而服务端下单取的是
+   * daily_menu.price_snapshot（发布菜单时冻结的价）。商家在加购后改过价，
+   * 不校准就会出现「确认页显示 28、订单实收 30」，用户只会觉得被坑。
+   * 这里绝不能用商品库实时价（/combo/all），那是两套口径。
    */
   checkCutoff() {
     if (!this.data.serveDate) {
@@ -150,11 +163,86 @@ Page({
           return;
         }
         this.setData({ cutoff: !!menu.cutoff });
-        this.recalc();
+        this.syncWithMenu(menu);
       })
       .catch(() => {
         // 拉不到就不提示，提交时服务端仍会拦
       });
+  },
+
+  /** 把购物车里的行按当前菜单（价格快照 + 规格内容）重算一遍 */
+  syncWithMenu(menu) {
+    const byComboId = {};
+    (menu.items || []).forEach((item) => {
+      byComboId[String(item.comboId)] = item;
+    });
+    const cart = cartUtil.load();
+    const kept = [];
+    const dropped = [];
+
+    cart.items.forEach((item) => {
+      const menuItem = byComboId[String(item.comboId)];
+      if (!menuItem) {
+        // 商家把它撤出这份菜单了：留着只会在提交时被服务端打回
+        dropped.push(item.name);
+        return;
+      }
+      const specDeltas = [];
+      let optionMissing = false;
+      (item.optionIds || []).forEach((optionId) => {
+        const option = findSpecOption(menuItem, optionId);
+        if (!option) {
+          optionMissing = true;
+          return;
+        }
+        specDeltas.push(Number(option.priceDelta || 0));
+      });
+      if (optionMissing) {
+        dropped.push(item.name + '（规格已调整）');
+        return;
+      }
+      kept.push(Object.assign({}, item, {
+        price: Number(menuItem.price || 0),
+        specDeltas,
+      }));
+    });
+
+    cart.items = kept;
+    cartUtil.save(cart);
+
+    if (dropped.length) {
+      const text = dropped.length === 1
+        ? dropped[0] + ' 已不在今日菜单，已为你移除'
+        : dropped.length + ' 件商品已不在今日菜单，已为你移除';
+      wx.showToast({ title: text, icon: 'none', duration: 2500 });
+    }
+    if (!kept.length) {
+      wx.navigateBack();
+      return;
+    }
+    this.setData({
+      lines: this.buildLines(cart),
+      count: cartUtil.count(cart),
+      goodsAmountText: yuan(cartUtil.goodsAmount(cart)),
+    });
+    this.recalc();
+  },
+
+  /** 购物车行 → 确认页展示行。单价 = 菜单快照价 + 规格差价 */
+  buildLines(cart) {
+    return cart.items.map((item) => {
+      const specDelta = (item.specDeltas || []).reduce((s, v) => s + Number(v || 0), 0);
+      const unit = Number(item.price || 0) + specDelta;
+      return {
+        key: cartUtil.lineKey(item.comboId, item.optionIds),
+        name: item.name,
+        specText: item.specText,
+        qty: item.qty,
+        optionIds: item.optionIds || [],
+        comboId: item.comboId,
+        lineText: yuan(unit * item.qty),
+      };
+    });
   },
 
   /** 默认地址：配送单必须有一个，否则提交时会被服务端打回 */

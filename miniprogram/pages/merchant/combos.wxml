@@ -19,6 +19,7 @@
       <view class="combo-main">
         <view class="combo-name">
           {{item.name}}
+          <text class="badge badge-cat" wx:if="{{item.categoryLabel}}">{{item.categoryLabel}}</text>
           <text class="badge {{item.status === 'on' ? 'badge-on' : ''}}">{{item.status === 'on' ? '在售' : '下架'}}</text>
         </view>
         <view class="combo-price">¥{{item.priceText}}</view>

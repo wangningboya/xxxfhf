@@ -124,6 +124,100 @@ page {
   color: #b0b0b0;
 }
 
+/* ---- 分类导航（需求 4.22）：左分类 / 右商品，只有一类时左侧不渲染 ---- */
+/* 左栏 sticky：列表往下滚时分类还在视野里；分类多到超过一屏时它自己滚 */
+.menu-split {
+  display: flex;
+  align-items: flex-start;
+}
+
+.cat-side {
+  width: 160rpx;
+  flex: none;
+  position: sticky;
+  top: 12rpx;
+  /* 分类特别多时左栏自己滚，别把页面撑得没法滚动；用 vh 而不是 calc(100vh - rpx)，
+     个别基础库对 calc 里的 rpx 换算不稳 */
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+.cat-side-item {
+  padding: 22rpx 8rpx;
+  margin-bottom: 8rpx;
+  border-radius: 14rpx;
+  font-size: 26rpx;
+  color: #6a6a6a;
+  text-align: center;
+  line-height: 1.35;
+}
+
+.cat-side-item-active {
+  background: #fff3e0;
+  color: #ff9f1c;
+  font-weight: 600;
+}
+
+/* 右侧拿走了 160rpx，卡片要收一档，否则菜名会被挤成三行 */
+.menu-main {
+  flex: 1;
+  min-width: 0;
+  margin-left: 16rpx;
+}
+
+.menu-split .menu-item {
+  padding: 20rpx;
+}
+
+.menu-split .menu-cover {
+  width: 132rpx;
+  height: 132rpx;
+}
+
+.menu-split .menu-body {
+  padding: 0 16rpx;
+}
+
+.menu-split .menu-name-row {
+  flex-wrap: wrap;
+}
+
+.menu-split .menu-name {
+  font-size: 30rpx;
+}
+
+.menu-split .menu-cat {
+  margin-left: 8rpx;
+  padding: 2rpx 8rpx;
+  font-size: 18rpx;
+}
+
+.menu-split .menu-dishes {
+  margin-top: 8rpx;
+  font-size: 22rpx;
+}
+
+.menu-split .menu-foot {
+  margin-top: 12rpx;
+}
+
+.menu-split .menu-price {
+  font-size: 30rpx;
+}
+
+.menu-split .menu-remain {
+  margin-left: 10rpx;
+  font-size: 20rpx;
+}
+
+.menu-split .menu-add {
+  min-width: 96rpx;
+  height: 54rpx;
+  padding: 0 14rpx;
+  font-size: 24rpx;
+  border-radius: 27rpx;
+}
+
 .banner {
   background: #eef4ff;
   color: #3c6fbf;
@@ -194,6 +288,23 @@ page {
   font-size: 32rpx;
   font-weight: 600;
   color: #1a1a1a;
+}
+
+.menu-name-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+/* 「全部」视图下的分类标（自制菜 / 盒饭）：只做识别，不抢名称 */
+.menu-cat {
+  flex: none;
+  margin-left: 12rpx;
+  padding: 2rpx 12rpx;
+  border-radius: 6rpx;
+  background: #fff3e0;
+  color: #ff9f1c;
+  font-size: 20rpx;
 }
 
 .menu-dishes {

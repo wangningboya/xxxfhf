@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.xxxfhf.meal.audit.AuditActions;
 import com.xxxfhf.meal.audit.AuditService;
 import com.xxxfhf.meal.common.BizException;
+import com.xxxfhf.meal.dict.DictCodes;
+import com.xxxfhf.meal.dict.DictService;
 import com.xxxfhf.meal.order.OrderUsageQuery;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,23 +47,38 @@ public class ComboService {
     private final OrderUsageQuery orderUsageQuery;
     /** 商品变更留痕（需求 4.19 / F-J13）：盒饭是售卖层，改价与改组成都会被用户直接看到 */
     private final AuditService auditService;
+    /** 商品分类取字典校验（需求 4.22）：分类只影响展示分组，但必须是个启用着的字典项 */
+    private final DictService dictService;
 
     public ComboService(ComboMapper comboMapper, DishMapper dishMapper,
                         SpecGroupMapper specGroupMapper, OrderUsageQuery orderUsageQuery,
-                        AuditService auditService) {
+                        AuditService auditService, DictService dictService) {
         this.comboMapper = comboMapper;
         this.dishMapper = dishMapper;
         this.specGroupMapper = specGroupMapper;
         this.orderUsageQuery = orderUsageQuery;
         this.auditService = auditService;
+        this.dictService = dictService;
     }
 
     /** 盒饭列表（商家端）：上下架的都要看得到，否则没法重新上架。 */
     public List<Combo> list(String keyword, String status) {
+        return list(keyword, status, null);
+    }
+
+    /**
+     * 盒饭列表，可按商品分类筛选（需求 4.22）。
+     *
+     * @param categoryCode 为空表示不按分类筛；**不做字典存在性校验** ——
+     *                     项被停用后，历史数据仍要能按原存值查出来
+     */
+    public List<Combo> list(String keyword, String status, String categoryCode) {
         String kw = keyword == null ? "" : keyword.trim();
         return comboMapper.selectList(Wrappers.<Combo>lambdaQuery()
                 .like(!kw.isEmpty(), Combo::getName, kw)
                 .eq(status != null && !status.isBlank(), Combo::getStatus, status)
+                .eq(categoryCode != null && !categoryCode.isBlank(),
+                        Combo::getCategoryCode, categoryCode)
                 .orderByAsc(Combo::getSort)
                 .orderByAsc(Combo::getName));
     }
@@ -89,6 +106,7 @@ public class ComboService {
         int price = requirePrice(cmd.price());
         List<ComboDish> dishes = normalizeDishes(cmd.dishes());
         List<Long> specGroupIds = normalizeSpecGroupIds(cmd.specGroupIds());
+        String categoryCode = requireCategory(cmd.categoryCode());
 
         boolean creating = cmd.id() == null;
         Combo combo;
@@ -110,7 +128,7 @@ public class ComboService {
         combo.setPrice(price);
         combo.setDishes(dishes);
         combo.setSpecGroupIds(specGroupIds);
-        combo.setCategoryId(cmd.categoryId());
+        combo.setCategoryCode(categoryCode);
 
         if (creating) {
             comboMapper.insert(combo);
@@ -122,7 +140,8 @@ public class ComboService {
         auditService.record(AuditActions.TABLE_COMBO, combo.getId(),
                 creating ? AuditActions.COMBO_CREATE : AuditActions.COMBO_UPDATE,
                 (creating ? "新增盒饭：" : "修改盒饭：") + name + "｜价格 " + price
-                        + " 分，菜品 " + dishes.size() + " 项，规格组 " + specGroupIds.size() + " 个");
+                        + " 分，分类 " + categoryCode + "，菜品 " + dishes.size() + " 项，规格组 "
+                        + specGroupIds.size() + " 个");
         return combo;
     }
 
@@ -264,15 +283,26 @@ public class ComboService {
     }
 
     /**
+     * 商品分类必填（需求 4.22）：取字典 {@code combo_category} 里启用着的项，存的是**存值**不是项 ID。
+     *
+     * <p>只做存在性校验：分类不参与履约，代码里没有任何按分类分叉的逻辑，
+     * 所以这里不会因为它换了值而多出别的分支。
+     */
+    private String requireCategory(String raw) {
+        return dictService.requireValue(DictCodes.COMBO_CATEGORY, "商品分类", raw, "保存盒饭");
+    }
+
+    /**
      * 保存入参。
      *
      * @param price        整数**分**，前端负责从元换算
      * @param dishes       只需传 dishId 与 qty；name 由服务端按菜品库回填
      * @param specGroupIds 启用的规格组；空数组表示这份盒饭没有规格
+     * @param categoryCode 商品分类存值（字典 combo_category），必填
      * @param sort         编辑时传 null 表示不修改排序
      */
     public record ComboCommand(Long id, String name, String cover, String desc, Integer price,
                                List<ComboDish> dishes, List<Long> specGroupIds,
-                               Long categoryId, Integer sort) {
+                               String categoryCode, Integer sort) {
     }
 }

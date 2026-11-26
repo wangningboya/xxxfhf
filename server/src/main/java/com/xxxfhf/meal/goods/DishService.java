@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.xxxfhf.meal.audit.AuditActions;
 import com.xxxfhf.meal.audit.AuditService;
 import com.xxxfhf.meal.common.BizException;
+import com.xxxfhf.meal.dict.DictCodes;
+import com.xxxfhf.meal.dict.DictService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -29,11 +31,15 @@ public class DishService {
     private final ComboMapper comboMapper;
     /** 商品变更留痕（需求 4.19 / F-J13）：菜品是原料层，改一次会影响所有引用它的盒饭 */
     private final AuditService auditService;
+    /** 原料分类取字典校验（需求 4.22）；本期没有维护入口，只在传了值时才校验 */
+    private final DictService dictService;
 
-    public DishService(DishMapper dishMapper, ComboMapper comboMapper, AuditService auditService) {
+    public DishService(DishMapper dishMapper, ComboMapper comboMapper, AuditService auditService,
+                       DictService dictService) {
         this.dishMapper = dishMapper;
         this.comboMapper = comboMapper;
         this.auditService = auditService;
+        this.dictService = dictService;
     }
 
     /** 菜品列表。商家端用，停用的也要看得到（否则没法重新启用）。 */
@@ -70,7 +76,13 @@ public class DishService {
             }
         }
         dish.setName(name);
-        dish.setCategoryId(cmd.categoryId());
+        // 原料分类本期没有维护入口（需求 4.22）：**传了才改**。
+        // 无条件 set 的后果是任何只改名字的调用都会把它顺手清空 —— 这正是
+        // ComboService 早年踩过的坑，这里不重复。
+        if (cmd.categoryCode() != null) {
+            dish.setCategoryCode(dictService.requireValue(
+                    DictCodes.DISH_CATEGORY, "原料分类", cmd.categoryCode(), "保存菜品"));
+        }
 
         if (creating) {
             dishMapper.insert(dish);
@@ -182,9 +194,11 @@ public class DishService {
     /**
      * 保存入参。
      *
-     * @param id         为空 = 新增
-     * @param sort       编辑时传 null 表示不修改排序
+     * @param id           为空 = 新增
+     * @param categoryCode 原料分类存值（字典 dish_category）；传 null 表示不动，
+     *                     传了值就必须是启用着的项（传空串会因为「请选择原料分类」被拒）
+     * @param sort         编辑时传 null 表示不修改排序
      */
-    public record DishCommand(Long id, String name, Long categoryId, Integer sort) {
+    public record DishCommand(Long id, String name, String categoryCode, Integer sort) {
     }
 }

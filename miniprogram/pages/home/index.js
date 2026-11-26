@@ -112,7 +112,15 @@ Page({
    * 数据就是上面那次 /menu 请求的返回，不再单独发请求。
    */
   applyMenuPreview(menu) {
-    const previewItems = (menu.items || []).map((item) => ({
+    // 首页是「先看盒饭」的入口：盒饭（bento）永远排在前面，自制菜等其它分类跟在后面。
+    // 用分组再拼接而不是 sort 比较器 —— 组内要保持服务端给的 sort 顺序，靠比较器得额外记下标
+    const bento = [];
+    const others = [];
+    (menu.items || []).forEach((item) => {
+      (item.category === 'bento' ? bento : others).push(item);
+    });
+
+    const previewItems = bento.concat(others).map((item) => ({
       comboId: item.comboId,
       name: item.name,
       coverUrl: assetUrl(item.cover),

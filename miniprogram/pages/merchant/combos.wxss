@@ -48,6 +48,12 @@
   color: #2e7d32;
 }
 
+/* 商品分类标（盒饭 / 自制菜 …）：只做识别，用中性色不抢「在售」的绿 */
+.badge-cat {
+  background: #fff3e0;
+  color: #ff9f1c;
+}
+
 .ops {
   display: flex;
   margin-top: 20rpx;

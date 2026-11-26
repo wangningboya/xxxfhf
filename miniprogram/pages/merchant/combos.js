@@ -1,6 +1,7 @@
 const app = getApp();
 const { request } = require('../../utils/request');
 const { yuan, assetUrl } = require('../../utils/format');
+const dict = require('../../utils/dict');
 
 /** 盒饭管理（F-H09 列表部分）：上下架、排序、进编辑页。 */
 Page({
@@ -12,6 +13,11 @@ Page({
   },
 
   onShow() {
+    // 字典没就绪时先等它（分类标要用显示名），失败也不阻塞列表
+    if (!dict.ready()) {
+      dict.load().then(() => this.load()).catch(() => this.load());
+      return;
+    }
     this.load();
   },
 
@@ -49,6 +55,8 @@ Page({
             .map((d) => (d.qty > 1 ? d.name + '×' + d.qty : d.name))
             .join('、'),
           specCount: (combo.specGroupIds || []).length,
+          // 分类显示名走字典：商家改了显示名（比如「自制菜」→「私房菜」）这里立刻跟着变
+          categoryLabel: dict.label('combo_category', combo.categoryCode, ''),
         }));
         this.setData({ combos, loading: false });
       })

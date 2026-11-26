@@ -4,6 +4,7 @@ const privacy = require('../../utils/privacy');
 const { yuan, dateStr, addDays, dayLabel, assetUrl } = require('../../utils/format');
 const cartUtil = require('../../utils/cart');
 const share = require('../../utils/share');
+const dict = require('../../utils/dict');
 
 Page({
   data: {
@@ -32,6 +33,13 @@ Page({
     menuLoading: false,
     /** 菜单项展示用（价格已转成元，避免 wxml 里做除法） */
     viewItems: [],
+    /** 未按分类过滤的整份列表，切分类时不再重复算 */
+    menuItems: [],
+    /** 分类导航（左栏）：[{ key, label }]，首项是「全部」 */
+    categoryTabs: [],
+    /** 左栏只在「有 2 个及以上分类」时才渲染，只有一类等于没得筛 */
+    showCategoryTabs: false,
+    activeCategory: '',
     /** 第三个 Tab「全部菜单」：盒饭库全量，只浏览不直接加购 */
     allActive: false,
     allItems: [],
@@ -237,13 +245,16 @@ Page({
     this.setData({ menuLoading: true });
     return request({ url: '/menu?serveDate=' + date })
       .then((menu) => {
-        const viewItems = (menu.items || []).map((item) => ({
+        const menuItems = (menu.items || []).map((item) => ({
           comboId: item.comboId,
           name: item.name,
           cover: item.cover,
           coverUrl: assetUrl(item.cover),
           price: Number(item.price || 0),
           priceText: yuan(item.price),
+          // 分类存值（bento / homemade …），显示名与页签都走字典，改显示名不用发版
+          category: item.category || '',
+          categoryLabel: dict.label('combo_category', item.category, ''),
           dishesText: (item.dishes || []).map((d) => d.name + '×' + d.qty).join('、'),
           hasSpec: (item.specGroups || []).length > 0,
           // 不限量时 remainQty 为 null，文案要区分「不限量」和「还剩 N 份」
@@ -252,7 +263,9 @@ Page({
             : (item.remainQty > 0 ? '剩 ' + item.remainQty + ' 份' : '已售完'),
           soldOut: item.remainQty !== null && item.remainQty !== undefined && item.remainQty <= 0,
         }));
-        this.setData({ menu, viewItems });
+        this.setData({ menu, menuItems });
+        this.applyCategoryFilter();
+        this.loadCategoryTabs();
       })
       .catch((err) => {
         app.toastError(err);
@@ -260,6 +273,63 @@ Page({
       .then(() => {
         this.setData({ menuLoading: false });
       });
+  },
+
+  /* ==================== 商品分类筛选 ==================== */
+
+  /**
+   * 左栏分类取字典，但**只保留这份菜单里真的有商品的分类**（需求 4.22）。
+   *
+   * 分类是字典里的全集，菜单是商家勾出来的子集：某个分类当天（或后天）一款都没勾，
+   * 点进去只会得到一句「暂无供应」，那一格就不该出现 —— 左栏的长度本身就是
+   * 「明天有几类东西可买」的信号。后天 Tab 走同一个 loadMenu，自然同样口径。
+   *
+   * 只剩 1 个分类时整块不渲染：一个页签的「筛选」只是占地方。
+   */
+  loadCategoryTabs() {
+    const apply = () => {
+      const all = dict.tabs('combo_category', '全部');
+      const present = {};
+      this.data.menuItems.forEach((item) => {
+        if (item.category) {
+          present[item.category] = true;
+        }
+      });
+      // 「全部」永远留着（key 为空串）；其余分类只有这份菜单里出现了才留
+      const tabs = all.filter((tab) => !tab.key || present[tab.key]);
+      const show = tabs.length > 2;
+      const active = this.data.activeCategory;
+      // 当前选中的分类在这份菜单里没有商品时落回「全部」，否则会筛出一份永远空着的列表
+      const keep = show && tabs.some((tab) => tab.key === active) ? active : '';
+      this.setData({ categoryTabs: show ? tabs : [], showCategoryTabs: show, activeCategory: keep });
+      this.applyCategoryFilter();
+    };
+    if (dict.ready()) {
+      apply();
+      // 陈旧缓存先渲染，再静默刷新一次（不阻塞、不闪白）
+      dict.load().then(apply);
+      return;
+    }
+    dict.load().then(apply);
+  },
+
+  onSwitchCategory(e) {
+    const key = e.currentTarget.dataset.key || '';
+    if (key === this.data.activeCategory) {
+      return;
+    }
+    this.setData({ activeCategory: key });
+    this.applyCategoryFilter();
+    // 切分类后把列表拉回顶部：左栏是 sticky 的，用户很可能已经滚到列表深处，
+    // 停在原位会先看到一片空白（新分类比上一份短时尤其明显）
+    wx.pageScrollTo({ selector: '.menu-split', duration: 200 });
+  },
+
+  /** 按当前分类过滤出要渲染的列表；切换供餐日不重置选择（需求 4.22） */
+  applyCategoryFilter() {
+    const all = this.data.menuItems;
+    const active = this.data.activeCategory;
+    this.setData({ viewItems: active ? all.filter((item) => item.category === active) : all });
   },
 
   /**

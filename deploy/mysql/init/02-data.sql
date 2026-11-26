@@ -67,9 +67,16 @@ ON DUPLICATE KEY UPDATE `config_key` = `config_key`;
 -- 内置类型的 item 与代码里的枚举一一对应：**只能改显示名 / 颜色 / 排序 / 启停，
 -- 不能增删项**，否则库里会出现状态机无法处理的值。
 --
--- 唯一例外是 pay_method（收款方式）：它只是收款渠道的标签，不参与状态机，
--- 商家可以自行增删（见 DictService.EXTENSIBLE_TYPES）。类型本身仍是内置的，
--- 不可删除 —— 一删下单页的下拉就空了，历史订单的显示名也一起落空。
+-- 默认只能改显示名 / 颜色 / 排序 / 启停，不能增删项，否则库里会出现状态机无法处理的值。
+--
+-- 两个例外（见 DictService.EXTENSIBLE_TYPES）：
+--   pay_method    收款方式：只是收款渠道的标签，不参与状态机，商家可自行增删项
+--   combo_category 商品分类：盒饭 / 自制菜只是列表分组，不参与任何履约分支，可增项。
+--                 种子两项仍是内置项（存值不可改、删不掉，只能停用），商家自建的项可删。
+-- 两个类型本身都是内置的、不可删除 —— 一删下拉就空了，历史数据的显示名也一起落空。
+--
+-- dish_category 是**自定义类型**（builtin = 0）：只建类型、不预置项，
+-- 留给将来做「备菜按原料分类分组」时再填，商家现在也可以自己在字典页加项。
 --
 -- 幂等键是 uk_dict_item(type_code, item_value)：重复执行只校验存在，不覆盖商家改过的显示名。
 -- -----------------------------------------------------------------------------
@@ -81,7 +88,9 @@ VALUES ('order_status', '订单状态', 1, '与 OrderStatus 常量一一对应')
        ('invite_status', '邀请码状态', 1, 'unused 未使用 / partial 部分使用 / used 已用完 / expired 已过期 / revoked 已作废'),
        ('delivery_type', '取送方式', 1, 'pickup 自取 / delivery 配送'),
        ('notify_type', '通知类型', 1, '与 NotifyType 一一对应，模板未申请时不发送'),
-       ('pay_method', '收款方式', 1, '初始三项对应 PayMethod 常量；可增删项，仅显示名/排序/启停可改')
+       ('pay_method', '收款方式', 1, '初始三项对应 PayMethod 常量；可增删项，仅显示名/排序/启停可改'),
+       ('combo_category', '商品分类', 1, '盒饭 / 自制菜等售卖分类；可增项，种子两项只能停用'),
+       ('dish_category', '原料分类', 0, '菜品分类，备菜分组预留；自定义类型，不预置项')
 ON DUPLICATE KEY UPDATE `type_code` = `type_code`;
 
 INSERT INTO `dict_item` (`type_code`, `item_value`, `item_label`, `tag_type`, `sort`, `status`, `builtin`)
@@ -119,5 +128,8 @@ VALUES ('order_status', 'pending_accept', '待接单', 'warning', 10, 'active', 
        -- 收款方式：初始三项内置（删不掉，只能停用），商家自建项的 builtin 为 0，可删
        ('pay_method', 'wechat', '微信', 'success', 10, 'active', 1),
        ('pay_method', 'alipay', '支付宝', 'primary', 20, 'active', 1),
-       ('pay_method', 'cash', '现金', 'warning', 30, 'active', 1)
+       ('pay_method', 'cash', '现金', 'warning', 30, 'active', 1),
+       -- 商品分类：种子两项内置（存值不可改、删不掉，只能停用）；商家自建的项可删
+       ('combo_category', 'bento', '盒饭', 'primary', 10, 'active', 1),
+       ('combo_category', 'homemade', '自制菜', 'warning', 20, 'active', 1)
 ON DUPLICATE KEY UPDATE `item_label` = `item_label`;

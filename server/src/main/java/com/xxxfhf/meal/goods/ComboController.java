@@ -33,8 +33,9 @@ public class ComboController {
     @GetMapping("/list")
     @RequirePerm(Perms.COMBO_MANAGE)
     public ApiResponse<List<Combo>> list(@RequestParam(required = false) String keyword,
-                                         @RequestParam(required = false) String status) {
-        return ApiResponse.ok(comboService.list(keyword, status));
+                                         @RequestParam(required = false) String status,
+                                         @RequestParam(required = false) String categoryCode) {
+        return ApiResponse.ok(comboService.list(keyword, status, categoryCode));
     }
 
     @GetMapping("/detail")

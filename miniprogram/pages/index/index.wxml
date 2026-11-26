@@ -51,32 +51,52 @@
     <view class="banner banner-warn" wx:elif="{{menu.cutoff}}">今日已截单，0 点后可继续下单</view>
     <view class="banner" wx:elif="{{!menu.orderable}}">该日菜单仅供浏览，明天才开放下单</view>
 
-    <view class="menu-empty" wx:if="{{!menuLoading && !viewItems.length}}">
-      <view class="menu-empty-title">{{activeDate === dates[0].date ? '明日暂无供应' : '这个供餐日还没有菜单'}}</view>
-      <view class="menu-empty-desc">商家发布后就能看到，可以先去「全部菜单」看看。</view>
-    </view>
+    <!-- 分类导航：左侧分类、右侧商品（需求 4.22）。只有一类时左侧整块不渲染，等于没得筛 -->
+    <view class="menu-split">
+      <view class="cat-side" wx:if="{{showCategoryTabs}}">
+        <view
+          class="cat-side-item {{activeCategory === item.key ? 'cat-side-item-active' : ''}}"
+          wx:for="{{categoryTabs}}"
+          wx:key="key"
+          data-key="{{item.key}}"
+          bindtap="onSwitchCategory"
+        >{{item.label}}</view>
+      </view>
 
-    <view class="menu-list">
-      <view class="menu-item" wx:for="{{viewItems}}" wx:key="comboId">
-        <image class="menu-cover" wx:if="{{item.coverUrl}}" src="{{item.coverUrl}}" mode="aspectFill" />
-        <view class="menu-cover menu-cover-empty" wx:else>暂无图</view>
-
-        <view class="menu-body" data-id="{{item.comboId}}" bindtap="onOpenCombo">
-          <view class="menu-name">{{item.name}}</view>
-          <view class="menu-dishes" wx:if="{{item.dishesText}}">{{item.dishesText}}</view>
-          <view class="menu-foot">
-            <text class="menu-price">¥{{item.priceText}}</text>
-            <text class="menu-remain">{{item.remainText}}</text>
-          </view>
+      <view class="menu-main">
+        <!-- 左栏只列这份菜单里真的有商品的分类，所以空态只有「这份菜单是空的」一种 -->
+        <view class="menu-empty" wx:if="{{!menuLoading && !viewItems.length}}">
+          <view class="menu-empty-title">{{activeDate === dates[0].date ? '明日暂无供应' : '这个供餐日还没有菜单'}}</view>
+          <view class="menu-empty-desc">商家发布后就能看到，可以先去「全部菜单」看看。</view>
         </view>
 
-        <view class="menu-add-wrap">
-          <view
-            class="menu-add {{item.soldOut || !menu.orderable || auditStatus !== 'approved' ? 'menu-add-disabled' : ''}}"
-            data-id="{{item.comboId}}"
-            bindtap="onQuickAdd"
-          >
-            {{item.hasSpec ? '选规格' : '＋'}}
+        <view class="menu-list">
+          <view class="menu-item" wx:for="{{viewItems}}" wx:key="comboId">
+            <image class="menu-cover" wx:if="{{item.coverUrl}}" src="{{item.coverUrl}}" mode="aspectFill" />
+            <view class="menu-cover menu-cover-empty" wx:else>暂无图</view>
+
+            <view class="menu-body" data-id="{{item.comboId}}" bindtap="onOpenCombo">
+              <view class="menu-name-row">
+                <text class="menu-name">{{item.name}}</text>
+                <!-- 「全部」视图下给自制品打个分类标；已经按分类筛完时就不重复了 -->
+                <text class="menu-cat" wx:if="{{item.categoryLabel && !activeCategory}}">{{item.categoryLabel}}</text>
+              </view>
+              <view class="menu-dishes" wx:if="{{item.dishesText}}">{{item.dishesText}}</view>
+              <view class="menu-foot">
+                <text class="menu-price">¥{{item.priceText}}</text>
+                <text class="menu-remain">{{item.remainText}}</text>
+              </view>
+            </view>
+
+            <view class="menu-add-wrap">
+              <view
+                class="menu-add {{item.soldOut || !menu.orderable || auditStatus !== 'approved' ? 'menu-add-disabled' : ''}}"
+                data-id="{{item.comboId}}"
+                bindtap="onQuickAdd"
+              >
+                {{item.hasSpec ? '选规格' : '＋'}}
+              </view>
+            </view>
           </view>
         </view>
       </view>

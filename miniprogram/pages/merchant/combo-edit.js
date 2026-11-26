@@ -2,6 +2,7 @@ const app = getApp();
 const { request, getToken } = require('../../utils/request');
 const { apiBase } = require('../../config');
 const { yuan, assetUrl } = require('../../utils/format');
+const dict = require('../../utils/dict');
 
 /**
  * 盒饭编辑（F-H09 编辑部分）。
@@ -21,6 +22,11 @@ Page({
     coverPreview: '',
     desc: '',
     sort: '',
+    /** 商品分类存值（bento / homemade …），必选；显示名走字典，商家改名不用发版 */
+    categoryCode: '',
+    categoryOptions: [],
+    categoryIndex: 0,
+    categoryLabel: '',
     dishes: [],
     dishOptions: [],
     specGroups: [],
@@ -34,11 +40,54 @@ Page({
   onLoad(options) {
     const id = (options && options.id) || '';
     this.setData({ id });
+    this.loadCategories();
     this.loadDishes();
     this.loadSpecs();
     if (id) {
       this.loadCombo(id);
     }
+  },
+
+  /* ==================== 商品分类（需求 4.22） ==================== */
+
+  /**
+   * 分类项由商家在后台「数据字典 → 商品分类」维护，这里只负责取出来。
+   * 字典没就绪时先渲染一份空列表，加载完再补 —— 不能因为字典慢就把保存按钮锁死。
+   */
+  loadCategories() {
+    const apply = () => {
+      const options = dict.options('combo_category');
+      this.setData({ categoryOptions: options });
+      this.syncCategoryIndex();
+    };
+    if (dict.ready()) {
+      apply();
+      return;
+    }
+    dict.load().then(apply);
+  },
+
+  /** 把 categoryCode 映射成 picker 的下标；没匹配到就停在第一项，但值保持空（保存时会被必填拦住） */
+  syncCategoryIndex() {
+    const options = this.data.categoryOptions;
+    const code = this.data.categoryCode;
+    const index = options.findIndex((option) => option.value === code);
+    this.setData({
+      categoryIndex: index < 0 ? 0 : index,
+      categoryLabel: index < 0 ? '' : options[index].label,
+    });
+  },
+
+  onChangeCategory(e) {
+    const option = this.data.categoryOptions[Number(e.detail.value)];
+    if (!option) {
+      return;
+    }
+    this.setData({
+      categoryCode: option.value,
+      categoryIndex: Number(e.detail.value),
+      categoryLabel: option.label,
+    });
   },
 
   loadCombo(id) {
@@ -56,6 +105,7 @@ Page({
           coverPreview: assetUrl(combo.cover),
           desc: combo.desc || '',
           sort: combo.sort === null || combo.sort === undefined ? '' : String(combo.sort),
+          categoryCode: combo.categoryCode || '',
           dishes: (combo.dishes || []).map((d) => ({
             dishId: d.dishId,
             name: d.name,
@@ -63,7 +113,10 @@ Page({
           })),
           selectedSpecs,
           specChecked,
-        }, () => this.syncSpecChecked());
+        }, () => {
+          this.syncSpecChecked();
+          this.syncCategoryIndex();
+        });
       })
       .catch((err) => app.toastError(err));
   },
@@ -230,9 +283,13 @@ Page({
   /* ---------------- 保存 ---------------- */
 
   onSave() {
-    const { id, name, priceYuan, desc, dishes, selectedSpecs, cover, sort } = this.data;
+    const { id, name, priceYuan, desc, dishes, selectedSpecs, cover, sort, categoryCode } = this.data;
     if (!name || !name.trim()) {
       wx.showToast({ title: '请填写盒饭名称', icon: 'none' });
+      return;
+    }
+    if (!categoryCode) {
+      wx.showToast({ title: '请选择商品分类', icon: 'none' });
       return;
     }
     const price = Math.round(Number(priceYuan || 0) * 100);
@@ -255,6 +312,7 @@ Page({
         cover: cover || null,
         desc: desc || null,
         price,
+        categoryCode,
         dishes: dishes.map((d) => ({ dishId: d.dishId, name: d.name, qty: d.qty || 1 })),
         specGroupIds: selectedSpecs,
         sort: sort === '' ? null : Number(sort),

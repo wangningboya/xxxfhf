@@ -53,7 +53,7 @@ VALUES ('主食', 1, 1,
 -- -----------------------------------------------------------------------------
 -- 菜品（原料层，不定价；不含米饭——米饭走规格组）
 -- -----------------------------------------------------------------------------
-INSERT INTO `dish` (`name`, `category_id`, `status`, `sort`) VALUES
+INSERT INTO `dish` (`name`, `category_code`, `status`, `sort`) VALUES
     ('油豆腐烤肉',     NULL, 'enabled', 1),
     ('萝卜干炒酱肉',   NULL, 'enabled', 2),
     ('红烧小鲳鱼2条',   NULL, 'enabled', 3),
@@ -89,16 +89,17 @@ SET @dish_008 = (SELECT `id` FROM `dish` WHERE `name` = '热卤鸡腿' LIMIT 1);
 -- -----------------------------------------------------------------------------
 -- 盒饭（售卖层；全部启用「主食」规格组；金额单位分）
 --   A 餐 15 元 / B 餐 13 元 / C 餐 18 元（例汤 2 份，演示菜品份数>1）/ 全素餐 10 元
+--   分类统一 bento（盒饭）：演示库里没有自制品，所以点餐页只有 1 个分类、不渲染分类页签
 -- -----------------------------------------------------------------------------
 INSERT INTO `combo`
-    (`name`, `cover`, `desc`, `price`, `dishes`, `spec_group_ids`, `status`, `sort`)
+    (`name`, `cover`, `desc`, `price`, `dishes`, `spec_group_ids`, `category_code`, `status`, `sort`)
 VALUES
     ('A 餐', NULL, '经典荤素搭配，红烧肉软糯入味', 1500,
      JSON_ARRAY(
              JSON_OBJECT('dishId', @dish_001, 'name', '红烧肉', 'qty', 1),
              JSON_OBJECT('dishId', @dish_002, 'name', '清炒时蔬', 'qty', 1)
      ),
-     JSON_ARRAY(@spec_staple), 'on', 1),
+     JSON_ARRAY(@spec_staple), 'bento', 'on', 1),
 
     ('B 餐', NULL, '下饭首选，配例汤一碗', 1300,
      JSON_ARRAY(
@@ -106,7 +107,7 @@ VALUES
              JSON_OBJECT('dishId', @dish_002, 'name', '清炒时蔬', 'qty', 1),
              JSON_OBJECT('dishId', @dish_008, 'name', '紫菜蛋花汤', 'qty', 1)
      ),
-     JSON_ARRAY(@spec_staple), 'on', 2),
+     JSON_ARRAY(@spec_staple), 'bento', 'on', 2),
 
     ('C 餐', NULL, '分量十足，牛腩炖到脱骨，例汤给两碗', 1800,
      JSON_ARRAY(
@@ -114,7 +115,7 @@ VALUES
              JSON_OBJECT('dishId', @dish_007, 'name', '蒜蓉西兰花', 'qty', 1),
              JSON_OBJECT('dishId', @dish_008, 'name', '紫菜蛋花汤', 'qty', 2)
      ),
-     JSON_ARRAY(@spec_staple), 'on', 3),
+     JSON_ARRAY(@spec_staple), 'bento', 'on', 3),
 
     ('全素餐', NULL, '三素清爽组合，轻负担', 1000,
      JSON_ARRAY(
@@ -122,7 +123,7 @@ VALUES
              JSON_OBJECT('dishId', @dish_006, 'name', '麻婆豆腐', 'qty', 1),
              JSON_OBJECT('dishId', @dish_002, 'name', '清炒时蔬', 'qty', 1)
      ),
-     JSON_ARRAY(@spec_staple), 'on', 4);
+     JSON_ARRAY(@spec_staple), 'bento', 'on', 4);
 
 -- -----------------------------------------------------------------------------
 -- 区域（配送片区）—— 按 uk_region_name 幂等，不清空：已有地址通过 region_id 引用它

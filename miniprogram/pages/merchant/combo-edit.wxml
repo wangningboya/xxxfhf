@@ -7,6 +7,14 @@
              value="{{name}}" data-key="name" bindinput="onInput" />
     </view>
     <view class="field">
+      <text class="field-label">分类</text>
+      <picker wx:if="{{categoryOptions.length}}" mode="selector" range="{{categoryOptions}}"
+              range-key="label" value="{{categoryIndex}}" bindchange="onChangeCategory">
+        <view class="field-input">{{categoryLabel || '请选择'}} ›</view>
+      </picker>
+      <view wx:else class="field-input muted">分类字典加载中…</view>
+    </view>
+    <view class="field">
       <text class="field-label">价格（元）</text>
       <input class="field-input" type="digit" placeholder="0.00" placeholder-class="ph"
              value="{{priceYuan}}" data-key="priceYuan" bindinput="onInput" />

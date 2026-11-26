@@ -13,6 +13,20 @@
         <el-option label="已上架" value="on" />
         <el-option label="已下架" value="off" />
       </el-select>
+      <el-select
+        v-model="categoryFilter"
+        placeholder="全部分类"
+        clearable
+        style="width: 140px"
+        @change="load"
+      >
+        <el-option
+          v-for="item in categoryOptions"
+          :key="item.value"
+          :label="item.label"
+          :value="item.value"
+        />
+      </el-select>
       <el-button @click="load">查询</el-button>
       <div class="toolbar-right">
         <el-button type="primary" @click="openEdit()">新增盒饭</el-button>
@@ -33,6 +47,14 @@
         </template>
       </el-table-column>
       <el-table-column prop="name" label="名称" width="160" />
+      <el-table-column label="分类" width="96">
+        <template #default="{ row }">
+          <el-tag v-if="row.categoryCode" :type="dict.tagType('combo_category', row.categoryCode)" size="small">
+            {{ dict.label('combo_category', row.categoryCode, row.categoryCode) }}
+          </el-tag>
+          <span v-else class="muted">未分类</span>
+        </template>
+      </el-table-column>
       <el-table-column label="价格" width="100" align="right">
         <template #default="{ row }"><span class="price">¥{{ yuan(row.price) }}</span></template>
       </el-table-column>
@@ -71,6 +93,17 @@
         <el-form-item label="价格（元）" required>
           <el-input-number v-model="form.priceYuan" :min="0" :precision="2" :step="1" />
 		      <div class="muted">提交时换算成分，界面按元显示</div>
+        </el-form-item>
+        <el-form-item label="分类" required>
+          <el-select v-model="form.categoryCode" placeholder="请选择分类" style="width: 200px">
+            <el-option
+              v-for="item in categoryOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            />
+          </el-select>
+          <div class="muted">取自字典「商品分类」，商家可在「数据字典」里增项</div>
         </el-form-item>
         <el-form-item label="排序">
           <el-input-number v-model="form.sort" :min="0" :max="9999" />
@@ -133,20 +166,27 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import http from '../../api';
+import { useDictStore } from '../../stores/dict';
+
+const dict = useDictStore();
 
 const rows = ref([]);
 const loading = ref(false);
 const keyword = ref('');
 const status = ref('');
+const categoryFilter = ref('');
 
 const drawer = ref(false);
 const saving = ref(false);
 const form = ref({ dishes: [], specGroupIds: [] });
 const dishOptions = ref([]);
 const specGroups = ref([]);
+
+// 分类下拉直接吃字典：商家在「数据字典」里加一个「卤味」，这里立刻有得选（需求 4.22）
+const categoryOptions = computed(() => dict.options('combo_category'));
 
 function yuan(cents) {
   return (Number(cents || 0) / 100).toFixed(2);
@@ -160,7 +200,11 @@ function load() {
   loading.value = true;
   http
     .get('/admin/combo/list', {
-      params: { keyword: keyword.value || undefined, status: status.value || undefined },
+      params: {
+        keyword: keyword.value || undefined,
+        status: status.value || undefined,
+        categoryCode: categoryFilter.value || undefined,
+      },
     })
     .then((list) => {
       rows.value = list || [];
@@ -179,6 +223,7 @@ function openEdit(row) {
     cover: row ? row.cover || '' : '',
     desc: row ? row.desc || '' : '',
     sort: row ? row.sort || 0 : 0,
+    categoryCode: row ? row.categoryCode || '' : '',
     specGroupIds: row ? (row.specGroupIds || []).slice() : [],
     dishes: [],
   };
@@ -226,6 +271,10 @@ function onSave() {
     ElMessage.warning('请填写盒饭名称');
     return;
   }
+  if (!data.categoryCode) {
+    ElMessage.warning('请选择分类');
+    return;
+  }
   const picked = dishOptions.value.filter((dish) => dish.checked);
   if (picked.length === 0) {
     ElMessage.warning('至少选择一道菜');
@@ -247,6 +296,7 @@ function onSave() {
       price,
       dishes: picked.map((dish) => ({ dishId: dish.dishId, name: dish.name, qty: dish.qty || 1 })),
       specGroupIds: data.specGroupIds || [],
+      categoryCode: data.categoryCode,
       sort: data.sort,
     })
     .then(() => {
@@ -283,6 +333,7 @@ function onDelete(row) {
 }
 
 onMounted(() => {
+  dict.load();
   load();
   http
     .get('/admin/dish/list', { params: { status: 'enabled' } })

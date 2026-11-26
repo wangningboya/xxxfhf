@@ -35,14 +35,24 @@ public class DictService {
     /**
      * 允许商家自行增删字典项的**内置**类型。
      *
-     * <p>只放收款方式：它只是个收款渠道的标签，多一个「银行转账」不会让任何代码
-     * 走到不认识的分支；其余内置类型的值与枚举一一对应（订单状态、收款状态等），
-     * 增一项就等于往状态机里塞一个处理不了的值。
+     * <p>放两类：
+     * <ul>
+     *   <li>{@link DictCodes#PAY_METHOD} 收款方式：它只是个收款渠道的标签，多一个「银行转账」
+     *       不会让任何代码走到不认识的分支；</li>
+     *   <li>{@link DictCodes#COMBO_CATEGORY} 商品分类：盒饭 / 自制菜只是点餐页的分组，
+     *       同样不参与任何履约分支，商家加一个「卤味」也不需要发版。</li>
+     * </ul>
+     * 其余内置类型的值与枚举一一对应（订单状态、收款状态等），增一项就等于往状态机里塞一个
+     * 处理不了的值。
      *
      * <p>类型本身仍是内置的：不可删除、编码不可改 —— 否则商家一删，
      * 下单页的下拉直接空掉，且所有历史订单的显示名一起落空。
+     *
+     * <p>注意「允许增项」不等于「允许删项」：新增的项由商家自建（{@code builtin = 0}）可删，
+     * 而种子项标了 {@code builtin = 1}，只能停用。
      */
-    private static final Set<String> EXTENSIBLE_TYPES = Set.of(DictCodes.PAY_METHOD);
+    private static final Set<String> EXTENSIBLE_TYPES =
+            Set.of(DictCodes.PAY_METHOD, DictCodes.COMBO_CATEGORY);
 
     private static final Logger log = LoggerFactory.getLogger(DictService.class);
 
@@ -381,7 +391,7 @@ public class DictService {
 
     /**
      * @param builtin    内置类型的编码被代码引用，不可删除、不可改编码
-     * @param extensible 允许商家自行增删项（内置类型里的例外，目前只有收款方式）。
+     * @param extensible 允许商家自行增删项（内置类型里的例外：收款方式、商品分类）。
      *                   前端据此决定「新增项」按钮是否可点 —— 否则后端放行了、
      *                   页面上按钮却是灰的，等于没放开。
      */

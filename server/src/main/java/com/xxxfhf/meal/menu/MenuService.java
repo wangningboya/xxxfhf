@@ -88,7 +88,7 @@ public class MenuService {
         for (Combo combo : comboService.listOnSale()) {
             DailyMenu menu = byCombo.get(combo.getId());
             if (menu != null) {
-                items.add(toItemView(menu));
+                items.add(toItemView(menu, combo));
             }
         }
 
@@ -100,7 +100,8 @@ public class MenuService {
         Set<Long> tomorrow = publishedMap(clock.tomorrow()).keySet();
         List<ComboAllItem> result = new ArrayList<>();
         for (Combo combo : comboService.listOnSale()) {
-            result.add(new ComboAllItem(combo.getId(), combo.getName(), combo.getCover(), combo.getDesc(),
+            result.add(new ComboAllItem(combo.getId(), combo.getName(), combo.getCover(),
+                    combo.getCategoryCode(), combo.getDesc(),
                     combo.getPrice(), nullToEmpty(combo.getDishes()),
                     snapshotSpecs(combo), tomorrow.contains(combo.getId())));
         }
@@ -117,7 +118,7 @@ public class MenuService {
         for (Combo combo : comboService.listAll()) {
             DailyMenu menu = byCombo.get(combo.getId());
             if (menu != null) {
-                items.add(toItemView(menu));
+                items.add(toItemView(menu, combo));
             }
         }
         // 有任意一条 PUBLISHED 就认为这一天已发布；后台要据此显示「发布 / 撤下」
@@ -342,7 +343,7 @@ public class MenuService {
         return result;
     }
 
-    private MenuItemView toItemView(DailyMenu menu) {
+    private MenuItemView toItemView(DailyMenu menu, Combo combo) {
         ComboSnapshot snapshot = menu.getComboSnapshot();
         int sold = menu.getSoldQty() == null ? 0 : menu.getSoldQty();
         Integer remain = null;
@@ -352,6 +353,9 @@ public class MenuService {
         return new MenuItemView(menu.getComboId(),
                 snapshot == null ? nameOf(menu) : snapshot.name(),
                 snapshot == null ? null : snapshot.cover(),
+                // 名称/封面/价格/组成都从快照取（发布那一刻冻结），
+                // **分类不从快照取**：它只是展示分组，换分类立刻生效才符合商家预期（需求 4.22）
+                combo.getCategoryCode(),
                 menu.getPriceSnapshot() == null ? 0 : menu.getPriceSnapshot(),
                 snapshot == null || snapshot.dishes() == null ? List.of() : snapshot.dishes(),
                 snapshot == null || snapshot.specGroups() == null ? List.of() : snapshot.specGroups(),
@@ -407,9 +411,11 @@ public class MenuService {
     /**
      * 菜单里的一项。
      *
+     * @param category  商品分类存值（字典 combo_category），前端用字典解析成显示名并做筛选页签。
+     *                  从**实时商品**取而不是从快照取：分类只是展示分组，换分类应当立即生效
      * @param remainQty 剩余份数；limitQty 为 null（不限量）时也是 null，前端显示「不限量」
      */
-    public record MenuItemView(Long comboId, String name, String cover, Integer price,
+    public record MenuItemView(Long comboId, String name, String cover, String category, Integer price,
                                List<ComboDish> dishes,
                                List<ComboSnapshot.SpecGroupSnapshot> specGroups,
                                Integer limitQty, Integer soldQty, Integer remainQty, String status) {
@@ -418,9 +424,11 @@ public class MenuService {
     /**
      * 全部菜单的一项。
      *
+     * @param category         商品分类存值，同上
      * @param tomorrowSupplied 是否在明天那份菜单里，前端据此打「明日供应 / 暂不供应」标签
      */
-    public record ComboAllItem(Long comboId, String name, String cover, String desc, Integer price,
+    public record ComboAllItem(Long comboId, String name, String cover, String category, String desc,
+                               Integer price,
                                List<ComboDish> dishes,
                                List<ComboSnapshot.SpecGroupSnapshot> specGroups,
                                boolean tomorrowSupplied) {

@@ -45,8 +45,14 @@ public class Combo {
     /** on / off，见 GoodsStatus */
     private String status;
 
-    /** 预留分类，本版不参与展示分组 */
-    private Long categoryId;
+    /**
+     * 商品分类存值，见字典 {@code combo_category}（当前 bento 盒饭 / homemade 自制菜）。
+     *
+     * <p>存的是**字典存值**而不是字典项 ID：改显示名、重建同存值的项都不影响已存商品，
+     * 项被删（只有商家自建的项可删）时商品照常展示与下单，最多是筛选页签少一项。
+     * 必选，由 {@code ComboService.save} 校验。
+     */
+    private String categoryCode;
 
     private Integer sort;
 
@@ -116,12 +122,12 @@ public class Combo {
         this.status = status;
     }
 
-    public Long getCategoryId() {
-        return categoryId;
+    public String getCategoryCode() {
+        return categoryCode;
     }
 
-    public void setCategoryId(Long categoryId) {
-        this.categoryId = categoryId;
+    public void setCategoryCode(String categoryCode) {
+        this.categoryCode = categoryCode;
     }
 
     public Integer getSort() {
