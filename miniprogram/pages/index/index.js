@@ -252,9 +252,8 @@ Page({
           coverUrl: assetUrl(item.cover),
           price: Number(item.price || 0),
           priceText: yuan(item.price),
-          // 分类存值（bento / homemade …），显示名与页签都走字典，改显示名不用发版
+          // 分类存值（bento / homemade …），只用来筛列表；显示名由字典解析，改显示名不用发版
           category: item.category || '',
-          categoryLabel: dict.label('combo_category', item.category, ''),
           dishesText: (item.dishes || []).map((d) => d.name + '×' + d.qty).join('、'),
           hasSpec: (item.specGroups || []).length > 0,
           // 不限量时 remainQty 为 null，文案要区分「不限量」和「还剩 N 份」
@@ -278,39 +277,70 @@ Page({
   /* ==================== 商品分类筛选 ==================== */
 
   /**
-   * 左栏分类取字典，但**只保留这份菜单里真的有商品的分类**（需求 4.22）。
+   * 这份菜单里出现、但本地字典还不认识的分类存值。
    *
-   * 分类是字典里的全集，菜单是商家勾出来的子集：某个分类当天（或后天）一款都没勾，
-   * 点进去只会得到一句「暂无供应」，那一格就不该出现 —— 左栏的长度本身就是
-   * 「明天有几类东西可买」的信号。后天 Tab 走同一个 loadMenu，自然同样口径。
+   * 菜单里已经有 `homemade`、字典里还没有这一项，只有两种可能：小程序本地缓存陈旧
+   * （`/dict` 有 12 小时 TTL），或者服务端确实还没种这个类型。前者强制刷一次就好，
+   * 后者只能先按存值显示 —— 但两种情况下左栏都不该整块消失。
+   */
+  unknownCategories() {
+    const known = dict.items('combo_category').map((d) => d.itemValue);
+    const unknown = [];
+    this.data.menuItems.forEach((item) => {
+      if (item.category && known.indexOf(item.category) === -1 && unknown.indexOf(item.category) === -1) {
+        unknown.push(item.category);
+      }
+    });
+    return unknown;
+  },
+
+  /**
+   * 左栏分类：**以这份菜单里真实的商品为准**，字典只负责顺序与显示名（需求 4.22）。
    *
-   * 只剩 1 个分类时整块不渲染：一个页签的「筛选」只是占地方。
+   * 之前这里直接拿 dict.tabs()，缓存里没有 combo_category 时左栏会整块消失 ——
+   * 菜单里明明有商品。现在先统计菜单里出现的分类，再按字典顺序排列、用字典补显示名；
+   * 字典没有的存值先按出现顺序排在后面、标签暂用存值，同时强制刷一次字典。
+   * 只有 1 个分类时不渲染：一个页签的「筛选」只是占地方。
    */
   loadCategoryTabs() {
-    const apply = () => {
-      const all = dict.tabs('combo_category', '全部');
-      const present = {};
-      this.data.menuItems.forEach((item) => {
-        if (item.category) {
-          present[item.category] = true;
-        }
-      });
-      // 「全部」永远留着（key 为空串）；其余分类只有这份菜单里出现了才留
-      const tabs = all.filter((tab) => !tab.key || present[tab.key]);
-      const show = tabs.length > 2;
-      const active = this.data.activeCategory;
-      // 当前选中的分类在这份菜单里没有商品时落回「全部」，否则会筛出一份永远空着的列表
-      const keep = show && tabs.some((tab) => tab.key === active) ? active : '';
-      this.setData({ categoryTabs: show ? tabs : [], showCategoryTabs: show, activeCategory: keep });
-      this.applyCategoryFilter();
-    };
-    if (dict.ready()) {
-      apply();
-      // 陈旧缓存先渲染，再静默刷新一次（不阻塞、不闪白）
-      dict.load().then(apply);
+    const unknown = this.unknownCategories();
+    if (unknown.length && !this.categoryDictRefreshed) {
+      // 先别出左栏：直接渲染会闪一下「bento」这种存值，等字典回来一次成型
+      this.categoryDictRefreshed = true;
+      dict.load(true).then(() => this.renderCategoryTabs());
       return;
     }
-    dict.load().then(apply);
+    this.renderCategoryTabs();
+    // 陈旧缓存先渲染，再静默刷新一次（不阻塞、不闪白）
+    dict.load().then(() => this.renderCategoryTabs());
+  },
+
+  /** 按「菜单里出现的分类 ∩ 字典」算出左栏；字典缺项时用存值兜底，绝不把整栏吞掉 */
+  renderCategoryTabs() {
+    const present = [];
+    this.data.menuItems.forEach((item) => {
+      if (item.category && present.indexOf(item.category) === -1) {
+        present.push(item.category);
+      }
+    });
+
+    const dictItems = dict.items('combo_category');
+    const known = dictItems.map((d) => d.itemValue);
+    // 字典里有的按字典顺序排前面；字典里没有的先按出现顺序排在后面
+    const tabs = [{ key: '', label: '全部' }]
+      .concat(dictItems
+        .filter((d) => present.indexOf(d.itemValue) !== -1)
+        .map((d) => ({ key: d.itemValue, label: d.itemLabel })))
+      .concat(present
+        .filter((code) => known.indexOf(code) === -1)
+        .map((code) => ({ key: code, label: code })));
+
+    const show = tabs.length > 2;
+    const active = this.data.activeCategory;
+    // 当前选中的分类在这份菜单里没有商品时落回「全部」，否则会筛出一份永远空着的列表
+    const keep = show && tabs.some((tab) => tab.key === active) ? active : '';
+    this.setData({ categoryTabs: show ? tabs : [], showCategoryTabs: show, activeCategory: keep });
+    this.applyCategoryFilter();
   },
 
   onSwitchCategory(e) {

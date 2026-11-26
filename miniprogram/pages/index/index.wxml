@@ -76,11 +76,7 @@
             <view class="menu-cover menu-cover-empty" wx:else>暂无图</view>
 
             <view class="menu-body" data-id="{{item.comboId}}" bindtap="onOpenCombo">
-              <view class="menu-name-row">
-                <text class="menu-name">{{item.name}}</text>
-                <!-- 「全部」视图下给自制品打个分类标；已经按分类筛完时就不重复了 -->
-                <text class="menu-cat" wx:if="{{item.categoryLabel && !activeCategory}}">{{item.categoryLabel}}</text>
-              </view>
+              <view class="menu-name">{{item.name}}</view>
               <view class="menu-dishes" wx:if="{{item.dishesText}}">{{item.dishesText}}</view>
               <view class="menu-foot">
                 <text class="menu-price">¥{{item.priceText}}</text>

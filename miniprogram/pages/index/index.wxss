@@ -178,18 +178,8 @@ page {
   padding: 0 16rpx;
 }
 
-.menu-split .menu-name-row {
-  flex-wrap: wrap;
-}
-
 .menu-split .menu-name {
   font-size: 30rpx;
-}
-
-.menu-split .menu-cat {
-  margin-left: 8rpx;
-  padding: 2rpx 8rpx;
-  font-size: 18rpx;
 }
 
 .menu-split .menu-dishes {
@@ -288,23 +278,6 @@ page {
   font-size: 32rpx;
   font-weight: 600;
   color: #1a1a1a;
-}
-
-.menu-name-row {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-}
-
-/* 「全部」视图下的分类标（自制菜 / 盒饭）：只做识别，不抢名称 */
-.menu-cat {
-  flex: none;
-  margin-left: 12rpx;
-  padding: 2rpx 12rpx;
-  border-radius: 6rpx;
-  background: #fff3e0;
-  color: #ff9f1c;
-  font-size: 20rpx;
 }
 
 .menu-dishes {
