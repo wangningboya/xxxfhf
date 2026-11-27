@@ -193,6 +193,18 @@ page {
   margin-left: 0;
 }
 
+/* 保存按钮必须是 <button form-type="submit"> 才能走 form 取视图真实值，
+   这里清掉 button 自带的内边距与边框，保持与旁边 view 按钮完全一致 */
+button.panel-btn {
+  padding: 0;
+  line-height: 1.2;
+  box-sizing: border-box;
+}
+
+button.panel-btn::after {
+  border: none;
+}
+
 .panel-ghost {
   background: #f5f6f8;
   color: #4a4a4a;

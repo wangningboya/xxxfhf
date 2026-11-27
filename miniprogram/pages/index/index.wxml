@@ -151,19 +151,24 @@
     <view class="nick-panel">
       <view class="nick-title">先留个称呼</view>
       <view class="nick-desc">方便商家认出你，填一次就好。</view>
-      <input
-        class="nick-input"
-        type="nickname"
-        value="{{nickNameInput}}"
-        placeholder="点击可一键填入微信昵称"
-        placeholder-class="nick-placeholder"
-        maxlength="32"
-        bindinput="onNickNameInput"
-        bindblur="onNickNameInput"
-        bindchange="onNickNameInput"
-        bindnicknamereview="onNickNameReview"
-      />
-      <button class="nick-btn" loading="{{savingNickName}}" bindtap="onSaveNickName">保存</button>
+      <!-- 昵称必须用 form 收集：微信审核不通过或上传超时时会清空输入框视图，
+           data 里的受控值不会跟着变，读 data 会把已判废的文本提交上去 -->
+      <form bindsubmit="onSubmitNickName">
+        <input
+          class="nick-input"
+          type="nickname"
+          name="nickName"
+          value="{{nickNameInput}}"
+          placeholder="点击可一键填入微信昵称"
+          placeholder-class="nick-placeholder"
+          maxlength="32"
+          bindinput="onNickNameInput"
+          bindblur="onNickNameInput"
+          bindchange="onNickNameInput"
+          bindnicknamereview="onNickNameReview"
+        />
+        <button class="nick-btn" form-type="submit" loading="{{savingNickName}}">保存</button>
+      </form>
     </view>
   </view>
 

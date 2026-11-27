@@ -6,6 +6,14 @@ const cartUtil = require('../../utils/cart');
 const share = require('../../utils/share');
 const dict = require('../../utils/dict');
 
+/**
+ * 等微信昵称审核结论的上限。
+ *
+ * `bindnicknamereview` 是客户端异步回调，点保存那一刻通常还没结果；超过这个时间仍没回调，
+ * 按 `timeout === true` 同一口径放行（检测没跑完不该惩罚用户），后端还有一道 msg_sec_check。
+ */
+const NICK_REVIEW_WAIT_MS = 3000;
+
 Page({
   data: {
     loading: true,
@@ -25,6 +33,10 @@ Page({
     nickNameInput: '',
     /** 微信审核判过违规的那段昵称：保存时比对，同一段不再提交 */
     nickRejectedText: '',
+    /** 微信判过「通过」的那段昵称：再次保存直接提交，不必白等一次审核 */
+    nickApprovedText: '',
+    /** 已点保存、正在等微信审核结论的昵称；非空时按钮显示加载态 */
+    nickPending: '',
     savingNickName: false,
 
     /* ---------------- 菜单 ---------------- */
@@ -84,6 +96,8 @@ Page({
 
   onUnload() {
     this.clearMidnightTimer();
+    // 昵称审核的等待定时器也要清：页面都走了再回调 setData 只会打一条告警
+    this.clearNickWait();
   },
 
   /**
@@ -210,7 +224,7 @@ Page({
    * 用户会觉得填完才被拦，而且告知晚于收集。挪到浮层出现时，先告知、后填写。
    *
    * 只主动弹一次：`nickPrivacyPrompted` 是页面实例级标记，用户点过「暂不」后不再反复打扰
-   * （P0-05 的口径）。保存时 `onSaveNickName` 里那道闸门保留，负责「不漏收集」。
+   * （P0-05 的口径）。保存时 `onSubmitNickName` 里那道闸门保留，负责「不漏收集」。
    */
   promptNickPrivacy() {
     if (this.nickPrivacyPrompted) {
@@ -221,7 +235,7 @@ Page({
       return;
     }
     // P0-05：拒绝后 7 天内不在「浮层露出」这个时机主动弹，避免反复打扰。
-    // 用户自己点「保存」时 onSaveNickName() 另有闸门，漏不掉告知，只是不在人家没动作时凑上去。
+    // 用户自己点「保存」时 onSubmitNickName() 另有闸门，漏不掉告知，只是不在人家没动作时凑上去。
     if (privacy.declinedRecently()) {
       return;
     }
@@ -551,37 +565,67 @@ Page({
    * 手打时才有 input，所以三种事件都接同一个处理函数，删掉任何一种都会漏值。
    */
   onNickNameInput(e) {
-    this.setData({ nickNameInput: (e.detail && e.detail.value) || '' });
+    const value = (e.detail && e.detail.value) || '';
+    // 等审核期间用户又改了字：这次挂起的提交作废，按新文本重新点保存
+    if (this.data.nickPending && value.trim() !== this.data.nickPending) {
+      this.clearNickWait();
+      this.setData({ nickPending: '' });
+    }
+    this.setData({ nickNameInput: value });
   },
 
   /**
    * 微信侧的昵称审核结果（基础库 2.29.1+，`detail = { pass, timeout }`）。
    *
-   * `pass === false` 时微信自己会弹「无法使用该昵称」，这里只记住被拒的那段文本，保存时比对。
-   * 不记状态位：`blur` 与本次回调的先后顺序不保证，状态位会被 bindblur 冲掉；比对文本不受时序影响。
-   * `timeout === true` 表示检测没跑完（官方未定义此时 pass 的取值），按放行处理，不记也不清。
+   * 审核是客户端异步回调，点保存那一刻往往还没有结论，所以保存不能抢在它前面提交：
+   * 先挂起（`nickPending`），等这里给出结论再决定发不发请求。
+   * `pass === false` 时微信自己会弹「无法使用该昵称」，这里不再叠一条提示。
+   * `timeout === true` 按放行处理（检测没跑完不该惩罚用户）。
    */
   onNickNameReview(e) {
     const detail = e.detail || {};
+    const text = (this.data.nickNameInput || '').trim();
+    const pending = this.data.nickPending;
+
     if (detail.timeout) {
+      if (pending && pending === text) {
+        this.submitNickName(pending);
+      }
       return;
     }
     if (detail.pass === false) {
-      this.setData({ nickRejectedText: (this.data.nickNameInput || '').trim() });
+      this.setData({ nickRejectedText: pending || text, nickApprovedText: '' });
+      // 挂起的那次不提交；微信自己的提示已经告诉用户为什么没存上
+      if (pending) {
+        this.clearNickWait();
+        this.setData({ nickPending: '' });
+      }
       return;
     }
-    if (this.data.nickRejectedText) {
-      this.setData({ nickRejectedText: '' });
+    this.setData({ nickApprovedText: text, nickRejectedText: '' });
+    if (pending && pending === text) {
+      this.submitNickName(pending);
     }
   },
 
-  /** 保存昵称。成功即关浮层（applyMe 会重新判断是否需要填）。 */
-  onSaveNickName() {
-    if (this.data.savingNickName) {
+  /**
+   * 保存昵称。成功即关浮层（applyMe 会重新判断是否需要填）。
+   *
+   * 取值走 form 的 submit，而不是 `data.nickNameInput`：微信在审核不通过、或
+   * `reviewNickname` 上传超时时会**清空输入框视图**，受控的 `data` 不会跟着变，
+   * 读 data 等于把已被微信否掉的文本原样提交（官方文档也建议用 form 收集）。
+   */
+  onSubmitNickName(e) {
+    if (this.data.savingNickName || this.data.nickPending) {
       return;
     }
-    const nickName = (this.data.nickNameInput || '').trim();
+    const nickName = ((e.detail && e.detail.value && e.detail.value.nickName) || '').trim();
+    // 视图已被微信清空（审核判废 / 上传超时）：data 也要跟着清，
+    // 否则受控 value 会把旧文本写回输入框，下一次保存又把它提交上去。
     if (!nickName) {
+      if (this.data.nickNameInput) {
+        this.setData({ nickNameInput: '' });
+      }
       wx.showToast({ title: '请填写昵称', icon: 'none' });
       return;
     }
@@ -590,14 +634,53 @@ Page({
       wx.showToast({ title: '该昵称无法使用，请换一个', icon: 'none' });
       return;
     }
+    // 已有「通过」结论就直接提交；还没有结论先挂起，等 bindnicknamereview 回来再决定
+    if (nickName === this.data.nickApprovedText) {
+      this.submitNickName(nickName);
+      return;
+    }
+    this.waitNickReview(nickName);
+  },
 
+  /**
+   * 微信侧还没有这段文本的结论：先挂起，等审核回调。
+   *
+   * 点「保存」本身会让输入框失焦、触发审核，正常流程下这里几百毫秒内就能拿到结论；
+   * 等满 {@link NICK_REVIEW_WAIT_MS} 仍没有回调，按 timeout 口径放行提交。
+   */
+  waitNickReview(nickName) {
+    this.setData({ nickPending: nickName });
+    this.clearNickWait();
+    this.nickWaitTimer = setTimeout(() => {
+      // 核对挂起期间没被改字作废。① ② 读的都是 data，判不出「视图被微信清空」；
+      // 实测受控 value 也写不回被清空的视图，所以这里只保证旧文本不被再次提交。
+      const current = (this.data.nickNameInput || '').trim();
+      if (this.data.nickPending === nickName && current === nickName) {
+        this.submitNickName(nickName);
+      } else {
+        this.setData({ nickPending: '' });
+      }
+    }, NICK_REVIEW_WAIT_MS);
+  },
+
+  clearNickWait() {
+    if (this.nickWaitTimer) {
+      clearTimeout(this.nickWaitTimer);
+      this.nickWaitTimer = null;
+    }
+  },
+
+  /** 真正的保存请求：只有审核通过、或等满超时之后才会走到这里 */
+  submitNickName(nickName) {
+    this.clearNickWait();
+    this.setData({ nickPending: '', savingNickName: true });
     // 昵称是个人信息，首次保存前先告知用途；同意后接着走原来的保存流程
     privacy.ensureAgreed().then((ok) => {
       if (!ok) {
         wx.showToast({ title: '同意后才能保存昵称', icon: 'none' });
+        this.setData({ savingNickName: false });
         return;
       }
-      this.setData({ savingNickName: true });
       request({ url: '/auth/nickname', method: 'POST', data: { nickName } })
         .then(() => app.refreshMe())
         .then((me) => {
