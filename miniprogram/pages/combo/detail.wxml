@@ -60,7 +60,7 @@
       <text class="total-amount">¥{{totalText}}</text>
     </view>
     <view class="add-btn {{orderable && approved ? '' : 'add-btn-disabled'}}" bindtap="onAdd">
-      {{!approved ? '账号审核中，暂不能选餐' : (browse ? '暂不供应，仅可浏览' : (orderable ? '加入购物车' : '当前不可下单'))}}
+      {{!approved ? '账号审核中，暂不能选餐' : (browse ? '暂不供应，仅可浏览' : (soldOut ? '已售罄' : '加入购物车'))}}
     </view>
   </view>
 </view>

@@ -9,6 +9,9 @@ Page({
     serveDate: '',
     loading: true,
     orderable: false,
+    /** 整份菜单的状态：与点餐页同口径，用来把「为什么不能下单」说清楚，而不是笼统一句「当前不可下单」 */
+    cutoff: false,
+    closed: false,
     /** 浏览态：从「全部菜单」进来的、不在当日菜单里的盒饭，只看不能买（需求 4.5） */
     browse: false,
     desc: '',
@@ -45,7 +48,8 @@ Page({
       .then((menu) => {
         const item = (menu.items || []).find((it) => it.comboId === this.data.comboId);
         if (item) {
-          this.renderItem(item, !!menu.orderable, false);
+          // cutoff / closed 一起传下去：只传 orderable 的话，页面上说不出「已截单」还是「停业」
+          this.renderItem(item, !!menu.orderable, false, !!menu.cutoff, !!menu.closed);
           return;
         }
         // 不在当日菜单：从「全部菜单」点进来的，退到盒饭库浏览（需求 4.5：进详情可看图文）
@@ -76,7 +80,7 @@ Page({
   },
 
   /** 渲染一份数据。browse = 浏览态（隐藏份数与加购，展示简介） */
-  renderItem(item, orderable, browse) {
+  renderItem(item, orderable, browse, cutoff, closed) {
     // 默认选中每个必选组的第一个选项：让用户一进来就能直接下单，
     // 而不是点「加入」时才被拦下来提示「请选择规格」
     const selected = {};
@@ -107,6 +111,9 @@ Page({
       /** 封面单独算一份完整地址：item.cover 是相对路径，还要用于加购，不能就地改 */
       coverUrl: assetUrl(item.cover),
       orderable: orderable && maxQty > 0,
+      // 从「全部菜单」进来时没有菜单级状态，两个都落 false，按钮文案仍由售罄决定
+      cutoff: !!cutoff,
+      closed: !!closed,
       browse: !!browse,
       desc: item.desc || '',
       dishesText: (item.dishes || []).map((d) => d.name + '×' + d.qty).join('、'),
@@ -183,7 +190,14 @@ Page({
       return;
     }
     if (!this.data.orderable) {
-      wx.showToast({ title: '当前不可下单', icon: 'none' });
+      // 与点餐页 isOnQuickAdd 同口径同顺序：整份菜单的原因（停业 > 截单）先说，
+      // 再退到「这款没了」，最后才是兜底的「当前不可下单」
+      const title = this.data.closed
+        ? '该供餐日暂停供应'
+        : (this.data.cutoff
+          ? '当日已截单'
+          : (this.data.soldOut ? '当前菜品已售罄' : '当前不可下单'));
+      wx.showToast({ title, icon: 'none' });
       return;
     }
 

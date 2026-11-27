@@ -450,14 +450,19 @@ Page({
       return;
     }
     if (!this.data.menu.orderable) {
+      // 三种不可下单的原因要分别说清楚，否则用户只知道点不动、不知道为什么：
+      // 停业 > 已截单（今天来不及了）> 其它（如后天的菜单，明天才开放下单）
+      const menu = this.data.menu;
       wx.showToast({
-        title: this.data.menu.closed ? '该供餐日暂停供应' : '当前不可下单',
+        title: menu.closed
+          ? '该供餐日暂停供应'
+          : (menu.cutoff ? '当日已截单' : '当前不可下单'),
         icon: 'none',
       });
       return;
     }
     if (item.soldOut) {
-      wx.showToast({ title: '已售完', icon: 'none' });
+      wx.showToast({ title: '当前菜品已售罄', icon: 'none' });
       return;
     }
     if (item.hasSpec) {
