@@ -80,7 +80,13 @@
               <view class="menu-dishes" wx:if="{{item.dishesText}}">{{item.dishesText}}</view>
               <view class="menu-foot">
                 <text class="menu-price">¥{{item.priceText}}</text>
-                <text class="menu-remain">{{item.remainText}}</text>
+                <text class="menu-remain">{{item.stockText}}</text>
+              </view>
+              <view class="menu-stock" wx:if="{{!item.unlimited}}">
+                <view
+                  class="menu-stock-fill {{item.soldOut ? 'menu-stock-fill-done' : ''}}"
+                  style="width: {{item.stockPercent}}%"
+                ></view>
               </view>
             </view>
 

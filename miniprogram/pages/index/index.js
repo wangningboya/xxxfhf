@@ -245,23 +245,29 @@ Page({
     this.setData({ menuLoading: true });
     return request({ url: '/menu?serveDate=' + date })
       .then((menu) => {
-        const menuItems = (menu.items || []).map((item) => ({
-          comboId: item.comboId,
-          name: item.name,
-          cover: item.cover,
-          coverUrl: assetUrl(item.cover),
-          price: Number(item.price || 0),
-          priceText: yuan(item.price),
-          // 分类存值（bento / homemade …），只用来筛列表；显示名由字典解析，改显示名不用发版
-          category: item.category || '',
-          dishesText: (item.dishes || []).map((d) => d.name + '×' + d.qty).join('、'),
-          hasSpec: (item.specGroups || []).length > 0,
-          // 不限量时 remainQty 为 null，文案要区分「不限量」和「还剩 N 份」
-          remainText: item.remainQty === null || item.remainQty === undefined
-            ? '不限量'
-            : (item.remainQty > 0 ? '剩 ' + item.remainQty + ' 份' : '已售完'),
-          soldOut: item.remainQty !== null && item.remainQty !== undefined && item.remainQty <= 0,
-        }));
+        const menuItems = (menu.items || []).map((item) => {
+          // 库存展示：限量显示「已订 M / 共 N」并按 M/N 画进度条；
+          // 不限量时 limitQty 为 null，没有 N，只报已订份数、不画进度条
+          const limit = item.limitQty === null || item.limitQty === undefined ? null : Number(item.limitQty);
+          const sold = Number(item.soldQty || 0);
+          const unlimited = limit === null;
+          return {
+            comboId: item.comboId,
+            name: item.name,
+            cover: item.cover,
+            coverUrl: assetUrl(item.cover),
+            price: Number(item.price || 0),
+            priceText: yuan(item.price),
+            // 分类存值（bento / homemade …），只用来筛列表；显示名由字典解析，改显示名不用发版
+            category: item.category || '',
+            dishesText: (item.dishes || []).map((d) => d.name + '×' + d.qty).join('、'),
+            hasSpec: (item.specGroups || []).length > 0,
+            stockText: unlimited ? '已订 ' + sold + ' 份 / 不限量' : '已订 ' + sold + ' / 共 ' + limit,
+            stockPercent: unlimited ? 0 : (limit > 0 ? Math.min(100, Math.floor((sold / limit) * 100)) : 100),
+            unlimited,
+            soldOut: !unlimited && sold >= limit,
+          };
+        });
         this.setData({ menu, menuItems });
         this.applyCategoryFilter();
         this.loadCategoryTabs();

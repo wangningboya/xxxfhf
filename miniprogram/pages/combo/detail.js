@@ -96,6 +96,11 @@ Page({
     const maxQty = browse || item.remainQty === null || item.remainQty === undefined
       ? 99 : Math.max(item.remainQty, 0);
 
+    // 库存展示口径与点餐页一致：限量「已订 M / 共 N」+ 进度条，不限量只报已订份数
+    const limit = item.limitQty === null || item.limitQty === undefined ? null : Number(item.limitQty);
+    const sold = Number(item.soldQty || 0);
+    const unlimited = limit === null;
+
     this.setData({
       loading: false,
       item,
@@ -108,6 +113,10 @@ Page({
       groups,
       selected,
       maxQty,
+      stockText: unlimited ? '已订 ' + sold + ' 份 / 不限量' : '已订 ' + sold + ' / 共 ' + limit,
+      stockPercent: unlimited ? 0 : (limit > 0 ? Math.min(100, Math.floor((sold / limit) * 100)) : 100),
+      unlimited,
+      soldOut: !unlimited && sold >= limit,
     });
     wx.setNavigationBarTitle({ title: item.name || '详情' });
     this.recalc();

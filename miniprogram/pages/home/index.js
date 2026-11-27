@@ -120,17 +120,22 @@ Page({
       (item.category === 'bento' ? bento : others).push(item);
     });
 
-    const previewItems = bento.concat(others).map((item) => ({
-      comboId: item.comboId,
-      name: item.name,
-      coverUrl: assetUrl(item.cover),
-      priceText: yuan(item.price),
-      // 口径与点餐页一致：remainQty 为 null / undefined 表示不限量
-      remainText: item.remainQty === null || item.remainQty === undefined
-        ? '不限量'
-        : (item.remainQty > 0 ? '剩 ' + item.remainQty + ' 份' : '已售完'),
-      soldOut: item.remainQty !== null && item.remainQty !== undefined && item.remainQty <= 0,
-    }));
+    const previewItems = bento.concat(others).map((item) => {
+      // 口径与点餐页一致：limitQty 为 null / undefined 表示不限量，只报已订份数、不画进度条
+      const limit = item.limitQty === null || item.limitQty === undefined ? null : Number(item.limitQty);
+      const sold = Number(item.soldQty || 0);
+      const unlimited = limit === null;
+      return {
+        comboId: item.comboId,
+        name: item.name,
+        coverUrl: assetUrl(item.cover),
+        priceText: yuan(item.price),
+        stockText: unlimited ? '已订 ' + sold + ' 份 / 不限量' : '已订 ' + sold + ' / 共 ' + limit,
+        stockPercent: unlimited ? 0 : (limit > 0 ? Math.min(100, Math.floor((sold / limit) * 100)) : 100),
+        unlimited,
+        soldOut: !unlimited && sold >= limit,
+      };
+    });
     this.setData({ previewItems });
   },
 

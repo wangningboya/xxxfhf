@@ -9,10 +9,12 @@
     </view>
     <view class="dishes" wx:if="{{desc}}">{{desc}}</view>
     <view class="dishes" wx:if="{{dishesText}}">含：{{dishesText}}</view>
-    <view class="remain" wx:if="{{!browse}}">
-      剩余
-      <text wx:if="{{item.remainQty === null || item.remainQty === undefined}}">不限量</text>
-      <text wx:else>{{item.remainQty}} 份</text>
+    <view class="remain" wx:if="{{!browse}}">{{stockText}}</view>
+    <view class="stock-bar" wx:if="{{!browse && !unlimited}}">
+      <view
+        class="stock-bar-fill {{soldOut ? 'stock-bar-fill-done' : ''}}"
+        style="width: {{stockPercent}}%"
+      ></view>
     </view>
     <view class="remain" wx:if="{{browse}}">暂不供应，仅可浏览</view>
   </view>

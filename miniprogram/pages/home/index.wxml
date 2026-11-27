@@ -69,7 +69,13 @@
         <view class="preview-name">{{item.name}}</view>
         <view class="preview-meta">
           <text class="preview-price">{{item.priceText}}</text>
-          <text class="preview-remain">{{item.remainText}}</text>
+          <text class="preview-remain">{{item.stockText}}</text>
+        </view>
+        <view class="preview-stock" wx:if="{{!item.unlimited}}">
+          <view
+            class="preview-stock-fill {{item.soldOut ? 'preview-stock-fill-done' : ''}}"
+            style="width: {{item.stockPercent}}%"
+          ></view>
         </view>
       </view>
     </scroll-view>

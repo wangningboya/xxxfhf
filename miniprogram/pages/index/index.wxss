@@ -305,6 +305,25 @@ page {
   color: #b0b0b0;
 }
 
+/* 已订 M / 共 N 的进度条：满格即售罄，满格时填充转灰 */
+.menu-stock {
+  height: 8rpx;
+  margin-top: 12rpx;
+  border-radius: 4rpx;
+  background: #f2f2f2;
+  overflow: hidden;
+}
+
+.menu-stock-fill {
+  height: 100%;
+  border-radius: 4rpx;
+  background: #ff9f1c;
+}
+
+.menu-stock-fill-done {
+  background: #d9d9d9;
+}
+
 /* 全部菜单 Tab 的「明日供应 / 暂不供应」标签 */
 .menu-tomorrow {
   margin-left: 16rpx;
