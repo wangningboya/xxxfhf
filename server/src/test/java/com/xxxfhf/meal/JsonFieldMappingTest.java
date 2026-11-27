@@ -1,11 +1,11 @@
 package com.xxxfhf.meal;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import com.xxxfhf.meal.role.Role;
-import com.xxxfhf.meal.role.RoleMapper;
-import com.xxxfhf.meal.user.AuditStatus;
-import com.xxxfhf.meal.user.User;
-import com.xxxfhf.meal.user.UserMapper;
+import com.xxxfhf.meal.role.domain.Role;
+import com.xxxfhf.meal.role.mapper.RoleMapper;
+import com.xxxfhf.meal.user.domain.AuditStatus;
+import com.xxxfhf.meal.user.domain.User;
+import com.xxxfhf.meal.user.mapper.UserMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;

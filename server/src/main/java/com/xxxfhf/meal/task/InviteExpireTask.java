@@ -1,6 +1,6 @@
 package com.xxxfhf.meal.task;
 
-import com.xxxfhf.meal.invite.InviteCodeService;
+import com.xxxfhf.meal.invite.service.InviteCodeService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;

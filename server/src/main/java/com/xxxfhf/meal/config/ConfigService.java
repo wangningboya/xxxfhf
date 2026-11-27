@@ -1,7 +1,7 @@
 package com.xxxfhf.meal.config;
 
-import com.xxxfhf.meal.audit.AuditActions;
-import com.xxxfhf.meal.audit.AuditService;
+import com.xxxfhf.meal.audit.domain.AuditActions;
+import com.xxxfhf.meal.audit.service.AuditService;
 import com.xxxfhf.meal.common.BizException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

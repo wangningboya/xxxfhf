@@ -1,17 +1,17 @@
 package com.xxxfhf.meal;
 
-import com.xxxfhf.meal.audit.AuditService;
-import com.xxxfhf.meal.auth.GroupAccessService;
+import com.xxxfhf.meal.audit.service.AuditService;
 import com.xxxfhf.meal.auth.SessionKeyStore;
 import com.xxxfhf.meal.auth.WxCrypto;
+import com.xxxfhf.meal.auth.service.GroupAccessService;
 import com.xxxfhf.meal.common.BizException;
 import com.xxxfhf.meal.common.ContentSecurityService;
 import com.xxxfhf.meal.config.ConfigService;
 import com.xxxfhf.meal.invite.InviteAttemptGuard;
-import com.xxxfhf.meal.invite.InviteCodeService;
-import com.xxxfhf.meal.user.AuditStatus;
-import com.xxxfhf.meal.user.User;
-import com.xxxfhf.meal.user.UserMapper;
+import com.xxxfhf.meal.invite.service.InviteCodeService;
+import com.xxxfhf.meal.user.domain.AuditStatus;
+import com.xxxfhf.meal.user.domain.User;
+import com.xxxfhf.meal.user.mapper.UserMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

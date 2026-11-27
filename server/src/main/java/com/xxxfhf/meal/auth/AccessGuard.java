@@ -1,9 +1,10 @@
 package com.xxxfhf.meal.auth;
 
+import com.xxxfhf.meal.auth.service.GroupAccessService;
 import com.xxxfhf.meal.common.BizException;
-import com.xxxfhf.meal.user.AuditStatus;
-import com.xxxfhf.meal.user.User;
-import com.xxxfhf.meal.user.UserMapper;
+import com.xxxfhf.meal.user.domain.AuditStatus;
+import com.xxxfhf.meal.user.domain.User;
+import com.xxxfhf.meal.user.mapper.UserMapper;
 import org.springframework.stereotype.Component;
 
 /**

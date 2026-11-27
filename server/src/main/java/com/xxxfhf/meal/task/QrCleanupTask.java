@@ -1,8 +1,8 @@
 package com.xxxfhf.meal.task;
 
 import com.xxxfhf.meal.config.AppProperties;
-import com.xxxfhf.meal.file.FileStorageService;
-import com.xxxfhf.meal.print.QrCodeService;
+import com.xxxfhf.meal.file.service.FileStorageService;
+import com.xxxfhf.meal.print.service.QrCodeService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;

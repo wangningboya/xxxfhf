@@ -1,6 +1,6 @@
 package com.xxxfhf.meal.common.ratelimit;
 
-import com.xxxfhf.meal.auth.JwtService;
+import com.xxxfhf.meal.auth.service.JwtService;
 import com.xxxfhf.meal.common.ApiResponse;
 import com.xxxfhf.meal.common.ErrorCode;
 import com.xxxfhf.meal.config.AppProperties;

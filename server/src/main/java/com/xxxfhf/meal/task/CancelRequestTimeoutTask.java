@@ -2,8 +2,8 @@ package com.xxxfhf.meal.task;
 
 import com.xxxfhf.meal.config.ConfigKey;
 import com.xxxfhf.meal.config.ConfigService;
-import com.xxxfhf.meal.order.OrderAdminService;
-import com.xxxfhf.meal.order.OrderQuery;
+import com.xxxfhf.meal.order.domain.OrderQuery;
+import com.xxxfhf.meal.order.service.OrderAdminService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;

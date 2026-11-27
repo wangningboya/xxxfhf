@@ -1,7 +1,7 @@
 package com.xxxfhf.meal.auth;
 
-import com.xxxfhf.meal.user.AuditStatus;
-import com.xxxfhf.meal.user.UserType;
+import com.xxxfhf.meal.user.domain.AuditStatus;
+import com.xxxfhf.meal.user.domain.UserType;
 
 import java.util.Collections;
 import java.util.Set;

@@ -1,10 +1,14 @@
 package com.xxxfhf.meal.user;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import com.xxxfhf.meal.auth.PasswordService;
+import com.xxxfhf.meal.auth.service.PasswordService;
 import com.xxxfhf.meal.config.AppProperties;
-import com.xxxfhf.meal.role.Role;
-import com.xxxfhf.meal.role.RoleMapper;
+import com.xxxfhf.meal.role.domain.Role;
+import com.xxxfhf.meal.role.mapper.RoleMapper;
+import com.xxxfhf.meal.user.domain.AuditStatus;
+import com.xxxfhf.meal.user.domain.User;
+import com.xxxfhf.meal.user.domain.UserType;
+import com.xxxfhf.meal.user.mapper.UserMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;

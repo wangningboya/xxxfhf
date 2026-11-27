@@ -1,6 +1,6 @@
 package com.xxxfhf.meal.task;
 
-import com.xxxfhf.meal.message.MessageService;
+import com.xxxfhf.meal.message.service.MessageService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;

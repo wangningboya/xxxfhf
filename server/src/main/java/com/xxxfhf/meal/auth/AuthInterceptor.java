@@ -1,12 +1,13 @@
 package com.xxxfhf.meal.auth;
 
+import com.xxxfhf.meal.auth.service.JwtService;
 import com.xxxfhf.meal.common.BizException;
-import com.xxxfhf.meal.role.Role;
-import com.xxxfhf.meal.role.RoleMapper;
-import com.xxxfhf.meal.user.AuditStatus;
-import com.xxxfhf.meal.user.User;
-import com.xxxfhf.meal.user.UserMapper;
-import com.xxxfhf.meal.user.UserType;
+import com.xxxfhf.meal.role.domain.Role;
+import com.xxxfhf.meal.role.mapper.RoleMapper;
+import com.xxxfhf.meal.user.domain.AuditStatus;
+import com.xxxfhf.meal.user.domain.User;
+import com.xxxfhf.meal.user.domain.UserType;
+import com.xxxfhf.meal.user.mapper.UserMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.stereotype.Component;

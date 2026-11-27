@@ -1,8 +1,8 @@
 package com.xxxfhf.meal.task;
 
 import com.xxxfhf.meal.menu.ServeDateClock;
-import com.xxxfhf.meal.notify.NotifyService;
-import com.xxxfhf.meal.order.OrderService;
+import com.xxxfhf.meal.notify.service.NotifyService;
+import com.xxxfhf.meal.order.service.OrderService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
