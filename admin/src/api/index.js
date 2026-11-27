@@ -60,6 +60,10 @@ http.interceptors.response.use(
       ElMessage.error(body.message || '登录已过期，请重新登录');
     } else if (status === 403) {
       ElMessage.error(body.message || '没有该操作权限');
+    } else if (status === 429) {
+      // 限流拒绝。nginx 按 IP（响应体由 nginx 的 error_page 统一成 JSON）与应用层按用户
+      // 都会返回 429，兜底文案保持一致；body.message 存在时优先用它，避免盖掉更具体的提示。
+      ElMessage.error(body.message || '请求过快，请刷新后再试');
     } else {
       ElMessage.error(body.message || '服务暂时不可用，请稍后重试');
     }

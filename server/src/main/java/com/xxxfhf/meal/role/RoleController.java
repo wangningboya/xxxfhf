@@ -40,7 +40,7 @@ public class RoleController {
         return ApiResponse.ok(roleService.list());
     }
 
-    /** 可分配的权限项清单（18 项，含 5 个只读）。 */
+    /** 可分配的权限项清单（19 项，含 5 个只读）。 */
     @GetMapping("/permissions")
     public ApiResponse<List<RoleService.PermissionItem>> permissions() {
         return ApiResponse.ok(roleService.permissionItems());

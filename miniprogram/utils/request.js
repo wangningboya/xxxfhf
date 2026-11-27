@@ -53,6 +53,17 @@ function request(options) {
           reject({ code: 40301, message: body.message || '没有操作权限' });
           return;
         }
+        if (res.statusCode === 429) {
+          // 限流拒绝。两层都可能给 429，文案在这里统一：
+          //   nginx 按来源 IP —— 响应体由 nginx 的 error_page 改写成同格式 JSON；
+          //   应用层按用户 —— 复用 ErrorCode.TOO_MANY_ATTEMPTS。
+          // 优先用 body.message：应用层的 429 有更具体的提示（如商家账号锁定
+          // 「失败次数过多，账号已锁定，约 N 分钟后自动解锁」），不能被笼统文案盖掉。
+          // 拿不到 message 才兜底（例如 nginx 未 reload、仍返回 HTML），
+          // 否则会落到下面的系统兜底，变成「服务暂时不可用」，把原因说错。
+          reject({ code: body.code || 42901, message: body.message || '请求过快，请刷新后再试' });
+          return;
+        }
         if (res.statusCode !== 200) {
           // 4xx 是业务异常（后端 GlobalExceptionHandler 按 ErrorCode 映射），message 直接展示；
           // 5xx、网关错误页、body 不是统一响应体都属于系统故障，统一兜底

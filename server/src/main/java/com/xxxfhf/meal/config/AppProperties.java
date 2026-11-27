@@ -22,6 +22,7 @@ public class AppProperties {
     private final Web web = new Web();
     private final Admin admin = new Admin();
     private final Qr qr = new Qr();
+    private final RateLimit rateLimit = new RateLimit();
 
     @PostConstruct
     void validate() {
@@ -61,6 +62,16 @@ public class AppProperties {
         if (qr.getKeepDays() < 1) {
             throw new IllegalStateException("APP_QR_KEEP_DAYS 必须 ≥ 1（0 或负数会让清理任务删掉刚生成的码）");
         }
+        if (rateLimit.getLimit() < 1 || rateLimit.getLoginLimit() < 1) {
+            throw new IllegalStateException("限流阈值必须 ≥ 1（APP_RATE_LIMIT_LIMIT / APP_RATE_LIMIT_LOGIN_LIMIT）");
+        }
+        if (rateLimit.getWindowSeconds() < 1) {
+            throw new IllegalStateException("APP_RATE_LIMIT_WINDOW_SECONDS 必须 ≥ 1");
+        }
+        if (rateLimit.getLoginLimit() > rateLimit.getLimit()) {
+            // 免登录入口比登录用户还宽松等于没限：这两个入口会写库、会消耗微信接口配额
+            throw new IllegalStateException("APP_RATE_LIMIT_LOGIN_LIMIT 不能大于 APP_RATE_LIMIT_LIMIT");
+        }
     }
 
     public Jwt getJwt() {
@@ -89,6 +100,10 @@ public class AppProperties {
 
     public Qr getQr() {
         return qr;
+    }
+
+    public RateLimit getRateLimit() {
+        return rateLimit;
     }
 
     /* ------------------------------------------------------------------ */
@@ -287,6 +302,65 @@ public class AppProperties {
 
         public void setEnabled(boolean enabled) {
             this.enabled = enabled;
+        }
+    }
+
+    /**
+     * 应用层限流。补 nginx 按来源 IP 之外的「按人」维度，规则见 {@code 限流需求.md}。
+     *
+     * <p>阈值改完要重启才生效：配置是启动时绑定的，没有接配置中心。
+     */
+    public static class RateLimit {
+        /**
+         * 观察模式：算配额、超限只记日志，不返回 429。
+         *
+         * <p>默认开。60 次/分钟是按请求画像推的、没实测过，先跑几天看日志确认没冤枉正常人，
+         * 再改成 false 重启，那时才开始真正拦截。
+         */
+        private boolean dryRun = true;
+
+        /** 登录用户的额度（次/窗口）。取不到身份时退化为按 IP 计数，共用这一个额度。 */
+        private int limit = 60;
+
+        /**
+         * 窗口长度（秒）。不能按秒限流：小程序进页面时 onShow 会在同一秒并发发 3 个请求，
+         * 按秒必误伤。登录用户的额度与免登录入口共用这个窗口。
+         */
+        private int windowSeconds = 60;
+
+        /** 免登录入口（/auth/login、/auth/join、/auth/admin/login）按 IP 的额度（次/窗口）。 */
+        private int loginLimit = 10;
+
+        public boolean isDryRun() {
+            return dryRun;
+        }
+
+        public void setDryRun(boolean dryRun) {
+            this.dryRun = dryRun;
+        }
+
+        public int getLimit() {
+            return limit;
+        }
+
+        public void setLimit(int limit) {
+            this.limit = limit;
+        }
+
+        public int getWindowSeconds() {
+            return windowSeconds;
+        }
+
+        public void setWindowSeconds(int windowSeconds) {
+            this.windowSeconds = windowSeconds;
+        }
+
+        public int getLoginLimit() {
+            return loginLimit;
+        }
+
+        public void setLoginLimit(int loginLimit) {
+            this.loginLimit = loginLimit;
         }
     }
 

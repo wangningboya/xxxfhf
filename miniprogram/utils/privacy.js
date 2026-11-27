@@ -18,7 +18,7 @@ const STORAGE_KEY = 'meal_privacy_consent';
 const DECLINE_KEY = 'meal_privacy_declined';
 
 /** 政策版本号：政策全文有实质改动就改这里，用户会被重新询问一次。 */
-const POLICY_VERSION = '2026-11-19';
+const POLICY_VERSION = '2026-11-26';
 
 /** 拒绝后的主动打扰冷却期（7 天）。只约束我们主动弹，不约束用户自己点控件。 */
 const DECLINE_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;

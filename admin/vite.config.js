@@ -10,12 +10,12 @@ export default defineConfig({
     // 开发期把 /api 反代到本地服务端，避免跨域与硬编码地址
     proxy: {
       '/api': {
-        target: 'http://118.31.238.2:8080',
+        target: 'http://127.0.0.1:8080',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
       '/upload': {
-        target: 'http://118.31.238.2:8080',
+        target: 'http://127.0.0.1:8080',
         changeOrigin: true,
       },
     },

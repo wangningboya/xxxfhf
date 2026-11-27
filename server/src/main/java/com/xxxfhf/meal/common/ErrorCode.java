@@ -29,7 +29,11 @@ public enum ErrorCode {
     FORBIDDEN(40301, "没有操作权限", HttpStatus.FORBIDDEN),
     NOT_FOUND(40401, "数据不存在", HttpStatus.NOT_FOUND),
     CONFLICT(40901, "数据状态已变化，请刷新后重试", HttpStatus.CONFLICT),
-    TOO_MANY_ATTEMPTS(42901, "尝试过于频繁，请稍后再试", HttpStatus.TOO_MANY_REQUESTS),
+    /*
+     * 42901 的默认文案：限流（RateLimitFilter）与登录锁定共用，三端话术一致（见 限流需求.md §8.5）。
+     * 登录锁定这类有具体原因的场合由 BizException.tooMany(msg) 覆盖，不会显示这里的默认值。
+     */
+    TOO_MANY_ATTEMPTS(42901, "请求过快，请刷新后再试", HttpStatus.TOO_MANY_REQUESTS),
 
     /*
      * ---------- 服务端异常 ----------

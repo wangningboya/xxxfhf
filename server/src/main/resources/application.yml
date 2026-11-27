@@ -70,6 +70,20 @@ app:
   qr:
     # 标签小程序码保留天数：超过这个天数的 qr/*.png 由定时任务删除，重打时按需重新生成
     keep-days: ${APP_QR_KEEP_DAYS:180}
+  rate-limit:
+    # 应用层限流：只补 nginx 做不到的「按人」维度。nginx 已按来源 IP 限流（见 deploy/nginx/nginx.conf），
+    # 两层叠加，nginx 挡工具，这里挡「同一个人慢慢刷」。规则与调参依据见 限流需求.md。
+    #
+    # dry-run：只记日志不拦截。默认开 —— 60 次/分钟是按请求画像推的、没实测过，
+    # 先跑几天看日志确认没冤枉正常人，再改成 false 并重启，那时才开始真正拦截。
+    dry-run: ${APP_RATE_LIMIT_DRY_RUN:true}
+    # 登录用户额度（次/窗口）；取不到身份时退化为按 IP，共用这一个额度。
+    # 正常点餐峰值 20~30 次/分钟（进页面 3 个 + 切 Tab + 下单 + 刷新），60 留了 2~3 倍余量。
+    limit: ${APP_RATE_LIMIT_LIMIT:60}
+    # 窗口长度（秒）。不能按秒：小程序 onShow 会在同一秒并发发 3 个请求，按秒必误伤。
+    window-seconds: ${APP_RATE_LIMIT_WINDOW_SECONDS:60}
+    # 免登录入口（登录 / 首次登记 / 后台登录）按 IP 的额度：不带身份就能打，且会写库、消耗微信接口配额。
+    login-limit: ${APP_RATE_LIMIT_LOGIN_LIMIT:10}
   schedule:
     # 每 5 分钟；要更精确改 0 * * * * *
     prepay-release-cron: "${APP_PREPAY_RELEASE_CRON:0 */5 * * * *}"
