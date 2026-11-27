@@ -27,6 +27,8 @@ Page({
     cells: [],
     nickEditing: false,
     nickInput: '',
+    /** 微信审核判过违规的那段昵称：保存时比对，同一段不再提交 */
+    nickRejectedText: '',
     phoneEditing: false,
     phoneInput: '',
     saving: false,
@@ -102,12 +104,36 @@ Page({
         wx.showToast({ title: '同意后才能填写昵称，你可以先逛逛', icon: 'none' });
         return;
       }
-      this.setData({ nickEditing: true, nickInput: (this.data.me && this.data.me.nickName) || '' });
+      this.setData({
+        nickEditing: true,
+        nickInput: (this.data.me && this.data.me.nickName) || '',
+        nickRejectedText: '',
+      });
     });
   },
 
   onNickInput(e) {
     this.setData({ nickInput: (e.detail && e.detail.value) || '' });
+  },
+
+  /**
+   * 微信侧的昵称审核结果（基础库 2.29.1+，`detail = { pass, timeout }`）。
+   *
+   * 口径同首页昵称浮层：只记住被拒的那段文本、保存时比对（不用状态位，会被 bindblur 冲掉）；
+   * `timeout === true` 按放行处理。
+   */
+  onNickReview(e) {
+    const detail = e.detail || {};
+    if (detail.timeout) {
+      return;
+    }
+    if (detail.pass === false) {
+      this.setData({ nickRejectedText: (this.data.nickInput || '').trim() });
+      return;
+    }
+    if (this.data.nickRejectedText) {
+      this.setData({ nickRejectedText: '' });
+    }
   },
 
   onCancelNick() {
@@ -118,6 +144,11 @@ Page({
     const nickName = (this.data.nickInput || '').trim();
     if (!nickName) {
       wx.showToast({ title: '请填写昵称', icon: 'none' });
+      return;
+    }
+    // 微信审核判过违规的同一段文本不再提交；改过字就放行，由服务端兜底
+    if (nickName === this.data.nickRejectedText) {
+      wx.showToast({ title: '该昵称无法使用，请换一个', icon: 'none' });
       return;
     }
     if (this.data.saving) {

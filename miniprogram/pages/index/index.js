@@ -23,6 +23,8 @@ Page({
     /** 还没填昵称时弹填写浮层：商家审核列表靠昵称认人 */
     needNickName: false,
     nickNameInput: '',
+    /** 微信审核判过违规的那段昵称：保存时比对，同一段不再提交 */
+    nickRejectedText: '',
     savingNickName: false,
 
     /* ---------------- 菜单 ---------------- */
@@ -547,6 +549,27 @@ Page({
     this.setData({ nickNameInput: (e.detail && e.detail.value) || '' });
   },
 
+  /**
+   * 微信侧的昵称审核结果（基础库 2.29.1+，`detail = { pass, timeout }`）。
+   *
+   * `pass === false` 时微信自己会弹「无法使用该昵称」，这里只记住被拒的那段文本，保存时比对。
+   * 不记状态位：`blur` 与本次回调的先后顺序不保证，状态位会被 bindblur 冲掉；比对文本不受时序影响。
+   * `timeout === true` 表示检测没跑完（官方未定义此时 pass 的取值），按放行处理，不记也不清。
+   */
+  onNickNameReview(e) {
+    const detail = e.detail || {};
+    if (detail.timeout) {
+      return;
+    }
+    if (detail.pass === false) {
+      this.setData({ nickRejectedText: (this.data.nickNameInput || '').trim() });
+      return;
+    }
+    if (this.data.nickRejectedText) {
+      this.setData({ nickRejectedText: '' });
+    }
+  },
+
   /** 保存昵称。成功即关浮层（applyMe 会重新判断是否需要填）。 */
   onSaveNickName() {
     if (this.data.savingNickName) {
@@ -555,6 +578,11 @@ Page({
     const nickName = (this.data.nickNameInput || '').trim();
     if (!nickName) {
       wx.showToast({ title: '请填写昵称', icon: 'none' });
+      return;
+    }
+    // 微信审核判过违规的同一段文本不再提交；改过字就放行，由服务端兜底
+    if (nickName === this.data.nickRejectedText) {
+      wx.showToast({ title: '该昵称无法使用，请换一个', icon: 'none' });
       return;
     }
 

@@ -160,6 +160,7 @@
         bindinput="onNickNameInput"
         bindblur="onNickNameInput"
         bindchange="onNickNameInput"
+        bindnicknamereview="onNickNameReview"
       />
       <button class="nick-btn" loading="{{savingNickName}}" bindtap="onSaveNickName">保存</button>
     </view>

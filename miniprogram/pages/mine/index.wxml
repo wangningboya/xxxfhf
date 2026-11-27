@@ -47,6 +47,7 @@
         bindinput="onNickInput"
         bindblur="onNickInput"
         bindchange="onNickInput"
+        bindnicknamereview="onNickReview"
       />
       <view class="panel-actions">
         <view class="panel-btn panel-ghost" bindtap="onCancelNick">取消</view>

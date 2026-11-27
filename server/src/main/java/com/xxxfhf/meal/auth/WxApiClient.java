@@ -292,12 +292,17 @@ public class WxApiClient {
     /** 微信「内容含违规信息」错误码。 */
     public static final int CONTENT_RISKY = 87014;
 
+    /** 2.0 返回体里「明确违规」的 suggest 取值。 */
+    private static final String SUGGEST_RISKY = "risky";
+
     /**
      * 内容安全检测（msg_sec_check 2.0）。
      *
      * <p>只回 errcode：0 = 通过，{@link #CONTENT_RISKY} = 确认含违规内容，其余算接口异常。
      * <b>不抛异常</b>：内容安全是附加风控，微信接口抖动不能连累改昵称这类主流程，
      * 调用方按「异常放行」处理，把 errcode 记进日志即可。
+     *
+     * <p>2.0 的判定在 {@code result.suggest}，由 {@link #judgeSecCheck} 统一换算成上面的错误码。
      *
      * @param content 待检测文本；空串直接通过
      * @param openid  用户 openid，可空（为空时不带，微信按调用方身份判定）
@@ -334,16 +339,7 @@ public class WxApiClient {
                 log.warn("内容安全检测返回 HTTP {}", response.statusCode());
                 return -1;
             }
-            JsonNode node = objectMapper.readTree(response.body());
-            int errcode = node.path("errcode").asInt(-1);
-            if (errcode == CONTENT_RISKY) {
-                // 不打印文本本身：昵称、备注都可能含个人信息
-                log.info("内容安全检测命中违规内容");
-            } else if (errcode != 0) {
-                log.warn("内容安全检测异常 errcode={} errmsg={}",
-                        errcode, node.path("errmsg").asText(""));
-            }
-            return errcode;
+            return judgeSecCheck(objectMapper.readTree(response.body()));
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
             return -1;
@@ -351,6 +347,42 @@ public class WxApiClient {
             log.warn("内容安全检测请求异常", ex);
             return -1;
         }
+    }
+
+    /**
+     * 把 {@code msg_sec_check} 2.0 的返回体换算成判定码。
+     *
+     * <p>2.0 的规则是「调用成功即 errcode = 0，是否违规看 result.suggest」——只判 errcode
+     * 会把违规内容全部放行（87014 是 1.0 的错误码，2.0 下基本不出现，这里仅留兜底）。
+     *
+     * <p>口径（技术文档 4.18.2）：只认 {@code result.suggest = "risky"} 拦截，
+     * {@code review} 与 {@code pass} 都放行——可疑内容交给商家人工审核。
+     * 只看综合的 {@code result.suggest}，不看 {@code detail[]} 里单条策略的建议。
+     *
+     * <p>包级可见 + 静态：单测直接喂一段固定 JSON 即可，不必起 HTTP。
+     *
+     * @return 0 = 通过；{@link #CONTENT_RISKY} = 命中违规；其余为微信错误码（调用方按异常放行）
+     */
+    static int judgeSecCheck(JsonNode node) {
+        int errcode = node.path("errcode").asInt(-1);
+        if (errcode != 0) {
+            if (errcode == CONTENT_RISKY) {
+                // 不打印文本本身：昵称、备注都可能含个人信息
+                log.info("内容安全检测命中违规内容（errcode 口径）");
+            } else {
+                log.warn("内容安全检测异常 errcode={} errmsg={}",
+                        errcode, node.path("errmsg").asText(""));
+            }
+            return errcode;
+        }
+        JsonNode result = node.path("result");
+        if (SUGGEST_RISKY.equals(result.path("suggest").asText(""))) {
+            // 同样不记原文：label 是违规类别枚举，trace_id 用于跟微信侧对账
+            log.info("内容安全检测命中违规 label={} trace_id={}",
+                    result.path("label").asInt(0), node.path("trace_id").asText(""));
+            return CONTENT_RISKY;
+        }
+        return 0;
     }
 
     /**
