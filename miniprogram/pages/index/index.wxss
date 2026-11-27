@@ -268,6 +268,43 @@ page {
   color: #b0b0b0;
 }
 
+/*
+ * 封面 + 月销量角标的定位容器。
+ *
+ * 宽高必须显式写死：<image> 一旦是 100%，它在 flex 行里就不再撑开自己的尺寸，
+ * 容器不给宽度会被 .menu-body 挤成 0（flex 子项默认可收缩）。
+ * flex-shrink: 0 从 .menu-cover 接过来。
+ */
+.cover-wrap {
+  position: relative;
+  width: 180rpx;
+  height: 180rpx;
+  flex-shrink: 0;
+  border-radius: 16rpx;
+  overflow: hidden;
+}
+
+/* 左侧分类栏把封面收到 132rpx（见 .menu-split .menu-cover），容器要跟着收 */
+.menu-split .cover-wrap {
+  width: 132rpx;
+  height: 132rpx;
+}
+
+/* 0,3,0 权重，压得过 .menu-split .menu-cover 的 132rpx；display:block 去掉行内元素底部基线间隙 */
+.menu-item .cover-wrap .menu-cover {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+}
+
+/* 上一条把 display 改成了 block，「暂无图」这里再要回居中（同权重、后写者胜） */
+.menu-item .cover-wrap .menu-cover-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .menu-body {
   flex: 1;
   padding: 0 20rpx;

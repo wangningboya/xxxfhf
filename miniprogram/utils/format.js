@@ -189,6 +189,21 @@ function durationText(from, to) {
   return restHours ? days + ' 天 ' + restHours + ' 小时' : days + ' 天';
 }
 
+/**
+ * 月销量角标文案。0 / null 返回空串 —— 本月没卖过就不挂角标，
+ * 空 badge 比「月售 0」更不打扰（产品口径：0 份不显示）。
+ *
+ * 超过 999 折成 999+：封面最窄只有 132rpx，四位数会把角标顶出封面边缘；
+ * 购物车球（`cartCount > 99 ? '99+'`）用的是同一个「折顶」思路，全站一致。
+ */
+function soldBadge(qty) {
+  const value = Number(qty || 0);
+  if (!(value > 0)) {
+    return '';
+  }
+  return '月售 ' + (value > 999 ? '999+' : value);
+}
+
 module.exports = {
   yuan,
   parseList,
@@ -201,4 +216,5 @@ module.exports = {
   relativeTime,
   timeLabel,
   durationText,
+  soldBadge,
 };

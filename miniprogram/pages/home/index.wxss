@@ -207,6 +207,28 @@ page {
   background: #f2f2f2;
 }
 
+/* 封面 + 月销量角标的定位容器：尺寸从 .preview-cover 接过来，图片改吃满 */
+.preview-cover-wrap {
+  position: relative;
+  width: 208rpx;
+  height: 160rpx;
+  border-radius: 12rpx;
+  overflow: hidden;
+}
+
+.preview-card .preview-cover-wrap .preview-cover {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+}
+
+.preview-card .preview-cover-wrap .preview-cover-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .preview-cover-empty {
   display: flex;
   align-items: center;

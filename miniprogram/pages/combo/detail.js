@@ -1,6 +1,6 @@
 const app = getApp();
 const { request } = require('../../utils/request');
-const { yuan, delta, assetUrl } = require('../../utils/format');
+const { yuan, delta, assetUrl, soldBadge } = require('../../utils/format');
 const cartUtil = require('../../utils/cart');
 
 Page({
@@ -117,6 +117,7 @@ Page({
       stockPercent: unlimited ? 0 : (limit > 0 ? Math.min(100, Math.floor((sold / limit) * 100)) : 100),
       unlimited,
       soldOut: !unlimited && sold >= limit,
+      monthSoldText: soldBadge(item.monthSoldQty),
     });
     wx.setNavigationBarTitle({ title: item.name || '详情' });
     this.recalc();

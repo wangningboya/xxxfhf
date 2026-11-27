@@ -1,6 +1,9 @@
 <view class="page" wx:if="{{!loading && item}}">
-  <image class="cover" wx:if="{{coverUrl}}" src="{{coverUrl}}" mode="aspectFill" />
-  <view class="cover cover-empty" wx:else>暂无图片</view>
+  <view class="cover-wrap">
+    <image class="cover" wx:if="{{coverUrl}}" src="{{coverUrl}}" mode="aspectFill" />
+    <view class="cover cover-empty" wx:else>暂无图片</view>
+    <view class="sold-badge" wx:if="{{monthSoldText}}">{{monthSoldText}}</view>
+  </view>
 
   <view class="card">
     <view class="title-row">

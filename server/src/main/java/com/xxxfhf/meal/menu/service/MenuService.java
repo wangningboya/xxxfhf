@@ -49,16 +49,20 @@ public class MenuService {
     private final ConfigService configService;
     /** 菜单变更留痕（需求 4.19 / F-J13）：一处改动会同时影响用户看到的菜单与可售份数 */
     private final AuditService auditService;
+    /** 封面角标要的「本月已售」。只读、带缓存，口径全在 ComboSalesService 一处 */
+    private final ComboSalesService comboSalesService;
 
     public MenuService(DailyMenuMapper menuMapper, ComboService comboService,
                        SpecGroupMapper specGroupMapper, ServeDateClock clock,
-                       ConfigService configService, AuditService auditService) {
+                       ConfigService configService, AuditService auditService,
+                       ComboSalesService comboSalesService) {
         this.menuMapper = menuMapper;
         this.comboService = comboService;
         this.specGroupMapper = specGroupMapper;
         this.clock = clock;
         this.configService = configService;
         this.auditService = auditService;
+        this.comboSalesService = comboSalesService;
     }
 
     /**
@@ -88,12 +92,13 @@ public class MenuService {
         boolean orderable = clock.isOrderable(date);
 
         Map<Long, DailyMenu> byCombo = publishedMap(date);
+        Map<Long, Integer> monthSold = comboSalesService.monthSoldByCombo();
         // 排序与可见性都以盒饭库为准：下架的盒饭即使还在菜单里也不展示（下架即彻底隐藏）
         List<MenuItemView> items = new ArrayList<>();
         for (Combo combo : comboService.listOnSale()) {
             DailyMenu menu = byCombo.get(combo.getId());
             if (menu != null) {
-                items.add(toItemView(menu, combo));
+                items.add(toItemView(menu, combo, monthSold));
             }
         }
 
@@ -103,12 +108,14 @@ public class MenuService {
     /** 全部菜单（盒饭库全量，仅上架的），带「明日供应」标记。只浏览，不提供加购。 */
     public List<ComboAllItem> allCombos() {
         Set<Long> tomorrow = publishedMap(clock.tomorrow()).keySet();
+        Map<Long, Integer> monthSold = comboSalesService.monthSoldByCombo();
         List<ComboAllItem> result = new ArrayList<>();
         for (Combo combo : comboService.listOnSale()) {
             result.add(new ComboAllItem(combo.getId(), combo.getName(), combo.getCover(),
                     combo.getCategoryCode(), combo.getDesc(),
                     combo.getPrice(), nullToEmpty(combo.getDishes()),
-                    snapshotSpecs(combo), tomorrow.contains(combo.getId())));
+                    snapshotSpecs(combo), tomorrow.contains(combo.getId()),
+                    monthSold.getOrDefault(combo.getId(), 0)));
         }
         return result;
     }
@@ -119,11 +126,12 @@ public class MenuService {
     public AdminMenuView adminView(LocalDate serveDate) {
         LocalDate date = requireDate(serveDate);
         Map<Long, DailyMenu> byCombo = allMap(date);
+        Map<Long, Integer> monthSold = comboSalesService.monthSoldByCombo();
         List<MenuItemView> items = new ArrayList<>();
         for (Combo combo : comboService.listAll()) {
             DailyMenu menu = byCombo.get(combo.getId());
             if (menu != null) {
-                items.add(toItemView(menu, combo));
+                items.add(toItemView(menu, combo, monthSold));
             }
         }
         // 有任意一条 PUBLISHED 就认为这一天已发布；后台要据此显示「发布 / 撤下」
@@ -348,7 +356,7 @@ public class MenuService {
         return result;
     }
 
-    private MenuItemView toItemView(DailyMenu menu, Combo combo) {
+    private MenuItemView toItemView(DailyMenu menu, Combo combo, Map<Long, Integer> monthSold) {
         ComboSnapshot snapshot = menu.getComboSnapshot();
         int sold = menu.getSoldQty() == null ? 0 : menu.getSoldQty();
         Integer remain = null;
@@ -364,7 +372,8 @@ public class MenuService {
                 menu.getPriceSnapshot() == null ? 0 : menu.getPriceSnapshot(),
                 snapshot == null || snapshot.dishes() == null ? List.of() : snapshot.dishes(),
                 snapshot == null || snapshot.specGroups() == null ? List.of() : snapshot.specGroups(),
-                menu.getLimitQty(), sold, remain, menu.getStatus());
+                menu.getLimitQty(), sold, remain, menu.getStatus(),
+                monthSold.getOrDefault(menu.getComboId(), 0));
     }
 
     private static String nameOf(DailyMenu menu) {
@@ -419,11 +428,14 @@ public class MenuService {
      * @param category  商品分类存值（字典 combo_category），前端用字典解析成显示名并做筛选页签。
      *                  从**实时商品**取而不是从快照取：分类只是展示分组，换分类应当立即生效
      * @param remainQty 剩余份数；limitQty 为 null（不限量）时也是 null，前端显示「不限量」
+     * @param monthSoldQty 本月（按 serve_date、已接单及之后）已售份数，口径见 {@link ComboSalesService}。
+     *                  0 表示本月没卖过，前端据此不渲染封面角标。**与 soldQty（当日占份）不是一个东西**
      */
     public record MenuItemView(Long comboId, String name, String cover, String category, Integer price,
                                List<ComboDish> dishes,
                                List<ComboSnapshot.SpecGroupSnapshot> specGroups,
-                               Integer limitQty, Integer soldQty, Integer remainQty, String status) {
+                               Integer limitQty, Integer soldQty, Integer remainQty, String status,
+                               Integer monthSoldQty) {
     }
 
     /**
@@ -431,12 +443,15 @@ public class MenuService {
      *
      * @param category         商品分类存值，同上
      * @param tomorrowSupplied 是否在明天那份菜单里，前端据此打「明日供应 / 暂不供应」标签
+     * @param monthSoldQty     本月已售份数，口径见 {@link ComboSalesService}。详情页从「全部菜单」
+     *                         进来时走的就是这条路径，没有它角标会时有时无
      */
     public record ComboAllItem(Long comboId, String name, String cover, String category, String desc,
                                Integer price,
                                List<ComboDish> dishes,
                                List<ComboSnapshot.SpecGroupSnapshot> specGroups,
-                               boolean tomorrowSupplied) {
+                               boolean tomorrowSupplied,
+                               Integer monthSoldQty) {
     }
 
     /**

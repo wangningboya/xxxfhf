@@ -1,6 +1,6 @@
 const app = getApp();
 const { request } = require('../../utils/request');
-const { dateStr, addDays, yuan, assetUrl } = require('../../utils/format');
+const { dateStr, addDays, yuan, assetUrl, soldBadge } = require('../../utils/format');
 const dict = require('../../utils/dict');
 const cartUtil = require('../../utils/cart');
 const share = require('../../utils/share');
@@ -134,6 +134,7 @@ Page({
         stockPercent: unlimited ? 0 : (limit > 0 ? Math.min(100, Math.floor((sold / limit) * 100)) : 100),
         unlimited,
         soldOut: !unlimited && sold >= limit,
+        monthSoldText: soldBadge(item.monthSoldQty),
       };
     });
     this.setData({ previewItems });

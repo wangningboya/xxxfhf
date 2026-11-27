@@ -62,9 +62,12 @@
         data-id="{{item.comboId}}"
         bindtap="onOpenCombo"
       >
-        <image class="preview-cover" src="{{item.coverUrl}}" mode="aspectFill" wx:if="{{item.coverUrl}}"></image>
-        <view class="preview-cover preview-cover-empty" wx:else>
-          <text>暂无图</text>
+        <view class="preview-cover-wrap">
+          <image class="preview-cover" src="{{item.coverUrl}}" mode="aspectFill" wx:if="{{item.coverUrl}}"></image>
+          <view class="preview-cover preview-cover-empty" wx:else>
+            <text>暂无图</text>
+          </view>
+          <view class="sold-badge" wx:if="{{item.monthSoldText}}">{{item.monthSoldText}}</view>
         </view>
         <view class="preview-name">{{item.name}}</view>
         <view class="preview-meta">

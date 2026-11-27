@@ -51,3 +51,26 @@ button {
 .tag-default {
   color: #4a4a4a;
 }
+
+/*
+ * 月销量角标：压在封面左下角。
+ *
+ * 为什么压在图上而不是另起一行：点餐页的封面只有 132rpx，右侧文案区已经被
+ * 「菜名 / 组成 / 价格 + 已订 X 共 Y / 进度条」占满，再加一行只会把列表撑高。
+ *
+ * 尺寸不写死：宽度由文字撑开，字号由各页面覆盖（132/180rpx 封面 20rpx，详情页大图 26rpx）。
+ */
+.sold-badge {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  max-width: 100%;
+  padding: 2rpx 10rpx;
+  font-size: 20rpx;
+  line-height: 1.4;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.55);
+  border-top-right-radius: 10rpx;
+  white-space: nowrap;
+  overflow: hidden;
+}

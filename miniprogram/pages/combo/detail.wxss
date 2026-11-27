@@ -8,12 +8,42 @@ page {
   box-sizing: border-box;
 }
 
+/*
+ * 封面 + 月销量角标的定位容器。
+ * 外边距从 .cover 挪到这里：容器开了 overflow:hidden，图片自带的 margin 会被裁掉一截。
+ */
+.cover-wrap {
+  position: relative;
+  width: 100%;
+  height: 420rpx;
+  border-radius: 20rpx;
+  overflow: hidden;
+  margin-bottom: 24rpx;
+}
+
 .cover {
   width: 100%;
   height: 420rpx;
   border-radius: 20rpx;
   background: #eceef1;
-  margin-bottom: 24rpx;
+}
+
+.cover-wrap .cover {
+  display: block;
+  height: 100%;
+  border-radius: 0;
+}
+
+.cover-wrap .cover-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 全宽大图上 20rpx 太小，单独放一档 */
+.cover-wrap .sold-badge {
+  font-size: 26rpx;
+  padding: 6rpx 16rpx;
 }
 
 .cover-empty {

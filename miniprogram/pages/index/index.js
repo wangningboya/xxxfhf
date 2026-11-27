@@ -1,7 +1,7 @@
 const app = getApp();
 const { request } = require('../../utils/request');
 const privacy = require('../../utils/privacy');
-const { yuan, dateStr, addDays, dayLabel, assetUrl } = require('../../utils/format');
+const { yuan, dateStr, addDays, dayLabel, assetUrl, soldBadge } = require('../../utils/format');
 const cartUtil = require('../../utils/cart');
 const share = require('../../utils/share');
 const dict = require('../../utils/dict');
@@ -266,6 +266,8 @@ Page({
             stockPercent: unlimited ? 0 : (limit > 0 ? Math.min(100, Math.floor((sold / limit) * 100)) : 100),
             unlimited,
             soldOut: !unlimited && sold >= limit,
+            // 本月已售（按供餐日自然月、已接单及之后），0 份时为空串即不渲染角标
+            monthSoldText: soldBadge(item.monthSoldQty),
           };
         });
         this.setData({ menu, menuItems });
@@ -409,6 +411,7 @@ Page({
           priceText: yuan(item.price),
           dishesText: (item.dishes || []).map((d) => d.name + '×' + d.qty).join('、'),
           tomorrowText: item.tomorrowSupplied ? '明日供应' : '暂不供应',
+          monthSoldText: soldBadge(item.monthSoldQty),
         }));
         this.setData({ allItems });
       })
