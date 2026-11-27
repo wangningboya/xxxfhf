@@ -9,7 +9,8 @@ import java.util.regex.Pattern;
  * 昵称改由用户在小程序「昵称填写能力」里点选微信昵称或手动输入，属于**用户自由输入的文本**，
  * 所以这里统一做三件事：去首尾空白、压内部空白、限长度。
  *
- * 不做敏感词过滤：这是熟人封闭群，商家审核时人工把关，机器过滤只会误伤正常昵称。
+ * 敏感词**不在这里做**：统一走微信 msg_sec_check 2.0（{@link ContentSecurityService}），
+ * 判定口径见技术文档 4.18。本类只管清洗与长度，别在这里另造一套词库。
  */
 public final class NickNameValidator {
 

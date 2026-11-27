@@ -690,9 +690,12 @@ async function onBatchApprove() {
       failed.push(user.nickName || user.userId);
     }
   }
-  ElMessage.success('已通过 ' + ok + ' 位');
+  // 一条都没成功时不能再弹绿色「已通过 0 位」：失败明细在下面的弹窗里，别让成功提示盖在前面
+  if (ok > 0) {
+    ElMessage.success('已通过 ' + ok + ' 位');
+  }
   if (failed.length) {
-    ElMessageBox.alert('以下用户未通过：' + failed.join('、'), '部分失败', { type: 'warning' })
+    ElMessageBox.alert('以下用户未通过：' + failed.join('、'), ok > 0 ? '部分失败' : '全部失败', { type: 'warning' })
       // 同生成邀请码的结果提示：点 × 关闭会 reject，需接住避免全局兜底误报
       .catch(() => {});
   }

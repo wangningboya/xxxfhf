@@ -168,7 +168,8 @@ function prettyJson(raw, fallback) {
 }
 
 function onSave() {
-  // 自取时段按行拆，空行丢掉；不合法的时间格式由服务端最终把关
+  // 自取时段按行拆，空行丢掉。服务端只校验它是不是 JSON 字符串数组，不校验每行内容格式，
+  // 所以写错了不会报错、只会让用户选不到这个时段 —— 按 placeholder 的写法填最稳
   const slots = slotsText.value
     .split('\n')
     .map((line) => line.trim())

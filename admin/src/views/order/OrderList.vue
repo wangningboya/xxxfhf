@@ -783,8 +783,14 @@ function onBatchAccept() {
     .post('/admin/order/accept', { orderIds })
     .then((result) => {
       const accepted = (result.accepted || []).length;
-      const skipped = (result.skipped || []).length;
-      ElMessage.success('已接单 ' + accepted + ' 单' + (skipped ? '，跳过 ' + skipped + ' 单' : ''));
+      const skipped = result.skipped || [];
+      // 一单都没接成时不能弹「已接单 0 单」：改成把跳过原因列出来，别让绿色提示造成「已经接完了」的错觉
+      if (accepted > 0) {
+        ElMessage.success('已接单 ' + accepted + ' 单' + (skipped.length ? '，跳过 ' + skipped.length + ' 单' : ''));
+      } else if (skipped.length) {
+        ElMessageBox.alert(skipped.join('\n'), '这些单没处理', { type: 'warning' })
+          .catch(() => {});
+      }
       if (result.warnings && result.warnings.length) {
         ElMessageBox.alert(result.warnings.join('\n'), '需要注意', { type: 'warning' })
           // 同上：点 × 关闭会 reject，需接住避免全局兜底误报
@@ -907,7 +913,10 @@ function submitBatchReject() {
     .then((result) => {
       const done = (result.rejected || []).length;
       const skipped = result.skipped || [];
-      ElMessage.success('已拒单 ' + done + ' 单' + (skipped.length ? '，跳过 ' + skipped.length + ' 单' : ''));
+      // 同上：全都跳过时不弹「已拒单 0 单」，跳过原因由下面的弹窗负责说明
+      if (done > 0) {
+        ElMessage.success('已拒单 ' + done + ' 单' + (skipped.length ? '，跳过 ' + skipped.length + ' 单' : ''));
+      }
       if (skipped.length) {
         ElMessageBox.alert(skipped.join('\n'), '这些单没处理', { type: 'warning' })
           .catch(() => {});
