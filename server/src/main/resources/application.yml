@@ -82,8 +82,12 @@ app:
     limit: ${APP_RATE_LIMIT_LIMIT:60}
     # 窗口长度（秒）。不能按秒：小程序 onShow 会在同一秒并发发 3 个请求，按秒必误伤。
     window-seconds: ${APP_RATE_LIMIT_WINDOW_SECONDS:60}
-    # 免登录入口（登录 / 首次登记 / 后台登录）按 IP 的额度：不带身份就能打，且会写库、消耗微信接口配额。
+    # 免登录的登录入口（小程序登录 / 后台登录）按 IP 的额度：不带身份就能打，且会写库、消耗微信接口配额。
     login-limit: ${APP_RATE_LIMIT_LOGIN_LIMIT:10}
+    # 首次登记入口 /auth/join 的独立额度（次/窗口），按 IP。
+    # 与登录分开：一次进入要打 1 次 login + 1 次 join，共用一个桶等于额度对半砍，
+    # 店里同一 WiFi 下 10 个顾客同时进来（20 次请求）会被 429 挡在门外。30 = 15 个人的余量。
+    join-limit: ${APP_RATE_LIMIT_JOIN_LIMIT:30}
   schedule:
     # 每 5 分钟；要更精确改 0 * * * * *
     prepay-release-cron: "${APP_PREPAY_RELEASE_CRON:0 */5 * * * *}"

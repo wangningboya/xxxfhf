@@ -91,21 +91,15 @@ public class GroupAccessService {
     /**
      * 用群卡片带回来的加密数据绑定 openGId。
      *
-     * @param userId        当前登录用户
-     * @param encryptedData wx.getShareInfo / wx.getGroupEnterInfo 返回的密文
-     * @param iv            同上返回的向量
-     */
-    @Transactional
-    public AccessState bindByShare(Long userId, String encryptedData, String iv) {
-        return bindByShare(requireUser(userId), encryptedData, iv);
-    }
-
-    /**
-     * 同 {@link #bindByShare(Long, String, String)}，直接作用于一个用户行。
-     *
-     * <p>给 {@link AuthService#join} 用：首次进入时用户行刚在同一个事务里插入，还没有提交，
+     * <p>唯一调用点是 {@link AuthService#join}：首次进入时用户行刚在同一个事务里插入，还没有提交，
      * 只能把实体传进来而不是再按 id 查一次。建号与绑定必须同生共死——
      * 群卡片不是本店的群时，刚插入的行要跟着回滚，否则又回到「打开过小程序就多一条待审核记录」。
+     *
+     * <p>已登记的用户不需要这条路径：有账号就意味着已准入（见类注释），所以没有「补绑群」的入口。
+     *
+     * @param user          当前用户行
+     * @param encryptedData wx.getShareInfo / wx.getGroupEnterInfo 返回的密文
+     * @param iv            同上返回的向量
      */
     @Transactional
     public AccessState bindByShare(User user, String encryptedData, String iv) {
@@ -156,18 +150,13 @@ public class GroupAccessService {
      * <p>邀请码是商家亲手发出去的：发码就是对这个人点头，所以核销成功即视为审核通过，
      * 不再让人停在待审核里等第二次确认。被驳回的人用新码进来同样直接通过。
      * 被禁用的用户不放行——禁用是商家主动切断，不能被一张码绕过。
-     */
-    @Transactional
-    public AccessState bindByInvite(Long userId, String rawCode) {
-        return bindByInvite(requireUser(userId), rawCode);
-    }
-
-    /**
-     * 同 {@link #bindByInvite(Long, String)}，直接作用于一个用户行。
      *
-     * <p>给 {@link AuthService#join} 用：邀请码核销要写使用明细，必须先有 userId，
-     * 所以首次进入的顺序是「先插入 pending 行拿 id → 再核销 → 核销失败整个事务回滚」。
-     * 反过来的话，一张无效的码就会在库里留下一条谁也用不上的待审核记录。
+     * <p>唯一调用点是 {@link AuthService#join}。这里必须作用于一个用户行而不是 userId：
+     * 首次进入的顺序是「先插入 pending 行拿 id → 再核销 → 核销失败整个事务回滚」，反过来的话
+     * 一张无效的码就会在库里留下一条谁也用不上的待审核记录。
+     *
+     * <p>本方法是全站唯一「凭一次猜测就写库」的地方，因此限次判定（{@link InviteAttemptGuard}）
+     * 挂在这里而不是各个 Controller，避免将来加入口时漏掉。
      */
     @Transactional
     public AccessState bindByInvite(User user, String rawCode) {
@@ -195,8 +184,8 @@ public class GroupAccessService {
         }
         inviteAttemptGuard.onSuccess(attemptKey);
 
-        // 核销成功即通过审核。写在这一层而不是各个调用点，是为了让首次建号（/auth/join）
-        // 和已登记用户（/auth/invite）共用同一条规则，且都落在调用方的事务里。
+        // 核销成功即通过审核。写在这一层而不是调用点，是为了让规则只有一处，
+        // 且落在调用方（AuthService.join）的事务里——建号失败时审核状态一起回滚。
         String from = user.getAuditStatus();
         user.setAuditStatus(AuditStatus.APPROVED);
         user.setApprovedAt(LocalDateTime.now());

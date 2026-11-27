@@ -65,23 +65,13 @@ public class AuthController {
     /* ---------------- 准入 ---------------- */
 
     /**
-     * 群卡片进入：提交 shareTicket 派生的加密数据，服务端解出 openGId 并校验白名单。
+     * 首次进入的请求体见 {@link JoinRequest}：补交邀请码与群卡片合并在 {@code /auth/join} 一处，
+     * 不再单设 {@code /auth/invite}、{@code /auth/bind-group}。
      *
-     * encryptedData / iv 来自 wx.getShareInfo 或 wx.getGroupEnterInfo，前端拿不到 openGId 本身。
+     * <p>为什么删：这两个接口的前置状态是「已登记但未准入」，而建号只能发生在 {@code join} 里，
+     * 且建号与准入同事务，所以这个状态在库里不存在（详见 技术文档 4.9.1）。
+     * 留着会让「准入到底有几个入口、各自怎么限流」每次都要重新论证一遍。
      */
-    @PostMapping("/bind-group")
-    public ApiResponse<GroupAccessService.AccessState> bindGroup(
-            @Valid @RequestBody WxEncryptedRequest request) {
-        return ApiResponse.ok(groupAccessService.bindByShare(
-                UserContext.userId(), request.encryptedData(), request.iv()));
-    }
-
-    /** 输入邀请码取得准入资格（一次性、有有效期）。 */
-    @PostMapping("/invite")
-    public ApiResponse<GroupAccessService.AccessState> bindByInvite(
-            @Valid @RequestBody InviteRequest request) {
-        return ApiResponse.ok(groupAccessService.bindByInvite(UserContext.userId(), request.code()));
-    }
 
     /* ---------------- 昵称 ---------------- */
 
@@ -173,16 +163,6 @@ public class AuthController {
             @NotBlank(message = "请输入账号") String username,
             @NotBlank(message = "请输入密码")
             @Size(max = 64, message = "密码过长") String password) {
-    }
-
-    public record WxEncryptedRequest(
-            @NotBlank(message = "缺少加密数据") @Size(max = 4096, message = "加密数据过长") String encryptedData,
-            @NotBlank(message = "缺少加密向量") @Size(max = 128, message = "加密向量过长") String iv) {
-    }
-
-    public record InviteRequest(
-            @NotBlank(message = "请输入邀请码")
-            @Size(max = 32, message = "邀请码过长") String code) {
     }
 
     /**

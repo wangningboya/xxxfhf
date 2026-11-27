@@ -1,5 +1,5 @@
 const app = getApp();
-const { request, toastError } = require('../../utils/request');
+const { toastError } = require('../../utils/request');
 
 Page({
   data: {
@@ -47,17 +47,11 @@ Page({
     }
     this.setData({ submitting: true });
 
-    const me = app.globalData.me;
-    // 已登记只是没准入：核销一张邀请码即可；还没登记：这张码同时把账号建出来
-    const task =
-      me && me.registered
-        ? request({ url: '/auth/invite', method: 'POST', data: { code } }).then((state) => {
-            app.globalData.me = Object.assign({}, app.globalData.me, state);
-            return state;
-          })
-        : app.joinByInvite(code);
-
-    task
+    // 准入只有一个入口：/auth/join（建号与核销在同一事务里完成）。
+    // 已登记的行会被服务端按 openid 直接复用，所以这里不再区分「有没有账号」——
+    // 原来那条「已登记走 /auth/invite」的分支对应的状态在库里不存在，接口已删。
+    app
+      .joinByInvite(code)
       .then(() => {
         wx.showToast({ title: '验证成功', icon: 'success' });
         wx.reLaunch({ url: '/pages/index/index' });

@@ -19,7 +19,7 @@ class AppPropertiesRateLimitTest {
     private static final String JWT_SECRET = "unit-test-secret-0123456789abcdef0123456789";
 
     @Test
-    @DisplayName("默认配置合法：60 次/60 秒，免登录 10 次，默认观察模式")
+    @DisplayName("默认配置合法：60 次/60 秒，登录 10 次，首次登记 30 次，默认观察模式")
     void defaultsAreValid() {
         AppProperties props = valid();
 
@@ -27,6 +27,7 @@ class AppPropertiesRateLimitTest {
         assertThat(props.getRateLimit().isDryRun()).isTrue();
         assertThat(props.getRateLimit().getLimit()).isEqualTo(60);
         assertThat(props.getRateLimit().getLoginLimit()).isEqualTo(10);
+        assertThat(props.getRateLimit().getJoinLimit()).isEqualTo(30);
         assertThat(props.getRateLimit().getWindowSeconds()).isEqualTo(60);
     }
 
@@ -53,7 +54,7 @@ class AppPropertiesRateLimitTest {
     }
 
     @Test
-    @DisplayName("免登录额度大于登录额度：启动失败，否则三个写库入口等于没限")
+    @DisplayName("免登录额度大于登录额度：启动失败，否则这两个写库入口等于没限")
     void rejectsLoginLimitGreaterThanLimit() {
         AppProperties props = valid();
         props.getRateLimit().setLimit(10);
@@ -62,6 +63,30 @@ class AppPropertiesRateLimitTest {
         assertThatThrownBy(props::validate)
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("APP_RATE_LIMIT_LOGIN_LIMIT 不能大于");
+    }
+
+    @Test
+    @DisplayName("首次登记额度 < 1：启动失败（0 会让所有新用户都进不来）")
+    void rejectsNonPositiveJoinLimit() {
+        AppProperties props = valid();
+        props.getRateLimit().setJoinLimit(0);
+
+        assertThatThrownBy(props::validate)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("APP_RATE_LIMIT_JOIN_LIMIT 必须 ≥ 1");
+    }
+
+    @Test
+    @DisplayName("首次登记额度大于全站额度：启动失败（免登录入口不能比登录用户还宽松）")
+    void rejectsJoinLimitGreaterThanLimit() {
+        AppProperties props = valid();
+        props.getRateLimit().setLimit(10);
+        props.getRateLimit().setLoginLimit(10);
+        props.getRateLimit().setJoinLimit(60);
+
+        assertThatThrownBy(props::validate)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("APP_RATE_LIMIT_JOIN_LIMIT 不能大于");
     }
 
     @Test

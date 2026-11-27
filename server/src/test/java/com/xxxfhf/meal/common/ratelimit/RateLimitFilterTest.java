@@ -9,6 +9,13 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import tools.jackson.databind.ObjectMapper;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -72,7 +79,7 @@ class RateLimitFilterTest {
     // ---------------------------------------------------------------- 配额归属
 
     @Test
-    @DisplayName("免登录入口走 L2 严格档：第 3 次就打满（阈值 2）")
+    @DisplayName("登录入口走 L2 严格档：第 3 次就打满（阈值 2）")
     void loginEntryUsesStricterQuota() throws Exception {
         RateLimitFilter filter = newFilter(props(100, 2, false), jwt());
 
@@ -85,12 +92,63 @@ class RateLimitFilterTest {
     }
 
     @Test
-    @DisplayName("/auth/join 与 /auth/admin/login 同样走 L2")
-    void allThreeLoginEntriesAreStrict() throws Exception {
-        for (String path : new String[]{"/auth/join", "/auth/admin/login"}) {
+    @DisplayName("/auth/admin/login 与小程序登录同档（登录档只剩这两条路径）")
+    void adminLoginIsStrictToo() throws Exception {
+        for (String path : new String[]{"/auth/login", "/auth/admin/login"}) {
             RateLimitFilter filter = newFilter(props(100, 1, false), jwt());
             assertThat(call(filter, request("POST", path)).reachedChain()).as(path).isTrue();
             assertThat(call(filter, request("POST", path)).reachedChain()).as(path).isFalse();
+        }
+    }
+
+    @Test
+    @DisplayName("/auth/join 走独立档：额度按其自身阈值计，不打满登录档")
+    void joinEntryUsesOwnQuota() throws Exception {
+        RateLimitFilter filter = newFilter(props(100, 1, 3, false), jwt());
+
+        for (int i = 0; i < 3; i++) {
+            assertThat(call(filter, request("POST", "/auth/join")).reachedChain()).as("第 %s 次", i + 1).isTrue();
+        }
+        Result fourth = call(filter, request("POST", "/auth/join"));
+        assertThat(fourth.reachedChain()).isFalse();
+        assertThat(fourth.response().getStatus()).isEqualTo(429);
+
+        // 若两档共用计数，上面 3 次 join 早就把 loginLimit=1 打满了
+        assertThat(call(filter, request("POST", "/auth/login")).reachedChain()).isTrue();
+    }
+
+    @Test
+    @DisplayName("爆破：同一 IP 并发 100 次 /auth/join，进入业务的严格等于 join 额度")
+    void concurrentBruteForceOnJoinIsCapped() throws Exception {
+        int quota = 30;
+        RateLimitFilter filter = newFilter(props(100, 10, quota, false), jwt());
+
+        // 全部线程卡在同一个起跑线上，模拟「一个脚本瞬间打出 100 个请求」
+        int threads = 100;
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        List<Future<Boolean>> futures = new ArrayList<>(threads);
+        try {
+            for (int i = 0; i < threads; i++) {
+                futures.add(pool.submit(() -> {
+                    start.await();
+                    return call(filter, request("POST", "/auth/join")).reachedChain();
+                }));
+            }
+            start.countDown();
+
+            int passed = 0;
+            for (Future<Boolean> future : futures) {
+                if (future.get(10, TimeUnit.SECONDS)) {
+                    passed++;
+                }
+            }
+
+            // 关键断言：不是 100，也不是「差不多」——SlidingWindowLimiter 在 compute 里判定，
+            // 这个数是确定的。它正是「一个人快速并发试」被压回单倍的那道闸。
+            assertThat(passed).isEqualTo(quota);
+        } finally {
+            pool.shutdownNow();
         }
     }
 
@@ -213,10 +271,16 @@ class RateLimitFilterTest {
     }
 
     private static AppProperties props(int limit, int loginLimit, boolean dryRun) {
+        // 不关心 join 档的用例让它与全站额度一致；要断言 join 行为的用例走四参版本
+        return props(limit, loginLimit, limit, dryRun);
+    }
+
+    private static AppProperties props(int limit, int loginLimit, int joinLimit, boolean dryRun) {
         AppProperties props = new AppProperties();
         props.getJwt().setSecret(JWT_SECRET);
         props.getRateLimit().setLimit(limit);
         props.getRateLimit().setLoginLimit(loginLimit);
+        props.getRateLimit().setJoinLimit(joinLimit);
         props.getRateLimit().setWindowSeconds(60);
         props.getRateLimit().setDryRun(dryRun);
         return props;

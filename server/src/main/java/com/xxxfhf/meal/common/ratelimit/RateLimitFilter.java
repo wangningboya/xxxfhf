@@ -37,13 +37,16 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *
  * <p>配额归属：
  * <ul>
- *   <li>三个免登录入口按 IP —— 它们绕过了身份，脚本换 IP 就能无限刷，而 {@code /auth/join} 会写库；</li>
+ *   <li>免登录入口按 IP —— 它们绕过了身份，脚本换 IP 就能无限刷，而 {@code /auth/join} 会写库；</li>
  *   <li>其余接口按 userId —— 群成员常连同一个 WiFi，出口 IP 相同，按 IP 会互相踩配额；</li>
  *   <li>取不到 userId（没令牌）也按 IP —— 这类请求马上会被拦截器 401，但仍占一份配额，
  *       避免「不带令牌」变成绕过限流的口子。</li>
  * </ul>
  *
- * <p>为什么两者不叠加：{@code /auth/login} 命中 L2 后直接返回，不再走 L1，否则一次登录要扣两次配额。
+ * <p>为什么两者不叠加：命中严格档后直接返回，不再走全站档，否则一次登录要扣两次配额。
+ *
+ * <p>{@code /auth/join} 单独一档而不是并进登录档：一次进入要打 1 次 login + 1 次 join，
+ * 共用 10 次/分钟的桶等于把额度对半砍，店里同一 WiFi 下 10 个顾客同时进来就会有人被 429。
  */
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE + 10)
@@ -60,21 +63,56 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private static final String FAVICON_PATH = "/favicon.ico";
 
     /**
-     * 免登录入口（L2 严格档）。
+     * 免登录的登录入口（L2 严格档）。
      *
-     * <p>必须与 WebMvcConfig.WHITE_LIST 里的三条一致：这是唯一「不带身份就能打、而且会写库或
+     * <p>必须与 WebMvcConfig.WHITE_LIST 里的登录入口一致：这是「不带身份就能打、而且会写库或
      * 消耗微信接口配额」的入口。
      */
-    private static final Set<String> LOGIN_PATHS = Set.of("/auth/login", "/auth/join", "/auth/admin/login");
+    private static final Set<String> LOGIN_PATHS = Set.of("/auth/login", "/auth/admin/login");
+
+    /**
+     * 首次登记入口（L2 独立档）。
+     *
+     * <p>它同样是免登录的，但一次进入要打 1 次 login + 1 次 join，和登录共用一个桶等于把额度对半砍。
+     * 这是全站唯一会「凭一个猜测就写库」的入口，额度不能松，但要单独计。
+     */
+    private static final String JOIN_PATH = "/auth/join";
 
     /** 日志去重表的兜底上限，正常流量远达不到 */
     private static final int MAX_LOG_MARKS = 5_000;
+
+    /**
+     * 配额档位：决定用哪个桶、按什么 key 计数、日志里怎么称呼。
+     *
+     * <p>用枚举而不是 {@code boolean loginEntry}：档位从两档变三档后，布尔值会让
+     * {@code limitOf} 与日志文案两处都退化成「是/不是登录入口」，加档必然漏改。
+     */
+    private enum Quota {
+        /** 免登录的登录入口，按 IP */
+        LOGIN("免登录登录入口"),
+        /** 首次登记入口，按 IP */
+        JOIN("首次登记入口"),
+        /** 其余接口，优先按 userId，取不到身份退化为 IP */
+        USER("登录用户");
+
+        private final String label;
+
+        Quota(String label) {
+            this.label = label;
+        }
+
+        /** 免登录入口没有身份可用，只能按 IP */
+        boolean byIp() {
+            return this != USER;
+        }
+    }
 
     private final AppProperties.RateLimit config;
     private final JwtService jwtService;
     private final ObjectMapper objectMapper;
     private final SlidingWindowLimiter globalLimiter;
     private final SlidingWindowLimiter loginLimiter;
+    private final SlidingWindowLimiter joinLimiter;
 
     /** key -> 上次写日志的分钟号，用来实现「每人每分钟最多一条」，避免被刷时日志把磁盘写满 */
     private final Map<String, Long> lastLogMinute = new ConcurrentHashMap<>();
@@ -85,10 +123,12 @@ public class RateLimitFilter extends OncePerRequestFilter {
         this.objectMapper = objectMapper;
         this.globalLimiter = new SlidingWindowLimiter(config.getLimit(), config.getWindowSeconds());
         this.loginLimiter = new SlidingWindowLimiter(config.getLoginLimit(), config.getWindowSeconds());
-        log.info("应用层限流已装配：{} 模式，全站 {}/{}s，免登录入口 {}/{}s",
+        this.joinLimiter = new SlidingWindowLimiter(config.getJoinLimit(), config.getWindowSeconds());
+        log.info("应用层限流已装配：{} 模式，全站 {}/{}s，免登录登录入口 {}/{}s，首次登记入口 {}/{}s",
                 config.isDryRun() ? "观察（只记日志不拦截）" : "强制拦截",
                 config.getLimit(), config.getWindowSeconds(),
-                config.getLoginLimit(), config.getWindowSeconds());
+                config.getLoginLimit(), config.getWindowSeconds(),
+                config.getJoinLimit(), config.getWindowSeconds());
     }
 
     /**
@@ -116,6 +156,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     void sweepIdleKeys() {
         globalLimiter.sweep();
         loginLimiter.sweep();
+        joinLimiter.sweep();
     }
 
     @Override
@@ -123,10 +164,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
 
         String path = request.getRequestURI();
-        boolean loginEntry = LOGIN_PATHS.contains(path);
+        Quota quota = quotaOf(path);
 
-        SlidingWindowLimiter limiter = loginEntry ? loginLimiter : globalLimiter;
-        String key = loginEntry ? ipKey(request) : quotaKey(request);
+        SlidingWindowLimiter limiter = switch (quota) {
+            case LOGIN -> loginLimiter;
+            case JOIN -> joinLimiter;
+            case USER -> globalLimiter;
+        };
+        String key = quota.byIp() ? ipKey(request) : quotaKey(request);
 
         SlidingWindowLimiter.Decision decision = limiter.acquire(key);
 
@@ -136,12 +181,20 @@ public class RateLimitFilter extends OncePerRequestFilter {
         }
 
         // 超限：先记一笔，再由 dry-run 决定是放行还是返回 429
-        logIfDue(key, request, decision, loginEntry);
+        logIfDue(key, request, decision, quota);
         if (config.isDryRun()) {
             chain.doFilter(request, response);
             return;
         }
         writeTooMany(response);
+    }
+
+    /** 路径 → 配额档位。精确匹配：路径里没有前缀匹配的余地，也不该给 {@code /auth/join/xxx} 开口子。 */
+    private static Quota quotaOf(String path) {
+        if (JOIN_PATH.equals(path)) {
+            return Quota.JOIN;
+        }
+        return LOGIN_PATHS.contains(path) ? Quota.LOGIN : Quota.USER;
     }
 
     /**
@@ -181,12 +234,16 @@ public class RateLimitFilter extends OncePerRequestFilter {
      *
      * <p>观察期日志是唯一的调参依据，但被脚本刷时逐条打会把磁盘写满，所以按 key 每分钟汇总一次：
      * 记下本分钟第一次超限的接口和当时的窗口计数。
+     *
+     * <p>去重的 key 带上档位前缀：同一 IP 在登录档和登记档是两个桶，若共用去重 key，
+     * 一条登录超限日志会把同分钟内的登记超限日志吞掉——那恰好是排查「新用户进不来」最需要的证据。
      */
     private void logIfDue(String key, HttpServletRequest request, SlidingWindowLimiter.Decision decision,
-                          boolean loginEntry) {
+                          Quota quota) {
+        String logKey = quota.name() + '|' + key;
         long minute = System.currentTimeMillis() / 60_000L;
         AtomicBoolean shouldLog = new AtomicBoolean(false);
-        lastLogMinute.compute(key, (k, last) -> {
+        lastLogMinute.compute(logKey, (k, last) -> {
             if (last == null || last != minute) {
                 shouldLog.set(true);
                 return minute;
@@ -199,12 +256,12 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
         if (config.isDryRun()) {
             log.warn("限流观察：本应拦截 key={} 窗口内 {} 次（阈值 {}/{}s，{}）{} {}",
-                    key, decision.count(), limitOf(loginEntry), config.getWindowSeconds(),
-                    loginEntry ? "免登录入口" : "登录用户", request.getMethod(), request.getRequestURI());
+                    key, decision.count(), limitOf(quota), config.getWindowSeconds(),
+                    quota.label, request.getMethod(), request.getRequestURI());
         } else {
             log.warn("限流拦截 key={} 窗口内 {} 次（阈值 {}/{}s，{}）{} {} 需等待 {}s",
-                    key, decision.count(), limitOf(loginEntry), config.getWindowSeconds(),
-                    loginEntry ? "免登录入口" : "登录用户", request.getMethod(), request.getRequestURI(),
+                    key, decision.count(), limitOf(quota), config.getWindowSeconds(),
+                    quota.label, request.getMethod(), request.getRequestURI(),
                     decision.retryAfterSeconds());
         }
 
@@ -214,8 +271,12 @@ public class RateLimitFilter extends OncePerRequestFilter {
         }
     }
 
-    private int limitOf(boolean loginEntry) {
-        return loginEntry ? config.getLoginLimit() : config.getLimit();
+    private int limitOf(Quota quota) {
+        return switch (quota) {
+            case LOGIN -> config.getLoginLimit();
+            case JOIN -> config.getJoinLimit();
+            case USER -> config.getLimit();
+        };
     }
 
     /**

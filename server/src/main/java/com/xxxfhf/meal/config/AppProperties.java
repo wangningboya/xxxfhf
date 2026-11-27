@@ -72,6 +72,12 @@ public class AppProperties {
             // 免登录入口比登录用户还宽松等于没限：这两个入口会写库、会消耗微信接口配额
             throw new IllegalStateException("APP_RATE_LIMIT_LOGIN_LIMIT 不能大于 APP_RATE_LIMIT_LIMIT");
         }
+        if (rateLimit.getJoinLimit() < 1) {
+            throw new IllegalStateException("APP_RATE_LIMIT_JOIN_LIMIT 必须 ≥ 1（0 会让所有新用户都进不来）");
+        }
+        if (rateLimit.getJoinLimit() > rateLimit.getLimit()) {
+            throw new IllegalStateException("APP_RATE_LIMIT_JOIN_LIMIT 不能大于 APP_RATE_LIMIT_LIMIT");
+        }
     }
 
     public Jwt getJwt() {
@@ -328,8 +334,17 @@ public class AppProperties {
          */
         private int windowSeconds = 60;
 
-        /** 免登录入口（/auth/login、/auth/join、/auth/admin/login）按 IP 的额度（次/窗口）。 */
+        /** 免登录的登录入口（/auth/login、/auth/admin/login）按 IP 的额度（次/窗口）。 */
         private int loginLimit = 10;
+
+        /**
+         * 首次登记入口 {@code /auth/join} 按 IP 的独立额度（次/窗口）。
+         *
+         * <p>为什么不和 {@link #loginLimit} 共用一个桶：一次进入要打 1 次 {@code login} + 1 次
+         * {@code join}，共用一个桶等于把额度对半砍。店里同一 WiFi 下 10 个顾客同时进来就是 20 次请求，
+         * 后 10 个会被 429 挡在门外——而开业当天恰恰全是这种情况。
+         */
+        private int joinLimit = 30;
 
         public boolean isDryRun() {
             return dryRun;
@@ -361,6 +376,14 @@ public class AppProperties {
 
         public void setLoginLimit(int loginLimit) {
             this.loginLimit = loginLimit;
+        }
+
+        public int getJoinLimit() {
+            return joinLimit;
+        }
+
+        public void setJoinLimit(int joinLimit) {
+            this.joinLimit = joinLimit;
         }
     }
 

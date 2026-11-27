@@ -346,7 +346,7 @@ App({
   },
 
   /**
-   * 进入首页的统一前置：登录 → 刷新状态 → 尝试群绑定。
+   * 进入首页的统一前置：登录 → 刷新状态 → 未登记时试群卡片建号。
    *
    * 令牌 7 天到期是必然发生的事，所以这里遇到 401 会清掉本地令牌重新 wx.login 一次，
    * 而不是把「登录已过期」甩给用户让他自己猜怎么办。
@@ -354,38 +354,31 @@ App({
    * 未登记的号没有令牌，刷新状态只会 401，所以直接去试群卡片登记：
    * 从群卡片进来的人不必手输邀请码，与商家的群白名单对上就自动建号。
    *
+   * 准入只有一个入口（/auth/join）：已登记就必然已准入，没有「补绑群」这一步可做。
+   *
    * @param {object} options 页面 onLoad 的 options（含 shareTicket）
    * @return {Promise<object>} 最新的用户状态
    */
   bootstrap(options) {
-    // 参数日志必须在入口、与身份无关：老号会直接跳过群绑定，不在这里打就没有任何 [group] 输出
+    // 参数日志必须在入口、与身份无关：不在这里打就没有任何 [group] 输出
     logEnter(options);
-    return this.ensureLogin()
-      .then((me) => {
-        if (me && !me.registered) {
-          // 明确知道没登记（没有令牌）：试试这次是不是从群卡片进来的
-          console.log('[group] 身份判定：未登记 → 走群卡片建号');
-          return this.tryJoinByGroup(options, me);
+    return this.ensureLogin().then((me) => {
+      if (me && !me.registered) {
+        // 明确知道没登记（没有令牌）：试试这次是不是从群卡片进来的
+        console.log('[group] 身份判定：未登记 → 走群卡片建号');
+        return this.tryJoinByGroup(options, me);
+      }
+      // me 为空说明有令牌但内存里还没状态，照旧拉一次
+      return this.refreshMe().catch((err) => {
+        if (err && err.code === 40101) {
+          setToken('');
+          return this.ensureLogin().then((fresh) =>
+            fresh && fresh.registered ? this.refreshMe() : this.tryJoinByGroup(options, fresh)
+          );
         }
-        // me 为空说明有令牌但内存里还没状态，照旧拉一次
-        return this.refreshMe().catch((err) => {
-          if (err && err.code === 40101) {
-            setToken('');
-            return this.ensureLogin().then((fresh) =>
-              fresh && fresh.registered ? this.refreshMe() : this.tryJoinByGroup(options, fresh)
-            );
-          }
-          throw err;
-        });
-      })
-      .then((me) => {
-        if (me && me.accessGranted) {
-          // 老号走这里，tryBindGroup 不会执行，所以那里面解释「取密文失败」的日志也打不出来
-          console.log('[group] 身份判定：已登记且已准入（老号）→ 跳过群绑定');
-          return me;
-        }
-        return this.tryBindGroup(options, me);
+        throw err;
       });
+    });
   },
 
   /**
@@ -418,40 +411,8 @@ App({
     });
   },
 
-  /**
-   * 用群卡片带的加密数据绑定 openGId。
-   *
-   * 失败不弹错：这里是「自动尝试」，拿不到群标识的用户会落到引导页走邀请码，
-   * 在这条路径上弹红字只会让用户困惑。
-   */
-  tryBindGroup(options, currentMe) {
-    if (!currentMe || !currentMe.registered) {
-      // 未登记的号没有令牌，调不到 /auth/bind-group，该走的是 join
-      return Promise.resolve(currentMe);
-    }
-    console.log('[group] 已登记但未准入，尝试用群卡片绑定群');
-    return getGroupEncrypted(options).then((encrypted) => {
-      if (!encrypted) {
-        console.log('[group] 这次没有群密文，跳过绑定');
-        return currentMe;
-      }
-      return request({
-        url: '/auth/bind-group',
-        method: 'POST',
-        data: { encryptedData: encrypted.encryptedData, iv: encrypted.iv },
-      })
-        .then((state) => {
-          console.log('[group] 群绑定成功');
-          const merged = Object.assign({}, currentMe, state);
-          this.globalData.me = merged;
-          return merged;
-        })
-        .catch((err) => {
-          console.warn('[group] 群绑定被拒', err && err.code, err && err.message);
-          return currentMe;
-        });
-    });
-  },
+  /* 已登记的用户不需要「补绑群」：有账号就意味着已准入，/auth/bind-group 已随
+     /auth/invite 一起删除（两者的前置状态都是「已登记但未准入」，而建号必然带准入）。 */
 
   /** 加载店铺配置，只在首次成功时缓存。 */
   loadConfig() {
