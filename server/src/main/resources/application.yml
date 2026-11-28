@@ -88,6 +88,32 @@ app:
     # 与登录分开：一次进入要打 1 次 login + 1 次 join，共用一个桶等于额度对半砍，
     # 店里同一 WiFi 下 10 个顾客同时进来（20 次请求）会被 429 挡在门外。30 = 15 个人的余量。
     join-limit: ${APP_RATE_LIMIT_JOIN_LIMIT:30}
+  # 联系顾客：把完整号码交给商家拨号的三道限制。属于隐私合规（按需 / 限次 / 留痕），
+  # 走环境变量而不是后台配置页 —— 商家自己放宽等于自证违规。
+  contact-phone:
+    # 同一笔订单 24 小时内最多调取几次
+    max-per-order-24h: ${APP_CONTACT_PHONE_MAX_PER_ORDER_24H:5}
+    # 同一个操作人一天最多调取几次
+    max-per-operator-day: ${APP_CONTACT_PHONE_MAX_PER_OPERATOR_DAY:100}
+    # 订单结束后仍可调取的天数，留出售后与退款沟通窗口；0 = 一结束就不可再调
+    window-days: ${APP_CONTACT_PHONE_WINDOW_DAYS:7}
+  # 邀请码核销防爆破：6 位纯数字码只有 100 万种组合，阈值放宽等于把爆破成本砍半
+  invite:
+    lock:
+      # 连续错几次触发锁定
+      max-failures: ${APP_INVITE_LOCK_MAX_FAILURES:10}
+      # 锁定时长（分钟）
+      minutes: ${APP_INVITE_LOCK_MINUTES:30}
+  # 商家后台登录失败锁定
+  auth:
+    login-lock:
+      # 连续错几次锁定（次数存在 user.login_fail_count，改阈值不动表结构）
+      max-failures: ${APP_AUTH_LOGIN_LOCK_MAX_FAILURES:3}
+      minutes: ${APP_AUTH_LOGIN_LOCK_MINUTES:30}
+  # 站内消息
+  message:
+    # 首页通知横栏最多带几条未读；只影响那一行滚动条，消息中心列表是分页不受影响
+    home-unread-limit: ${APP_MESSAGE_HOME_UNREAD_LIMIT:3}
   schedule:
     # 每 5 分钟；要更精确改 0 * * * * *
     prepay-release-cron: "${APP_PREPAY_RELEASE_CRON:0 */5 * * * *}"

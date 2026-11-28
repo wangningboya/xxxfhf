@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.xxxfhf.meal.audit.domain.AuditActions;
 import com.xxxfhf.meal.audit.service.AuditService;
 import com.xxxfhf.meal.common.BizException;
+import com.xxxfhf.meal.config.ConfigKey;
+import com.xxxfhf.meal.config.ConfigService;
 import com.xxxfhf.meal.dict.domain.DictCodes;
 import com.xxxfhf.meal.dict.service.DictService;
 import com.xxxfhf.meal.goods.domain.Combo;
@@ -57,16 +59,20 @@ public class ComboService {
     private final AuditService auditService;
     /** 商品分类取字典校验（需求 4.22）：分类只影响展示分组，但必须是个启用着的字典项 */
     private final DictService dictService;
+    /** 盒内单菜品份数上限走配置，商家可在后台调（默认 99） */
+    private final ConfigService configService;
 
     public ComboService(ComboMapper comboMapper, DishMapper dishMapper,
                         SpecGroupMapper specGroupMapper, OrderUsageQuery orderUsageQuery,
-                        AuditService auditService, DictService dictService) {
+                        AuditService auditService, DictService dictService,
+                        ConfigService configService) {
         this.comboMapper = comboMapper;
         this.dishMapper = dishMapper;
         this.specGroupMapper = specGroupMapper;
         this.orderUsageQuery = orderUsageQuery;
         this.auditService = auditService;
         this.dictService = dictService;
+        this.configService = configService;
     }
 
     /** 盒饭列表（商家端）：上下架的都要看得到，否则没法重新上架。 */
@@ -210,6 +216,9 @@ public class ComboService {
         Map<Long, Dish> cache = new HashMap<>();
         List<ComboDish> result = new ArrayList<>(raw.size());
         Set<Long> seen = new HashSet<>();
+        // 循环外读一次：这份配置在一次保存里不会变，逐行查库只是白白多几次主键扫描
+        int maxQty = configService.getPositiveInt(
+                ConfigKey.COMBO_DISH_MAX_QTY, ConfigKey.COMBO_DISH_MAX_QTY_DEFAULT);
 
         for (ComboDish item : raw) {
             Long dishId = item == null ? null : item.dishId();
@@ -227,8 +236,9 @@ public class ComboService {
                 throw BizException.param("「" + dish.getName() + "」已停用，不能加入盒饭");
             }
             int qty = item.qtyOrDefault();
-            if (qty > 99) {
-                throw BizException.param("单个菜品份数最多 99 份");
+            // 份数上限商家可调：例汤 2 份是常态，这里防的是误填 200 份
+            if (qty > maxQty) {
+                throw BizException.param("单个菜品份数最多 " + maxQty + " 份");
             }
             result.add(new ComboDish(dish.getId(), dish.getName(), qty));
         }

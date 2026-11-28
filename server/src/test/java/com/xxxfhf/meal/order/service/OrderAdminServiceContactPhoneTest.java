@@ -1,6 +1,8 @@
 package com.xxxfhf.meal.order.service;
 
 import com.xxxfhf.meal.common.BizException;
+import com.xxxfhf.meal.config.AppProperties;
+import com.xxxfhf.meal.config.ConfigService;
 import com.xxxfhf.meal.dict.service.DictService;
 import com.xxxfhf.meal.menu.ServeDateClock;
 import com.xxxfhf.meal.notify.service.NotifyService;
@@ -18,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
@@ -54,6 +57,14 @@ class OrderAdminServiceContactPhoneTest {
     private OrderStatusLogMapper statusLogMapper;
     @Mock
     private DictService dictService;
+    @Mock
+    private ConfigService configService;
+    /**
+     * 用真实对象而不是 mock：默认值就是本类用例期望的 5 次 / 100 次 / 7 天，
+     * 用 mock 反而要逐条 stub 三个 getter。
+     */
+    @Spy
+    private AppProperties appProperties = new AppProperties();
 
     @InjectMocks
     private OrderAdminService service;

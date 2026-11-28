@@ -24,7 +24,8 @@ Page({
     /** { [组下标]: optionId } */
     selected: {},
     qty: 1,
-    maxQty: 99,
+    /** 加号上限：加载前先按 1，避免配置还没到手时能一路加到 99 */
+    maxQty: 1,
     /** 审核已通过：待审核用户只能看，按钮置灰（需求 3.1 / 4.17） */
     approved: true,
   },
@@ -44,8 +45,14 @@ Page({
       this.setData({ loading: false });
       return;
     }
-    request({ url: '/menu?serveDate=' + this.data.serveDate })
-      .then((menu) => {
+    // 配置与菜单并行拉，但必须等配置到手再渲染：加号上限来自「单个盒饭最多份数」，
+    // 冷启动直接进这页（分享卡片、扫码、消息跳转、购物车跳详情）时 globalData 里还是空的，
+    // 只读缓存会按 99 兜底，用户能一路加到 99，提交时才被服务端打回。
+    Promise.all([
+      app.loadConfig(),
+      request({ url: '/menu?serveDate=' + this.data.serveDate }),
+    ])
+      .then(([, menu]) => {
         const item = (menu.items || []).find((it) => it.comboId === this.data.comboId);
         if (item) {
           // cutoff / closed 一起传下去：只传 orderable 的话，页面上说不出「已截单」还是「停业」
@@ -97,8 +104,20 @@ Page({
       return { name: group.name, required: !!group.required, options };
     });
 
-    const maxQty = browse || item.remainQty === null || item.remainQty === undefined
-      ? 99 : Math.max(item.remainQty, 0);
+    // 加号上限 = min(后台配置的「单个盒饭最多份数」, 当日剩余份数) - 车里已有的该盒饭份数。
+    // 配置口径是「单个盒饭合计」：车里已有 4 份，这次最多只能再加 1 份，
+    // 否则两次加购能凑出 2N 份（换主食就是两行，逐行都合规但合计超了）。
+    // 配置请求失败时按 99 兜底：前端只是提前拦，真正的判据在服务端，
+    // 宁可让用户点到提交被拒，也不能让页面连一份都加不了。
+    const configLimit = Number((app.globalData.config || {}).orderMaxQtyPerItem) || 99;
+    const stockLimit = item.remainQty === null || item.remainQty === undefined
+      ? configLimit
+      : Math.max(item.remainQty, 0);
+    const cart = cartUtil.load();
+    // 过期车等于空车：onAdd 里也是这么处理的，两处口径要一致
+    const inCart = cartUtil.isStale(cart) ? 0 : cartUtil.qtyOfCombo(cart, item.comboId);
+    const remain = Math.max(Math.min(configLimit, stockLimit) - inCart, 0);
+    const maxQty = browse ? configLimit : remain;
 
     // 库存展示口径与点餐页一致：限量「已订 M / 共 N」+ 进度条，不限量只报已订份数
     const limit = item.limitQty === null || item.limitQty === undefined ? null : Number(item.limitQty);
@@ -124,6 +143,8 @@ Page({
       stockPercent: unlimited ? 0 : (limit > 0 ? Math.min(100, Math.floor((sold / limit) * 100)) : 100),
       unlimited,
       soldOut: !unlimited && sold >= limit,
+      /** 车里这个盒饭已经攒到上限，本次一份都加不了（与售罄区分开：这不是没货） */
+      cartFull: !browse && remain <= 0,
       monthSoldText: soldBadge(item.monthSoldQty),
     });
     wx.setNavigationBarTitle({ title: item.name || '详情' });
@@ -178,7 +199,10 @@ Page({
 
   onPlus() {
     if (this.data.qty >= this.data.maxQty) {
-      wx.showToast({ title: '最多 ' + this.data.maxQty + ' 份', icon: 'none' });
+      wx.showToast({
+        title: this.data.cartFull ? '这个盒饭已加到上限' : '最多 ' + this.data.maxQty + ' 份',
+        icon: 'none',
+      });
       return;
     }
     this.setData({ qty: this.data.qty + 1 });
@@ -191,12 +215,14 @@ Page({
     }
     if (!this.data.orderable) {
       // 与点餐页 isOnQuickAdd 同口径同顺序：整份菜单的原因（停业 > 截单）先说，
-      // 再退到「这款没了」，最后才是兜底的「当前不可下单」
+      // 再退到「这款没了」，然后才是「车里这个盒饭已经加满」，最后才是兜底的「当前不可下单」
       const title = this.data.closed
         ? '该供餐日暂停供应'
         : (this.data.cutoff
           ? '当日已截单'
-          : (this.data.soldOut ? '当前菜品已售罄' : '当前不可下单'));
+          : (this.data.soldOut
+            ? '当前菜品已售罄'
+            : (this.data.cartFull ? '这个盒饭已加到上限' : '当前不可下单')));
       wx.showToast({ title, icon: 'none' });
       return;
     }
@@ -235,6 +261,22 @@ Page({
     // 只有跨 0 点才算过期；本页的 serveDate 只是这盒饭属于哪天，不用来清车
     if (cartUtil.isStale(cart)) {
       cart = cartUtil.empty();
+    }
+    // 一单最多几种盒饭：按盒饭去重，与服务端同一口径（同盒饭换主食只算一种）。
+    // 读不到配置就不拦（服务端仍会判定），避免配置请求失败时连菜都加不了。
+    const maxKinds = Number((app.globalData.config || {}).orderMaxItemKinds) || 0;
+    if (maxKinds > 0) {
+      const kinds = [];
+      cart.items.forEach((line) => {
+        if (kinds.indexOf(line.comboId) < 0) {
+          kinds.push(line.comboId);
+        }
+      });
+      // 车里已有这个盒饭（换个主食再加一份）不算新增一种
+      if (kinds.indexOf(item.comboId) < 0 && kinds.length >= maxKinds) {
+        wx.showToast({ title: '一单最多 ' + maxKinds + ' 种盒饭', icon: 'none' });
+        return;
+      }
     }
     const next = cartUtil.addLine(cart, {
       comboId: item.comboId,

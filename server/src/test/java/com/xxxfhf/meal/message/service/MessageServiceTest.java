@@ -3,6 +3,7 @@ package com.xxxfhf.meal.message.service;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.xxxfhf.meal.common.BizException;
+import com.xxxfhf.meal.config.AppProperties;
 import com.xxxfhf.meal.message.domain.UserMessage;
 import com.xxxfhf.meal.message.mapper.UserMessageMapper;
 import com.xxxfhf.meal.notify.domain.NotifyType;
@@ -43,6 +44,9 @@ class MessageServiceTest {
     private UserMessageMapper messageMapper;
     @Mock
     private UserMapper userMapper;
+    /** 首页横栏条数改成读配置；本类用例不调 summary()，给出 mock 只是避免注入 null */
+    @Mock
+    private AppProperties appProperties;
 
     @InjectMocks
     private MessageService service;

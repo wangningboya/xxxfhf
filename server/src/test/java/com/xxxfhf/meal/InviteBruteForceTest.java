@@ -6,6 +6,7 @@ import com.xxxfhf.meal.auth.WxCrypto;
 import com.xxxfhf.meal.auth.service.GroupAccessService;
 import com.xxxfhf.meal.common.BizException;
 import com.xxxfhf.meal.common.ContentSecurityService;
+import com.xxxfhf.meal.config.AppProperties;
 import com.xxxfhf.meal.config.ConfigService;
 import com.xxxfhf.meal.invite.InviteAttemptGuard;
 import com.xxxfhf.meal.invite.service.InviteCodeService;
@@ -71,7 +72,8 @@ class InviteBruteForceTest {
     void setUp() {
         // 真实 guard：每个用例一份干净计数
         service = new GroupAccessService(userMapper, sessionKeyStore, wxCrypto, configService,
-                inviteCodeService, new InviteAttemptGuard(), auditService, contentSecurity);
+                inviteCodeService, new InviteAttemptGuard(new AppProperties()), auditService,
+                contentSecurity);
     }
 
     @Test

@@ -327,6 +327,12 @@ Page({
       });
       return;
     }
+    // 总份数兜底：商家可能在下单途中把上限调小，购物车那几个入口是按旧值拦的
+    const limit = Number((app.globalData.config || {}).orderMaxQtyTotal) || 20;
+    if (this.data.count > limit) {
+      wx.showToast({ title: '一单最多 ' + limit + ' 份，请返回调整', icon: 'none' });
+      return;
+    }
     // 自取单不强制留手机号：到店报 4 位取餐码即可核销，电话不是必要信息。
     // 账号里填过号会带进订单快照，商家仍能在售后窗口内联系到人
     this.setData({ submitting: true });

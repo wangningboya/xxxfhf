@@ -9,6 +9,14 @@ const linkState = require('./utils/print/link-state');
 const LOGIN_FAILED = '微信登录失败，请重新进入小程序';
 
 /**
+ * 店铺配置的本地缓存时长。
+ *
+ * 配置以前是「成功一次就永不重拉」，后台改了份数上限/配送费，小程序不杀进程就一直按旧值算。
+ * 60 秒是折中：商家改完最多等一分钟，顾客端也不必每进一个页面就打一次 /config。
+ */
+const CONFIG_TTL_MS = 60 * 1000;
+
+/**
  * 尚未登记的微信用户。
  *
  * 服务端 /auth/login 不再「查不到就建号」，这个微信第一次进来时拿到的就是这份状态：
@@ -48,6 +56,8 @@ App({
     /** 店铺配置：名称、公告、截单时间等 */
     config: {},
     configLoaded: false,
+    /** 上次成功拉到配置的时刻，配合 CONFIG_TTL_MS 判过期 */
+    configLoadedAt: 0,
     /** 登录中的 Promise，避免多个页面同时触发重复 wx.login */
     loginPromise: null,
     /**
@@ -414,15 +424,18 @@ App({
   /* 已登记的用户不需要「补绑群」：有账号就意味着已准入，/auth/bind-group 已随
      /auth/invite 一起删除（两者的前置状态都是「已登记但未准入」，而建号必然带准入）。 */
 
-  /** 加载店铺配置，只在首次成功时缓存。 */
+  /** 加载店铺配置：60 秒内复用，超过就重拉。 */
   loadConfig() {
-    if (this.globalData.configLoaded) {
+    const fresh = this.globalData.configLoaded
+      && Date.now() - this.globalData.configLoadedAt < CONFIG_TTL_MS;
+    if (fresh) {
       return Promise.resolve(this.globalData.config);
     }
     return request({ url: '/config' })
       .then((data) => {
         this.globalData.config = data || {};
         this.globalData.configLoaded = true;
+        this.globalData.configLoadedAt = Date.now();
         return this.globalData.config;
       })
       .catch(() => this.globalData.config);

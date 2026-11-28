@@ -14,7 +14,10 @@ Page({
   },
 
   onShow() {
-    this.refresh();
+    // 一单总份数上限来自 /config（后台「系统配置 → 业务限制」）。冷启动直接进本页
+    // （底栏 tab 点进来）时 globalData 里还是空的，不等它就会按 20 兜底；
+    // 缓存未过期时 loadConfig 立即返回，不会多等一次网络。
+    app.loadConfig().then(() => this.refresh());
   },
 
   refresh() {
@@ -86,6 +89,15 @@ Page({
     this.refresh();
   },
 
+  /**
+   * 一单总份数上限：后台「系统配置 → 业务限制」下发，缺失时按 20 兜底。
+   *
+   * 前端拦只是为了少一次「点了提交才被打回」，判据始终在服务端。
+   */
+  totalLimit() {
+    return Number((app.globalData.config || {}).orderMaxQtyTotal) || 20;
+  },
+
   onPlus(e) {
     const key = e.currentTarget.dataset.key;
     const line = this.data.lines.find((l) => l.key === key);
@@ -93,6 +105,17 @@ Page({
       return;
     }
     const cart = cartUtil.load();
+    const limit = this.totalLimit();
+    if (cartUtil.count(cart) >= limit) {
+      wx.showToast({ title: '一单最多 ' + limit + ' 份', icon: 'none' });
+      return;
+    }
+    // 单个盒饭合计：同一盒饭换规格是两行，两份各加也能凑出 2N，这里按盒饭汇总判
+    const perItem = Number((app.globalData.config || {}).orderMaxQtyPerItem) || 0;
+    if (perItem > 0 && cartUtil.qtyOfCombo(cart, line.comboId) >= perItem) {
+      wx.showToast({ title: '单个盒饭最多 ' + perItem + ' 份', icon: 'none' });
+      return;
+    }
     cartUtil.save(cartUtil.setQty(cart, key, line.qty + 1));
     this.refresh();
   },
@@ -140,6 +163,12 @@ Page({
     }
     if (this.data.cutoff) {
       wx.showToast({ title: '已截单，请重新选择', icon: 'none' });
+      return;
+    }
+    // 结算前再核一次总份数：商家可能刚把上限调小，车里还是按旧上限攒的
+    const limit = this.totalLimit();
+    if (this.data.count > limit) {
+      wx.showToast({ title: '一单最多 ' + limit + ' 份，请减少份数', icon: 'none' });
       return;
     }
     wx.navigateTo({ url: '/pages/order/confirm' });

@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xxxfhf.meal.common.BizException;
 import com.xxxfhf.meal.common.PageResult;
+import com.xxxfhf.meal.config.AppProperties;
 import com.xxxfhf.meal.message.domain.NoticeType;
 import com.xxxfhf.meal.message.domain.UserMessage;
 import com.xxxfhf.meal.message.mapper.UserMessageMapper;
@@ -51,15 +52,17 @@ public class MessageService {
     public static final int MAX_CONTENT = 255;
     /** 与 user_message.read_by_name 的列宽一致 */
     public static final int MAX_READER = 64;
-    /** 首页滚动条最多取几条未读 */
-    public static final int SUMMARY_LIMIT = 3;
 
     private final UserMessageMapper messageMapper;
     private final UserMapper userMapper;
+    /** 首页横栏取几条未读走环境变量（APP_MESSAGE_HOME_UNREAD_LIMIT，默认 3） */
+    private final AppProperties appProperties;
 
-    public MessageService(UserMessageMapper messageMapper, UserMapper userMapper) {
+    public MessageService(UserMessageMapper messageMapper, UserMapper userMapper,
+                          AppProperties appProperties) {
         this.messageMapper = messageMapper;
         this.userMapper = userMapper;
+        this.appProperties = appProperties;
     }
 
     /* ==================== 写入 ==================== */
@@ -144,20 +147,21 @@ public class MessageService {
     /* ==================== 查询 ==================== */
 
     /**
-     * 首页用：未读总数 + 最多 3 条未读（新的在前）。
+     * 首页用：未读总数 + 最多 N 条未读（新的在前，N 默认 3，见 app.message.home-unread-limit）。
      *
      * <p>未读数用 {@code selectCount} 单独查，不拿列表长度充当：
-     * 列表被 LIMIT 3 截断后，长度永远是 3，铃铛角标就废了。
+     * 列表被 LIMIT 截断后，长度永远是 N，铃铛角标就废了。
      */
     public Summary summary(Long userId, String side) {
         Long unread = messageMapper.selectCount(scope(userId, side).isNull(UserMessage::getReadAt));
 
+        // 配置值来自 yml（启动时已校验 ≥1），不是前端入参，拼进 LIMIT 无注入面
+        int limit = appProperties.getMessage().getHomeUnreadLimit();
         List<UserMessage> latest = messageMapper.selectList(scope(userId, side)
                 .isNull(UserMessage::getReadAt)
                 .orderByDesc(UserMessage::getCreatedAt)
                 .orderByDesc(UserMessage::getId)
-                // 常量拼接，不来自前端，无注入面
-                .last("LIMIT " + SUMMARY_LIMIT));
+                .last("LIMIT " + limit));
 
         List<Row> items = new ArrayList<>(latest.size());
         for (UserMessage message : latest) {

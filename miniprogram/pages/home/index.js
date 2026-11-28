@@ -5,6 +5,33 @@ const dict = require('../../utils/dict');
 const cartUtil = require('../../utils/cart');
 const share = require('../../utils/share');
 
+/** 距今天 hh:mm 还有多少毫秒：截单时间配的是「前一天」的时刻，即今天的这个点 */
+function msUntil(hhmm) {
+  const parts = String(hhmm).split(':');
+  const h = Number(parts[0]);
+  const m = Number(parts[1]);
+  if (!isFinite(h) || !isFinite(m)) {
+    return 0;
+  }
+  const target = new Date();
+  target.setHours(h, m, 0, 0);
+  return target.getTime() - Date.now();
+}
+
+/** 剩余时长文案：按分钟向上取整，满一小时才报小时 */
+function formatLeft(ms) {
+  const totalMin = Math.ceil(ms / 60000);
+  if (totalMin < 1) {
+    return '不足 1 分钟';
+  }
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if (!h) {
+    return m + ' 分钟';
+  }
+  return m ? h + ' 小时 ' + m + ' 分' : h + ' 小时';
+}
+
 Page({
   data: {
     loading: true,
@@ -15,6 +42,8 @@ Page({
     shopPhone: '',
     serveTimeText: '',
     cutoffTime: '',
+    /** 截单倒计时文案，接在「前一天 hh:mm」后面显示；停业 / 空菜单 / 仅供浏览时为空 */
+    cutoffLeftText: '',
     /** 首页只看次日菜单的营业状态，与点餐页同源（需求 4.5） */
     serveDate: '',
     statusText: '',
@@ -38,6 +67,13 @@ Page({
   onShow() {
     // 每次显示都要重开：分享菜单不跨页面状态，从别的页返回后不调会退回默认（不带 shareTicket）
     share.enableShareMenu();
+    // 购物车球是纯本地读，不能放在下面的并发守卫之后 ——
+    // 弱网下上一次 init 还没跑完时从详情页加购返回，球数会停在旧值
+    this.refreshCartBar();
+    // onHide 清过定时器，这里接着走；首屏还没拿到营业状态时 countdownState 为空，不重算
+    if (this.countdownState) {
+      this.refreshCountdown();
+    }
     if (this.loadingNow) {
       return;
     }
@@ -47,9 +83,27 @@ Page({
     if (shareEntry) {
       this.shareOptions = shareEntry;
     }
-    // 每次显示都重读购物车：从盒饭详情加完货返回首页时正好落在这里，球数才是新的
-    this.refreshCartBar();
     this.init();
+  },
+
+  onHide() {
+    this.stopCountdown();
+  },
+
+  onUnload() {
+    this.stopCountdown();
+  },
+
+  /**
+   * 下拉刷新：用户显式要最新状态，直接重跑一次 init（营业状态 / 菜单 / 消息 / 订单条全刷）。
+   * 上一次 init 未结束时不复用并发 —— 两条链同时 setData 会互相覆盖，直接收掉转圈。
+   */
+  onPullDownRefresh() {
+    if (this.loadingNow) {
+      wx.stopPullDownRefresh();
+      return;
+    }
+    this.init().then(() => wx.stopPullDownRefresh());
   },
 
   /**
@@ -64,7 +118,12 @@ Page({
     const serveDate = addDays(dateStr(), 1);
     this.setData({ serveDate });
 
-    app
+    // 消息与订单状态条与主链并行：它们慢或失败都不该拖住「开始点餐」按钮。
+    // 必须放在 return 之前，否则 return 之后就是死代码
+    this.loadMessages();
+    this.loadOrderBar();
+
+    return app
       .bootstrap(this.shareOptions)
       .then((me) => {
         if (!me || !me.accessGranted) {
@@ -101,10 +160,6 @@ Page({
         this.setData({ loading: false });
         this.loadingNow = false;
       });
-
-    // 消息与订单状态条并行：它们慢或失败都不该拖住「开始点餐」按钮
-    this.loadMessages();
-    this.loadOrderBar();
   },
 
   /**
@@ -237,22 +292,80 @@ Page({
     const count = (menu.items || []).length;
     let statusText = '明日可下单';
     let statusWarn = false;
+    /** 倒计时只在「可下单 / 已截单」时才有意义：open 走计时、cutoff 直接显示已截单 */
+    let countdownState = 'open';
 
     if (menu.closed) {
       statusText = '明日门店暂停供应';
       statusWarn = true;
+      countdownState = 'none';
     } else if (!count) {
       statusText = '明日暂无供应';
       statusWarn = true;
+      countdownState = 'none';
     } else if (menu.cutoff) {
       statusText = '今日已截单，0 点后可继续下单';
       statusWarn = true;
+      countdownState = 'cutoff';
     } else if (!menu.orderable) {
       statusText = '明日菜单仅供浏览，明天开放下单';
       statusWarn = true;
+      countdownState = 'none';
     }
 
+    this.countdownState = countdownState;
     this.setData({ statusText, statusWarn });
+    this.refreshCountdown();
+  },
+
+  /**
+   * 截单倒计时：口径以服务端返回的营业状态为准，这里只负责报「还剩多久」。
+   *
+   * 停业 / 空菜单 / 仅供浏览时不显示（摆一个倒计时会让人以为还能下单）；
+   * 服务端已判截单时直接显示「今日已截单」；客户端钟走过截单点后同步改文案，
+   * 用与 applyMenuStatus 同一句话，避免「明日可下单 + 今日已截单」自相矛盾。
+   */
+  refreshCountdown() {
+    const cutoffTime = this.data.cutoffTime;
+    if (!cutoffTime || this.countdownState === 'none') {
+      this.setData({ cutoffLeftText: '' });
+      this.stopCountdown();
+      return;
+    }
+    if (this.countdownState === 'cutoff') {
+      this.setData({ cutoffLeftText: '今日已截单' });
+      this.stopCountdown();
+      return;
+    }
+
+    const left = msUntil(cutoffTime);
+    if (left <= 0) {
+      this.countdownState = 'cutoff';
+      this.setData({
+        cutoffLeftText: '今日已截单',
+        statusText: '今日已截单，0 点后可继续下单',
+        statusWarn: true,
+      });
+      this.stopCountdown();
+      return;
+    }
+
+    this.setData({ cutoffLeftText: '距截单 ' + formatLeft(left) });
+    this.startCountdown();
+  },
+
+  startCountdown() {
+    if (this.countdownTimer) {
+      return;
+    }
+    this.countdownTimer = setInterval(() => this.refreshCountdown(), 30000);
+  },
+
+  stopCountdown() {
+    if (this.countdownTimer) {
+      clearInterval(this.countdownTimer);
+      this.countdownTimer = null;
+    }
   },
 
   /** 下单统一在点餐 Tab，首页不加购 */

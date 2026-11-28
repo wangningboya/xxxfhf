@@ -5,6 +5,8 @@ import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.xxxfhf.meal.audit.domain.AuditActions;
 import com.xxxfhf.meal.audit.service.AuditService;
 import com.xxxfhf.meal.common.BizException;
+import com.xxxfhf.meal.config.ConfigKey;
+import com.xxxfhf.meal.config.ConfigService;
 import com.xxxfhf.meal.invite.domain.InviteCode;
 import com.xxxfhf.meal.invite.domain.InviteStatus;
 import com.xxxfhf.meal.invite.domain.InviteUse;
@@ -15,6 +17,7 @@ import com.xxxfhf.meal.user.domain.User;
 import com.xxxfhf.meal.user.mapper.UserMapper;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,11 +33,13 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -64,8 +69,19 @@ class InviteCodeServiceTest {
     @Mock
     private AuditService auditService;
 
+    /** 有效期上限改走配置后，create() 会读它；默认值 720 与线上初始数据一致 */
+    @Mock
+    private ConfigService configService;
+
     @InjectMocks
     private InviteCodeService service;
+
+    @BeforeEach
+    void stubConfig() {
+        // lenient：个别用例不走到 create() 的这行，严格模式下会报多余 stub
+        lenient().when(configService.getPositiveInt(eq(ConfigKey.INVITE_MAX_EXPIRE_HOURS), anyInt()))
+                .thenReturn(ConfigKey.INVITE_MAX_EXPIRE_HOURS_DEFAULT);
+    }
 
     /**
      * 单测不起 Spring 容器，MyBatis-Plus 的 lambda 列名缓存不会自动建立；
@@ -105,11 +121,13 @@ class InviteCodeServiceTest {
     }
 
     @Test
-    @DisplayName("有效期超过 30 天直接拒绝")
+    @DisplayName("有效期超过上限（默认 720 小时）直接拒绝")
     void expireTooLongRejected() {
+        // 上限现在来自配置，文案只回具体小时数，不再硬写「30 天」——
+        // 商家把上限调到 48 小时后，说「30 天」就是错的
         assertThatThrownBy(() -> service.create(1, 721, 100L))
                 .isInstanceOf(BizException.class)
-                .hasMessageContaining("30 天");
+                .hasMessageContaining("720");
         verify(inviteCodeMapper, never()).insert(any(InviteCode.class));
     }
 

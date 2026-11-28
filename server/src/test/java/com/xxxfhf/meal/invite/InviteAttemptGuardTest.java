@@ -1,6 +1,7 @@
 package com.xxxfhf.meal.invite;
 
 import com.xxxfhf.meal.common.BizException;
+import com.xxxfhf.meal.config.AppProperties;
 import com.xxxfhf.meal.invite.InviteAttemptGuard;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -16,7 +17,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class InviteAttemptGuardTest {
 
-    private final InviteAttemptGuard guard = new InviteAttemptGuard();
+    /** 阈值与时长现在来自 AppProperties 默认值（10 次 / 30 分钟），与改前一致 */
+    private final InviteAttemptGuard guard = new InviteAttemptGuard(new AppProperties());
 
     @Test
     @DisplayName("没失败过：直接放行")

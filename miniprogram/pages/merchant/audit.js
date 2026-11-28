@@ -325,13 +325,25 @@ Page({
     if (this.data.creating) {
       return;
     }
-    // 次数让商家自己填：一个码能被多少人各用一次，边界与服务端一致（≥1，不设上限）
+    // 有效期上限读后台配置（系统配置 → 业务限制），不再写死 48：
+    // 后台把上限调到 24 时，固定发 48 会被服务端直接拒掉。
+    // 取不到就按「不显示上限、本地不拦」处理，交给服务端判定。
+    request({ url: '/admin/config' })
+      .then((cfg) => {
+        const max = Number((cfg || {}).inviteMaxExpireHours);
+        this.askUses(max >= 1 ? max : 0);
+      })
+      .catch(() => this.askUses(0));
+  },
+
+  /** 第一步：可用次数。一个码能被多少人各用一次，边界与服务端一致（≥1，不设上限） */
+  askUses(maxHours) {
     wx.showModal({
       title: '生成邀请码',
       editable: true,
       placeholderText: '这张码可被多少人使用？',
       content: '1',
-      confirmText: '生成',
+      confirmText: '下一步',
       success: (res) => {
         if (!res.confirm) {
           return;
@@ -341,15 +353,42 @@ Page({
           wx.showToast({ title: '次数需为 1 以上的整数', icon: 'none' });
           return;
         }
-        this.createInvite(uses);
+        this.askExpire(uses, maxHours);
       },
     });
   },
 
-  createInvite(uses) {
+  /** 第二步：有效期。不预填数字，商家自己填 */
+  askExpire(uses, maxHours) {
+    wx.showModal({
+      title: '有效期（小时）',
+      editable: true,
+      placeholderText: maxHours > 0
+        ? '有效期内可用，不超过 ' + maxHours
+        : '有效期内可用',
+      content: '',
+      confirmText: '生成',
+      success: (res) => {
+        if (!res.confirm) {
+          return;
+        }
+        const hours = parseInt((res.content || '').trim(), 10);
+        if (!(hours >= 1)) {
+          wx.showToast({ title: '有效期需为 1 以上的整数小时', icon: 'none' });
+          return;
+        }
+        if (maxHours > 0 && hours > maxHours) {
+          wx.showToast({ title: '有效期不能超过 ' + maxHours + ' 小时', icon: 'none' });
+          return;
+        }
+        this.createInvite(uses, hours);
+      },
+    });
+  },
+
+  createInvite(uses, expireHours) {
     this.setData({ creating: true });
-    // 默认 48 小时：够群主把卡片发出去、对方隔天打开
-    request({ url: '/admin/invite/create', method: 'POST', data: { uses, expireHours: 48 } })
+    request({ url: '/admin/invite/create', method: 'POST', data: { uses, expireHours } })
       .then((code) => {
         if (!code || !code.code) {
           return;

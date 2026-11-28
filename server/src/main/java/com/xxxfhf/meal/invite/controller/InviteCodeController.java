@@ -12,7 +12,6 @@ import com.xxxfhf.meal.invite.domain.InviteUse;
 import com.xxxfhf.meal.invite.service.InviteCodeService;
 import com.xxxfhf.meal.user.domain.User;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -118,13 +117,18 @@ public class InviteCodeController {
         return ApiResponse.ok(InviteCodeView.of(code, creators.get(creator)));
     }
 
-    /** 生成请求：次数必填且 ≥ 1（不设上限），有效期 1~720 小时。 */
+    /**
+     * 生成请求：次数必填且 ≥ 1（不设上限），有效期 ≥ 1 小时。
+     *
+     * 有效期上限**不在这里卡死**：上限是后台可配的（默认 720 小时），
+     * 写死一个 @Max 会和配置对不上 —— 商家把上限调到 48 后，用户传 100 时
+     * 注解仍会按 720 放行，最终由 Service 按当前配置拒掉，那才是唯一的判定口。
+     */
     public record CreateRequest(
             @NotNull(message = "请填写可用次数")
             @Min(value = 1, message = "可用次数至少 1 次")
             Integer uses,
             @Min(value = 1, message = "有效期至少 1 小时")
-            @Max(value = 720, message = "有效期最长 720 小时（30 天）")
             Integer expireHours) {
     }
 

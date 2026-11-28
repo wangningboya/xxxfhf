@@ -8,6 +8,7 @@ import com.xxxfhf.meal.auth.WxApiClient;
 import com.xxxfhf.meal.common.BizException;
 import com.xxxfhf.meal.common.ErrorCode;
 import com.xxxfhf.meal.common.MaskUtil;
+import com.xxxfhf.meal.config.AppProperties;
 import com.xxxfhf.meal.role.domain.Role;
 import com.xxxfhf.meal.role.mapper.RoleMapper;
 import com.xxxfhf.meal.user.domain.AuditStatus;
@@ -41,12 +42,6 @@ public class AuthService {
 
     private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
-    /** 登录失败锁定阈值：连续失败这么多次触发锁定 */
-    private static final int LOGIN_FAIL_LOCK_THRESHOLD = 3;
-
-    /** 锁定时长（分钟），到期自动解锁 */
-    private static final long LOCK_MINUTES = 30;
-
     private final WxApiClient wxApiClient;
     private final SessionKeyStore sessionKeyStore;
     private final UserMapper userMapper;
@@ -55,11 +50,14 @@ public class AuthService {
     private final PasswordService passwordService;
     private final GroupAccessService groupAccessService;
     private final AuditService auditService;
+    /** 登录失败锁定阈值与时长走环境变量（APP_AUTH_LOGIN_LOCK_*），属安全闸门不让商家调 */
+    private final AppProperties appProperties;
 
     public AuthService(WxApiClient wxApiClient, SessionKeyStore sessionKeyStore,
                        UserMapper userMapper, RoleMapper roleMapper,
                        JwtService jwtService, PasswordService passwordService,
-                       GroupAccessService groupAccessService, AuditService auditService) {
+                       GroupAccessService groupAccessService, AuditService auditService,
+                       AppProperties appProperties) {
         this.wxApiClient = wxApiClient;
         this.sessionKeyStore = sessionKeyStore;
         this.userMapper = userMapper;
@@ -68,6 +66,7 @@ public class AuthService {
         this.passwordService = passwordService;
         this.groupAccessService = groupAccessService;
         this.auditService = auditService;
+        this.appProperties = appProperties;
     }
 
     @Transactional
@@ -259,16 +258,18 @@ public class AuthService {
         return user.getTokenVersion() == null ? 0 : user.getTokenVersion();
     }
 
-    /** 连续失败计数：到 3 次锁 30 分钟并清零计数（锁到期后重新数），未到阈值则累加。 */
+    /** 连续失败计数：到阈值（默认 3 次）锁 M 分钟（默认 30）并清零计数，未到阈值则累加。 */
     private void recordLoginFailure(User user) {
+        int threshold = appProperties.getAuth().getLoginLock().getMaxFailures();
+        long lockMinutes = appProperties.getAuth().getLoginLock().getMinutes();
         int fails = (user.getLoginFailCount() == null ? 0 : user.getLoginFailCount()) + 1;
-        if (fails >= LOGIN_FAIL_LOCK_THRESHOLD) {
+        if (fails >= threshold) {
             userMapper.update(null, Wrappers.<User>lambdaUpdate()
                     .eq(User::getId, user.getId())
                     .set(User::getLoginFailCount, 0)
-                    .set(User::getLockUntil, LocalDateTime.now().plusMinutes(LOCK_MINUTES)));
+                    .set(User::getLockUntil, LocalDateTime.now().plusMinutes(lockMinutes)));
             log.warn("商家账号连续登录失败 {} 次，锁定 {} 分钟 userId={}",
-                    LOGIN_FAIL_LOCK_THRESHOLD, LOCK_MINUTES, user.getId());
+                    threshold, lockMinutes, user.getId());
         } else {
             userMapper.update(null, Wrappers.<User>lambdaUpdate()
                     .eq(User::getId, user.getId())

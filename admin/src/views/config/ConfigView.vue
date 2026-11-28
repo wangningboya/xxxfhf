@@ -67,6 +67,37 @@
         <span class="muted">0 表示免配送费</span>
       </el-form-item>
 
+      <el-divider content-position="left">业务限制</el-divider>
+      <el-form-item label="一单最多几种盒饭">
+        <el-input-number v-model="form.orderMaxItemKinds" :min="1" :max="4" :step="1" />
+        <span class="muted">种。达到上限后不能再往购物车加新的盒饭</span>
+      </el-form-item>
+      <el-form-item label="单个盒饭最多份数">
+        <el-input-number v-model="form.orderMaxQtyPerItem" :min="1" :max="5" :step="1" />
+        <span class="muted">份。同一种盒饭一次最多点几份</span>
+      </el-form-item>
+      <el-form-item label="一单总份数上限">
+        <el-input-number v-model="form.orderMaxQtyTotal" :min="1" :max="20" :step="1" />
+        <span class="muted">份。所有盒饭份数之和，超出时以总份数优先</span>
+      </el-form-item>
+      <el-form-item label="盒饭内单个菜品份数">
+        <el-input-number v-model="form.comboDishMaxQty" :min="1" :max="99" :step="1" />
+        <span class="muted">份。配置盒饭组成时，单个菜品最多填几份</span>
+      </el-form-item>
+      <el-form-item label="批量接单/拒单上限">
+        <el-input-number v-model="form.orderBatchLimit" :min="1" :max="20" :step="1" />
+        <span class="muted">单。一次最多勾多少单一起接单或拒单</span>
+      </el-form-item>
+      <el-form-item label="邀请码有效期上限">
+        <el-input-number v-model="form.inviteMaxExpireHours" :min="1" :max="720" :step="1" />
+        <span class="muted">小时。720 = 30 天，生成的邀请码不能超过这个有效期</span>
+      </el-form-item>
+      <el-form-item>
+        <div class="muted">
+          以上六项<b>即时生效</b>，无需重启。<b>商家代客下单不受任何份数限制</b>，只受当日剩余份数约束。
+        </div>
+      </el-form-item>
+
       <el-divider content-position="left">订阅消息</el-divider>
       <el-form-item label="消息模板">
         <el-input
@@ -106,6 +137,13 @@ const form = ref({
   serveTimeText: '',
   prepayReleaseMinutes: 30,
   cancelRequestTimeoutHours: 2,
+  // 业务限制：默认值与 ConfigKey 的 *_DEFAULT 一致，缺失时用它兜底
+  orderMaxItemKinds: 4,
+  orderMaxQtyPerItem: 5,
+  orderMaxQtyTotal: 20,
+  comboDishMaxQty: 99,
+  orderBatchLimit: 20,
+  inviteMaxExpireHours: 720,
 });
 const cutoff = ref('21:00');
 const slotsText = ref('');
@@ -130,6 +168,13 @@ function load() {
         prepayReleaseMinutes: Number(data.prepayReleaseMinutes || 30),
         cancelRequestTimeoutHours:
           timeout === undefined || timeout === null || timeout === '' ? 2 : Number(timeout),
+        // 0 不是合法值，`|| 默认` 顺带把脏值挡回默认值；真正的范围校验在服务端
+        orderMaxItemKinds: Number(data.orderMaxItemKinds || 4),
+        orderMaxQtyPerItem: Number(data.orderMaxQtyPerItem || 5),
+        orderMaxQtyTotal: Number(data.orderMaxQtyTotal || 20),
+        comboDishMaxQty: Number(data.comboDishMaxQty || 99),
+        orderBatchLimit: Number(data.orderBatchLimit || 20),
+        inviteMaxExpireHours: Number(data.inviteMaxExpireHours || 720),
       };
       cutoff.value = data.cutoffTime || '21:00';
       deliveryFeeYuan.value = Number(data.deliveryFee || 0) / 100;
@@ -215,6 +260,13 @@ function onSave() {
     deliveryFee: String(Math.round(Number(deliveryFeeYuan.value || 0) * 100)),
     prepayReleaseMinutes: String(form.value.prepayReleaseMinutes || 30),
     cancelRequestTimeoutHours: String(form.value.cancelRequestTimeoutHours || 0),
+    // 业务限制：后端要求 1~上限 的整数，这里统一转字符串；el-input-number 清空时给 null，回落默认值
+    orderMaxItemKinds: String(form.value.orderMaxItemKinds ?? 4),
+    orderMaxQtyPerItem: String(form.value.orderMaxQtyPerItem ?? 5),
+    orderMaxQtyTotal: String(form.value.orderMaxQtyTotal ?? 20),
+    comboDishMaxQty: String(form.value.comboDishMaxQty ?? 99),
+    orderBatchLimit: String(form.value.orderBatchLimit ?? 20),
+    inviteMaxExpireHours: String(form.value.inviteMaxExpireHours ?? 720),
     groupOpenIds: JSON.stringify(groups),
     subscribeTemplates: templates,
   };

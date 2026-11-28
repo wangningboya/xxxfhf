@@ -78,6 +78,18 @@ function count(cart) {
   return cart.items.reduce((sum, item) => sum + item.qty, 0);
 }
 
+/**
+ * 某个盒饭在车里一共几份 —— 跨规格累加。
+ *
+ * 「单个盒饭最多 N 份」是按盒饭算的，不按行算。同一盒饭选白米饭 / 杂粮饭是两行，
+ * 逐行各判 N 份就变成了 2N，拆个规格就能绕开上限。
+ */
+function qtyOfCombo(cart, comboId) {
+  return cart.items.reduce((sum, item) => (
+    String(item.comboId) === String(comboId) ? sum + Number(item.qty || 0) : sum
+  ), 0);
+}
+
 /** 商品金额合计（分）。不含配送费与规格差价 —— 差价在下单页由服务端算，避免两边算法不一致。 */
 function goodsAmount(cart) {
   return cart.items.reduce((sum, item) => {
@@ -112,6 +124,7 @@ module.exports = {
   addLine,
   setQty,
   count,
+  qtyOfCombo,
   goodsAmount,
   lineKey,
   empty,

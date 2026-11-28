@@ -70,6 +70,22 @@ public class ConfigService {
     }
 
     /**
+     * 取正整数配置，**小于 1 一律按 1 处理**。
+     *
+     * 份数上限这类值不能用 {@link #getInt} 直接取：配成 0 时 {@code qty > 0} 会让
+     * 所有订单都下不了，属于全站停单级别的故障。保存接口已经把范围卡在 ≥1，
+     * 但库里可能被手工改脏，所以读取侧再兜一层 —— 宁可只允许 1 份，也不能一单都下不了。
+     */
+    public int getPositiveInt(String key, int defaultValue) {
+        int value = getInt(key, defaultValue);
+        if (value < 1) {
+            log.warn("配置项 {} 的值 {} 小于 1，按 1 处理", key, value);
+            return 1;
+        }
+        return value;
+    }
+
+    /**
      * 取 JSON 数组配置。值缺失、为空数组或解析失败一律返回空列表——
      * 调用方（如群白名单校验）拿到空列表意味着「谁都不放行」，这是安全的一侧。
      */
@@ -218,7 +234,13 @@ public class ConfigService {
             Map.entry(ConfigKey.CANCEL_REQUEST_TIMEOUT_HOURS, "取消申请超时小时数"),
             Map.entry(ConfigKey.CLOSED_DATES, "停业日"),
             Map.entry(ConfigKey.GROUP_OPEN_IDS, "群白名单"),
-            Map.entry(ConfigKey.SUBSCRIBE_TEMPLATES, "订阅消息模板")
+            Map.entry(ConfigKey.SUBSCRIBE_TEMPLATES, "订阅消息模板"),
+            Map.entry(ConfigKey.ORDER_MAX_ITEM_KINDS, "一单最多几种盒饭"),
+            Map.entry(ConfigKey.ORDER_MAX_QTY_PER_ITEM, "单个盒饭最多份数"),
+            Map.entry(ConfigKey.ORDER_MAX_QTY_TOTAL, "一单总份数上限"),
+            Map.entry(ConfigKey.COMBO_DISH_MAX_QTY, "盒饭内单个菜品份数"),
+            Map.entry(ConfigKey.ORDER_BATCH_LIMIT, "批量接单/拒单上限"),
+            Map.entry(ConfigKey.INVITE_MAX_EXPIRE_HOURS, "邀请码有效期上限")
     );
 
     /** 已知配置项的完整清单，与建表初始数据保持一致。 */
@@ -235,6 +257,12 @@ public class ConfigService {
             ConfigKey.CANCEL_REQUEST_TIMEOUT_HOURS,
             ConfigKey.CLOSED_DATES,
             ConfigKey.GROUP_OPEN_IDS,
-            ConfigKey.SUBSCRIBE_TEMPLATES
+            ConfigKey.SUBSCRIBE_TEMPLATES,
+            ConfigKey.ORDER_MAX_ITEM_KINDS,
+            ConfigKey.ORDER_MAX_QTY_PER_ITEM,
+            ConfigKey.ORDER_MAX_QTY_TOTAL,
+            ConfigKey.COMBO_DISH_MAX_QTY,
+            ConfigKey.ORDER_BATCH_LIMIT,
+            ConfigKey.INVITE_MAX_EXPIRE_HOURS
     );
 }

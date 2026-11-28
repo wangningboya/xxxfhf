@@ -23,6 +23,10 @@ public class AppProperties {
     private final Admin admin = new Admin();
     private final Qr qr = new Qr();
     private final RateLimit rateLimit = new RateLimit();
+    private final ContactPhone contactPhone = new ContactPhone();
+    private final Invite invite = new Invite();
+    private final Auth auth = new Auth();
+    private final Message message = new Message();
 
     @PostConstruct
     void validate() {
@@ -78,6 +82,28 @@ public class AppProperties {
         if (rateLimit.getJoinLimit() > rateLimit.getLimit()) {
             throw new IllegalStateException("APP_RATE_LIMIT_JOIN_LIMIT 不能大于 APP_RATE_LIMIT_LIMIT");
         }
+        // 联系顾客：限次是隐私合规的一部分（号码按需、限次、留痕），配错等于把闸门拆了
+        if (contactPhone.getMaxPerOrder24h() < 1) {
+            throw new IllegalStateException("APP_CONTACT_PHONE_MAX_PER_ORDER_24H 必须 ≥ 1");
+        }
+        if (contactPhone.getMaxPerOperatorDay() < 1) {
+            throw new IllegalStateException("APP_CONTACT_PHONE_MAX_PER_OPERATOR_DAY 必须 ≥ 1");
+        }
+        if (contactPhone.getWindowDays() < 0) {
+            // 0 是合法值：表示订单一结束就不可再调取，只在营业时段内可联系
+            throw new IllegalStateException("APP_CONTACT_PHONE_WINDOW_DAYS 必须 ≥ 0");
+        }
+        if (invite.getLock().getMaxFailures() < 1 || invite.getLock().getMinutes() < 1) {
+            throw new IllegalStateException(
+                    "APP_INVITE_LOCK_MAX_FAILURES / APP_INVITE_LOCK_MINUTES 必须 ≥ 1");
+        }
+        if (auth.getLoginLock().getMaxFailures() < 1 || auth.getLoginLock().getMinutes() < 1) {
+            throw new IllegalStateException(
+                    "APP_AUTH_LOGIN_LOCK_MAX_FAILURES / APP_AUTH_LOGIN_LOCK_MINUTES 必须 ≥ 1");
+        }
+        if (message.getHomeUnreadLimit() < 1) {
+            throw new IllegalStateException("APP_MESSAGE_HOME_UNREAD_LIMIT 必须 ≥ 1");
+        }
     }
 
     public Jwt getJwt() {
@@ -110,6 +136,22 @@ public class AppProperties {
 
     public RateLimit getRateLimit() {
         return rateLimit;
+    }
+
+    public ContactPhone getContactPhone() {
+        return contactPhone;
+    }
+
+    public Invite getInvite() {
+        return invite;
+    }
+
+    public Auth getAuth() {
+        return auth;
+    }
+
+    public Message getMessage() {
+        return message;
     }
 
     /* ------------------------------------------------------------------ */
@@ -436,6 +478,141 @@ public class AppProperties {
 
         public void setInitEnabled(boolean initEnabled) {
             this.initEnabled = initEnabled;
+        }
+    }
+
+    /**
+     * 联系顾客（调取完整号码拨号）的限次策略。
+     *
+     * <p>这三个数是**隐私合规的一部分**，不是体验参数：号码平时一律掩码，只有真要打电话时才
+     * 按需调取一次并留痕。限次防的不是用户，是页面上无意识地反复点开把号码摊开。
+     * 所以放在环境变量而不是后台配置页 —— 商家不该能自己放宽。
+     */
+    public static class ContactPhone {
+        /** 同一笔订单 24 小时内最多调取几次 */
+        private int maxPerOrder24h = 5;
+        /** 同一个操作人一天最多调取几次 */
+        private int maxPerOperatorDay = 100;
+        /** 订单结束之后仍可调取的天数，留出售后与退款沟通的窗口；0 表示一结束就不可调 */
+        private int windowDays = 7;
+
+        public int getMaxPerOrder24h() {
+            return maxPerOrder24h;
+        }
+
+        public void setMaxPerOrder24h(int maxPerOrder24h) {
+            this.maxPerOrder24h = maxPerOrder24h;
+        }
+
+        public int getMaxPerOperatorDay() {
+            return maxPerOperatorDay;
+        }
+
+        public void setMaxPerOperatorDay(int maxPerOperatorDay) {
+            this.maxPerOperatorDay = maxPerOperatorDay;
+        }
+
+        public int getWindowDays() {
+            return windowDays;
+        }
+
+        public void setWindowDays(int windowDays) {
+            this.windowDays = windowDays;
+        }
+    }
+
+    /** 邀请码相关策略。 */
+    public static class Invite {
+
+        private final Lock lock = new Lock();
+
+        public Lock getLock() {
+            return lock;
+        }
+
+        /**
+         * 核销失败锁定：连错 N 次锁 M 分钟。
+         *
+         * <p>放环境变量的理由同 {@link ContactPhone}：这是防爆破的闸门，
+         * 6 位纯数字码只有 100 万种组合，阈值放宽一倍等于把爆破成本砍一半。
+         */
+        public static class Lock {
+            /** 连续错几次触发锁定 */
+            private int maxFailures = 10;
+            /** 锁定时长（分钟） */
+            private int minutes = 30;
+
+            public int getMaxFailures() {
+                return maxFailures;
+            }
+
+            public void setMaxFailures(int maxFailures) {
+                this.maxFailures = maxFailures;
+            }
+
+            public int getMinutes() {
+                return minutes;
+            }
+
+            public void setMinutes(int minutes) {
+                this.minutes = minutes;
+            }
+        }
+    }
+
+    /** 商家后台登录策略。 */
+    public static class Auth {
+
+        private final LoginLock loginLock = new LoginLock();
+
+        public LoginLock getLoginLock() {
+            return loginLock;
+        }
+
+        /**
+         * 登录失败锁定：连错 N 次锁 M 分钟。
+         *
+         * <p>次数存在 {@code user.login_fail_count} 列，改阈值不动表结构；
+         * 已在锁定中的账号仍按原 {@code lock_until} 到期，不会被这次改动提前解锁。
+         */
+        public static class LoginLock {
+            private int maxFailures = 3;
+            private int minutes = 30;
+
+            public int getMaxFailures() {
+                return maxFailures;
+            }
+
+            public void setMaxFailures(int maxFailures) {
+                this.maxFailures = maxFailures;
+            }
+
+            public int getMinutes() {
+                return minutes;
+            }
+
+            public void setMinutes(int minutes) {
+                this.minutes = minutes;
+            }
+        }
+    }
+
+    /** 站内消息。 */
+    public static class Message {
+        /**
+         * 首页通知横栏最多带几条未读。
+         *
+         * <p>只影响首页那一行滚动条，消息中心列表不受影响（那边是分页）。
+         * 取值大了横栏会撑高，通常不需要改。
+         */
+        private int homeUnreadLimit = 3;
+
+        public int getHomeUnreadLimit() {
+            return homeUnreadLimit;
+        }
+
+        public void setHomeUnreadLimit(int homeUnreadLimit) {
+            this.homeUnreadLimit = homeUnreadLimit;
         }
     }
 }

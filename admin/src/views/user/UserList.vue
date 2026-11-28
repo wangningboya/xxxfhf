@@ -291,8 +291,15 @@
           <span class="muted form-hint">这张码可被多少人各用一次</span>
         </el-form-item>
         <el-form-item label="有效期">
-          <el-input-number v-model="inviteForm.expireHours" :min="1" :max="720" :step="24" />
-          <span class="muted form-hint">小时（1-720）</span>
+          <el-input-number
+            v-model="inviteForm.expireHours"
+            :min="1"
+            :max="inviteMaxHours || undefined"
+            :step="24"
+          />
+          <span class="muted form-hint">
+            小时{{ inviteMaxHours ? '（1-' + inviteMaxHours + '）' : '' }}
+          </span>
         </el-form-item>
       </el-form>
       <div class="muted">只生成 1 个码；用户凭码进入后直接通过审核。</div>
@@ -706,27 +713,50 @@ async function onBatchApprove() {
 
 const inviteFormVisible = ref(false);
 const inviteCreating = ref(false);
-const inviteForm = ref({ uses: 1, expireHours: 168 });
+/** 有效期默认留空，由操作人自己填；不预填任何数字 */
+const inviteForm = ref({ uses: 1, expireHours: null });
+/**
+ * 有效期上限取「系统配置 → 业务限制 → 邀请码有效期上限」，不再写死 720。
+ * null = 还没取到，此时不传 max、也不在本地拦上限，交给服务端按配置判定。
+ */
+const inviteMaxHours = ref(null);
 const inviteCreatedVisible = ref(false);
 const inviteCreatedList = ref([]);
 const inviteUnread = ref(0);
 let invitePollTimer = null;
 
 function onCreateInvite() {
-  inviteForm.value = { uses: 1, expireHours: 168 };
+  inviteForm.value = { uses: 1, expireHours: null };
+  // 每次打开都重取一次：刚在系统配置里改过上限，这里必须立刻按新值限
+  http
+    .get('/admin/config')
+    .then((cfg) => {
+      const max = Number((cfg || {}).inviteMaxExpireHours);
+      inviteMaxHours.value = max >= 1 ? max : null;
+    })
+    .catch(() => {});
   inviteFormVisible.value = true;
 }
 
 function onSubmitInvites() {
   const uses = Number(inviteForm.value.uses);
-  const expireHours = Number(inviteForm.value.expireHours);
+  const raw = inviteForm.value.expireHours;
   // 与服务端同一套边界，先给一句人话，省一次往返
   if (!Number.isInteger(uses) || uses < 1) {
     ElMessage.warning('可用次数需为 1 以上的整数');
     return;
   }
-  if (!(expireHours >= 1 && expireHours <= 720)) {
-    ElMessage.warning('有效期需在 1 到 720 小时之间');
+  if (raw === null || raw === undefined || raw === '') {
+    ElMessage.warning('请填写有效期');
+    return;
+  }
+  const expireHours = Number(raw);
+  if (!Number.isInteger(expireHours) || expireHours < 1) {
+    ElMessage.warning('有效期需为 1 以上的整数小时');
+    return;
+  }
+  if (inviteMaxHours.value && expireHours > inviteMaxHours.value) {
+    ElMessage.warning('有效期不能超过 ' + inviteMaxHours.value + ' 小时');
     return;
   }
   inviteCreating.value = true;

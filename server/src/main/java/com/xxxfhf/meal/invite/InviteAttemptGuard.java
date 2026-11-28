@@ -1,6 +1,7 @@
 package com.xxxfhf.meal.invite;
 
 import com.xxxfhf.meal.common.BizException;
+import com.xxxfhf.meal.config.AppProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -26,16 +27,21 @@ public class InviteAttemptGuard {
 
     private static final Logger log = LoggerFactory.getLogger(InviteAttemptGuard.class);
 
-    /** 连续错 10 次触发锁定 */
-    static final int MAX_FAILURES = 10;
-
-    /** 锁定时长 */
-    static final Duration LOCK = Duration.ofMinutes(30);
-
     /** 进程内计数不能无限涨：超过这个量就顺手清掉已过锁定期/从未锁定的记录 */
     private static final int MAX_TRACKED = 10_000;
 
+    /**
+     * 阈值与锁定时长走环境变量（APP_INVITE_LOCK_MAX_FAILURES / APP_INVITE_LOCK_MINUTES，
+     * 默认 10 次 / 30 分钟）。这是防爆破的闸门：6 位纯数字码只有 100 万种组合，
+     * 放宽阈值等于把爆破成本砍半，所以不给后台可调。
+     */
+    private final AppProperties appProperties;
+
     private final Map<String, Attempt> attempts = new ConcurrentHashMap<>();
+
+    public InviteAttemptGuard(AppProperties appProperties) {
+        this.appProperties = appProperties;
+    }
 
     /**
      * 提交核销前先看是否还在锁定期，锁着就直接拒绝，不查库也不烧码。
@@ -54,8 +60,10 @@ public class InviteAttemptGuard {
         }
     }
 
-    /** 记录一次核销失败。第 10 次失败的同时开始锁 30 分钟。 */
+    /** 记录一次核销失败。到第 N 次（默认 10）失败的同时开始锁定 M 分钟（默认 30）。 */
     public void onFailure(String key) {
+        int maxFailures = appProperties.getInvite().getLock().getMaxFailures();
+        Duration lock = Duration.ofMinutes(appProperties.getInvite().getLock().getMinutes());
         LocalDateTime now = LocalDateTime.now();
         attempts.compute(key, (ignored, old) -> {
             Attempt attempt = old;
@@ -64,9 +72,9 @@ public class InviteAttemptGuard {
                 attempt = new Attempt();
             }
             attempt.failures++;
-            if (attempt.failures >= MAX_FAILURES) {
-                attempt.lockedUntil = now.plus(LOCK);
-                log.warn("邀请码错误次数达到上限，锁定 30 分钟 key={}", mask(key));
+            if (attempt.failures >= maxFailures) {
+                attempt.lockedUntil = now.plus(lock);
+                log.warn("邀请码错误次数达到上限，锁定 {} 分钟 key={}", lock.toMinutes(), mask(key));
             }
             return attempt;
         });

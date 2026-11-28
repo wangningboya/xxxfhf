@@ -36,8 +36,27 @@ public class ConfigController {
             ConfigKey.CUTOFF_TIME,
             ConfigKey.PICKUP_SLOTS,
             ConfigKey.DELIVERY_FEE,
-            ConfigKey.CLOSED_DATES
+            ConfigKey.CLOSED_DATES,
+            // 下单页要用它算加号上限：不下发的话前端只能继续写死一个假上限，
+            // 后台改了配置前端不跟，用户能加到超限份数、提交时才被打回
+            ConfigKey.ORDER_MAX_ITEM_KINDS,
+            ConfigKey.ORDER_MAX_QTY_PER_ITEM,
+            ConfigKey.ORDER_MAX_QTY_TOTAL
     };
+
+    /**
+     * 业务限制项的保存上限。
+     *
+     * <p>当前**等于默认值**，即商家只能往下调、不能往上调：这六个数字是按实际经营规模定的硬顶。
+     * 代价是「某天菜单出现第 5 种盒饭，后台调不上去」，届时改这里、或直接把上限改大。
+     * 集中成常量而不是散在调用处，就是为了那一天只改一行。
+     */
+    private static final int CEIL_ITEM_KINDS = ConfigKey.ORDER_MAX_ITEM_KINDS_DEFAULT;
+    private static final int CEIL_QTY_PER_ITEM = ConfigKey.ORDER_MAX_QTY_PER_ITEM_DEFAULT;
+    private static final int CEIL_QTY_TOTAL = ConfigKey.ORDER_MAX_QTY_TOTAL_DEFAULT;
+    private static final int CEIL_COMBO_DISH_QTY = ConfigKey.COMBO_DISH_MAX_QTY_DEFAULT;
+    private static final int CEIL_BATCH = ConfigKey.ORDER_BATCH_LIMIT_DEFAULT;
+    private static final int CEIL_INVITE_HOURS = ConfigKey.INVITE_MAX_EXPIRE_HOURS_DEFAULT;
 
     /** 截单时间：兼容「9:00」这种不补零的写法，与 ServeDateClock 的兼容口径一致 */
     private static final Pattern CUTOFF_PATTERN = Pattern.compile("^(\\d{1,2}):(\\d{2})$");
@@ -84,6 +103,8 @@ public class ConfigController {
      * 释放分钟回 30、取消超时回 0 = 关闭自动同意、自取时段回空 = 自取单下不了），
      * 商家只会看到「已保存」。后台界面本来就有 min/max 与时间选择器限着，这里补的是
      * 绕过界面直接调接口那条路。**只校验结构与范围，不校验业务合理性**（例如时段具体怎么写）。
+     *
+     * 六个业务限制项（份数、批量、邀请码有效期）同样卡范围，见 {@link #requireRange}。
      */
     @PostMapping("/admin/config")
     @RequirePerm(Perms.CONFIG_MANAGE)
@@ -94,6 +115,14 @@ public class ConfigController {
         requireNonNegativeInt("配送费", values.get(ConfigKey.DELIVERY_FEE));
         requireNonNegativeInt("未付款释放分钟数", values.get(ConfigKey.PREPAY_RELEASE_MINUTES));
         requireNonNegativeInt("取消申请超时小时数", values.get(ConfigKey.CANCEL_REQUEST_TIMEOUT_HOURS));
+        // 业务限制项：下限固定 1。0 不是「关闭限制」而是「谁都下不了单」，
+        // 读取侧虽然会夹到 1，但与其让商家看到「已保存」却发现行为不对，不如当场拒掉。
+        requireRange("一单最多几种盒饭", values.get(ConfigKey.ORDER_MAX_ITEM_KINDS), 1, CEIL_ITEM_KINDS);
+        requireRange("单个盒饭最多份数", values.get(ConfigKey.ORDER_MAX_QTY_PER_ITEM), 1, CEIL_QTY_PER_ITEM);
+        requireRange("一单总份数上限", values.get(ConfigKey.ORDER_MAX_QTY_TOTAL), 1, CEIL_QTY_TOTAL);
+        requireRange("盒饭内单个菜品份数", values.get(ConfigKey.COMBO_DISH_MAX_QTY), 1, CEIL_COMBO_DISH_QTY);
+        requireRange("批量接单/拒单上限", values.get(ConfigKey.ORDER_BATCH_LIMIT), 1, CEIL_BATCH);
+        requireRange("邀请码有效期上限", values.get(ConfigKey.INVITE_MAX_EXPIRE_HOURS), 1, CEIL_INVITE_HOURS);
         // 门店电话留空表示不展示拨号入口；填了就必须是可拨的号，否则用户点下去是空号
         PhoneValidator.requireShopPhone(values.get(ConfigKey.SHOP_PHONE));
         configService.setAll(values);
@@ -173,6 +202,32 @@ public class ConfigController {
             Integer.parseInt(value);
         } catch (NumberFormatException ex) {
             throw BizException.param(label + "超出可表示的范围，当前值：" + value);
+        }
+    }
+
+    /**
+     * 业务限制项：必须是 [min, max] 内的整数。
+     *
+     * <p>留空表示「不提交这一项」，直接放行 —— 与其它配置项的约定一致（空值不等于 0）。
+     * 校验在保存时做，读取侧另有 {@code getPositiveInt} 兜底，两道都要，缺一不可：
+     * 前者挡界面与接口，后者挡手工改库留下的脏值。
+     */
+    private void requireRange(String label, String raw, int min, int max) {
+        if (raw == null || raw.isBlank()) {
+            return;
+        }
+        String value = raw.trim();
+        if (!NON_NEGATIVE_INT.matcher(value).matches()) {
+            throw BizException.param(label + "必须是整数，当前值：" + value);
+        }
+        int parsed;
+        try {
+            parsed = Integer.parseInt(value);
+        } catch (NumberFormatException ex) {
+            throw BizException.param(label + "超出可表示的范围，当前值：" + value);
+        }
+        if (parsed < min || parsed > max) {
+            throw BizException.param(label + "必须在 " + min + " ~ " + max + " 之间，当前值：" + value);
         }
     }
 }

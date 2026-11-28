@@ -7,6 +7,8 @@ import com.xxxfhf.meal.audit.domain.AuditActions;
 import com.xxxfhf.meal.audit.service.AuditService;
 import com.xxxfhf.meal.common.BizException;
 import com.xxxfhf.meal.common.ErrorCode;
+import com.xxxfhf.meal.config.ConfigKey;
+import com.xxxfhf.meal.config.ConfigService;
 import com.xxxfhf.meal.invite.domain.InviteCode;
 import com.xxxfhf.meal.invite.domain.InviteStatus;
 import com.xxxfhf.meal.invite.domain.InviteUse;
@@ -51,30 +53,34 @@ public class InviteCodeService {
      */
     private static final int MAX_GENERATE_RETRY = 20;
 
-    /** 有效期上限 30 天，防止「永不过期」的码在群里长期流传 */
-    private static final int MAX_EXPIRE_HOURS = 24 * 30;
-
+    /**
+     * 有效期上限走配置（默认 30 天 = 720 小时），防止「永不过期」的码在群里长期流传。
+     * 上限值本身由后台配置页把着，这里只负责读。
+     */
     private static final DateTimeFormatter MINUTE = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     private final InviteCodeMapper inviteCodeMapper;
     private final InviteUseMapper inviteUseMapper;
     private final UserMapper userMapper;
     private final AuditService auditService;
+    private final ConfigService configService;
     private final SecureRandom random = new SecureRandom();
 
     public InviteCodeService(InviteCodeMapper inviteCodeMapper, InviteUseMapper inviteUseMapper,
-                             UserMapper userMapper, AuditService auditService) {
+                             UserMapper userMapper, AuditService auditService,
+                             ConfigService configService) {
         this.inviteCodeMapper = inviteCodeMapper;
         this.inviteUseMapper = inviteUseMapper;
         this.userMapper = userMapper;
         this.auditService = auditService;
+        this.configService = configService;
     }
 
     /**
      * 生成一个邀请码。
      *
      * @param uses        可用次数（正整数，不设上限）：这张码能被多少个人各用一次
-     * @param expireHours 有效期（小时），1 ~ 720
+     * @param expireHours 有效期（小时），1 ~ 后台配置的上限（默认 720）
      * @param createdBy   生成人 userId
      */
     @Transactional
@@ -83,8 +89,10 @@ public class InviteCodeService {
             throw BizException.param("可用次数至少 1 次");
         }
         int hours = expireHours <= 0 ? 24 : expireHours;
-        if (hours > MAX_EXPIRE_HOURS) {
-            throw BizException.param("有效期最长 " + MAX_EXPIRE_HOURS + " 小时（30 天）");
+        int maxHours = configService.getPositiveInt(
+                ConfigKey.INVITE_MAX_EXPIRE_HOURS, ConfigKey.INVITE_MAX_EXPIRE_HOURS_DEFAULT);
+        if (hours > maxHours) {
+            throw BizException.param("有效期最长 " + maxHours + " 小时");
         }
 
         for (int attempt = 0; attempt < MAX_GENERATE_RETRY; attempt++) {

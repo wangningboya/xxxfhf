@@ -96,7 +96,10 @@
     </view>
     <view class="status-row" wx:if="{{cutoffTime}}">
       <text class="status-label">截单时间</text>
-      <text class="status-value">前一天 {{cutoffTime}}</text>
+      <view class="status-value status-cutoff">
+        <text class="cutoff-base">前一天 {{cutoffTime}}{{cutoffLeftText ? ' ·' : ''}}</text>
+        <text class="cutoff-left" wx:if="{{cutoffLeftText}}">{{cutoffLeftText}}</text>
+      </view>
     </view>
     <view class="status-row" wx:if="{{shopAddress}}" bindlongpress="onCopyAddress">
       <text class="status-label">自取点</text>

@@ -59,4 +59,41 @@ public final class ConfigKey {
      * 系统照常运行，只是不发通知，不会报错。
      */
     public static final String SUBSCRIBE_TEMPLATES = "subscribeTemplates";
+
+    /* ---------------- 业务限制（商家可在后台调整，即时生效） ---------------- */
+
+    /**
+     * 一单最多几种盒饭。
+     *
+     * 这三个份数上限是**互为独立**的三道闸，不是一道闸的三种写法：
+     * 「最多几种」管购物车里有多少行，「每种最多几份」管单行数量，
+     * 「一单总份数」管所有行加起来 —— 只配其中一两个都会留下敞口。
+     */
+    public static final String ORDER_MAX_ITEM_KINDS = "orderMaxItemKinds";
+    public static final int ORDER_MAX_ITEM_KINDS_DEFAULT = 4;
+
+    /** 单个盒饭一次最多几份 */
+    public static final String ORDER_MAX_QTY_PER_ITEM = "orderMaxQtyPerItem";
+    public static final int ORDER_MAX_QTY_PER_ITEM_DEFAULT = 5;
+
+    /**
+     * 一单总份数上限（所有明细份数之和）。
+     *
+     * 代客下单不受此项与 {@link #ORDER_MAX_QTY_PER_ITEM}、{@link #ORDER_MAX_ITEM_KINDS} 约束：
+     * 团餐场景一次几十份是正常需求，数量由商家对着电话自己把关，系统只兜住当日剩余份数。
+     */
+    public static final String ORDER_MAX_QTY_TOTAL = "orderMaxQtyTotal";
+    public static final int ORDER_MAX_QTY_TOTAL_DEFAULT = 20;
+
+    /** 盒饭里单个菜品的份数上限（例汤 2 份是常态，这里防的是误填 200 份） */
+    public static final String COMBO_DISH_MAX_QTY = "comboDishMaxQty";
+    public static final int COMBO_DISH_MAX_QTY_DEFAULT = 99;
+
+    /** 一次批量接单 / 批量拒单的订单数上限，两个入口共用 */
+    public static final String ORDER_BATCH_LIMIT = "orderBatchLimit";
+    public static final int ORDER_BATCH_LIMIT_DEFAULT = 20;
+
+    /** 邀请码有效期上限（小时）。720 = 30 天，防「永不过期」的码在群里长期流传 */
+    public static final String INVITE_MAX_EXPIRE_HOURS = "inviteMaxExpireHours";
+    public static final int INVITE_MAX_EXPIRE_HOURS_DEFAULT = 24 * 30;
 }

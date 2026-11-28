@@ -6,6 +6,9 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xxxfhf.meal.audit.AuditHelper;
 import com.xxxfhf.meal.common.BizException;
 import com.xxxfhf.meal.common.MaskUtil;
+import com.xxxfhf.meal.config.AppProperties;
+import com.xxxfhf.meal.config.ConfigKey;
+import com.xxxfhf.meal.config.ConfigService;
 import com.xxxfhf.meal.dict.domain.DictCodes;
 import com.xxxfhf.meal.dict.service.DictService;
 import com.xxxfhf.meal.menu.ServeDateClock;
@@ -48,8 +51,6 @@ public class OrderAdminService {
 
     private static final Logger log = LoggerFactory.getLogger(OrderAdminService.class);
 
-    private static final int MAX_BATCH_ACCEPT = 50;
-
     private final OrderMapper orderMapper;
     private final OrderService orderService;
     private final UserMapper userMapper;
@@ -59,12 +60,16 @@ public class OrderAdminService {
     private final OrderStatusLogMapper statusLogMapper;
     private final DictService dictService;
     private final PrintService printService;
+    /** 批量接单 / 拒单上限走后台配置，调取号码的限次与窗口走环境变量 */
+    private final ConfigService configService;
+    private final AppProperties appProperties;
 
     public OrderAdminService(OrderMapper orderMapper, OrderService orderService,
                              UserMapper userMapper, ServeDateClock clock,
                              NotifyService notifyService, OrderStatusLogService statusLogService,
                              OrderStatusLogMapper statusLogMapper, DictService dictService,
-                             PrintService printService) {
+                             PrintService printService, ConfigService configService,
+                             AppProperties appProperties) {
         this.orderMapper = orderMapper;
         this.orderService = orderService;
         this.userMapper = userMapper;
@@ -74,6 +79,8 @@ public class OrderAdminService {
         this.statusLogMapper = statusLogMapper;
         this.dictService = dictService;
         this.printService = printService;
+        this.configService = configService;
+        this.appProperties = appProperties;
     }
 
     /* ==================== 查询 ==================== */
@@ -301,6 +308,17 @@ public class OrderAdminService {
     /* ==================== 状态流转 ==================== */
 
     /**
+     * 一次批量接/拒的上限，商家可在后台调（默认 20）。
+     *
+     * 两个入口共用同一个值：接单和拒单的界面是同一张列表、同一套勾选，
+     * 配成两个数只会让商家的「全选」有时成功有时报错。
+     */
+    private int batchLimit() {
+        return configService.getPositiveInt(
+                ConfigKey.ORDER_BATCH_LIMIT, ConfigKey.ORDER_BATCH_LIMIT_DEFAULT);
+    }
+
+    /**
      * 接单（支持批量）。**不再扣份数** —— 份数在下单时就占住了，这里只确认。
      *
      * 逐单处理，单笔失败不影响其它单：早上一批十几单里有一单状态不对，
@@ -311,8 +329,9 @@ public class OrderAdminService {
         if (orderIds == null || orderIds.isEmpty()) {
             throw BizException.param("请选择要接单的订单");
         }
-        if (orderIds.size() > MAX_BATCH_ACCEPT) {
-            throw BizException.param("一次最多接 " + MAX_BATCH_ACCEPT + " 单");
+        int maxBatch = batchLimit();
+        if (orderIds.size() > maxBatch) {
+            throw BizException.param("一次最多接 " + maxBatch + " 单");
         }
 
         List<String> accepted = new ArrayList<>();
@@ -400,8 +419,9 @@ public class OrderAdminService {
         if (orderIds == null || orderIds.isEmpty()) {
             throw BizException.param("请选择要拒单的订单");
         }
-        if (orderIds.size() > MAX_BATCH_ACCEPT) {
-            throw BizException.param("一次最多拒 " + MAX_BATCH_ACCEPT + " 单");
+        int maxBatch = batchLimit();
+        if (orderIds.size() > maxBatch) {
+            throw BizException.param("一次最多拒 " + maxBatch + " 单");
         }
         // 原因先校验：整批共用，没有「这一单不缺原因、那一单缺」的说法
         String trimmed = requireReason(reason);
@@ -546,15 +566,9 @@ public class OrderAdminService {
 
     /* ==================== 联系顾客 ==================== */
 
-    /** 订单结束（完成/取消/拒单）之后仍可调取号码的天数，留出退款与售后沟通的窗口 */
-    private static final int CONTACT_WINDOW_DAYS = 7;
-    /** 同一笔订单 24 小时内最多调取几次 */
-    private static final int CONTACT_MAX_PER_ORDER_24H = 5;
-    /** 同一个操作人一天最多调取几次 */
-    private static final int CONTACT_MAX_PER_OPERATOR_DAY = 100;
-
     /**
-     * 联系顾客：按需、限次、留痕地把完整号码交给商家拨号。
+     * 调取号码的三道限制**全部走环境变量**（APP_CONTACT_PHONE_*），默认 7 天窗口 / 同单 24h 内 5 次 /
+     * 每人每天 100 次。不给后台可调：这是隐私合规里的「按需、限次、留痕」，商家自己放宽等于自证违规。
      *
      * <p>列表里的号码一律是掩码，只有真要打电话时才取一次全号；这次调取会写进订单时间轴，
      * 「谁在什么时候看了哪一单的号码」事后可查。限次防的不是用户，是页面上无意识地
@@ -566,18 +580,21 @@ public class OrderAdminService {
     public String contactPhone(Long operatorId, Long orderId) {
         Order order = orderService.require(orderId);
         LocalDateTime now = LocalDateTime.now();
+        int windowDays = appProperties.getContactPhone().getWindowDays();
+        int maxPerOrder = appProperties.getContactPhone().getMaxPerOrder24h();
+        int maxPerOperatorDay = appProperties.getContactPhone().getMaxPerOperatorDay();
 
         LocalDateTime terminalAt = terminalAt(order);
-        if (terminalAt != null && terminalAt.isBefore(now.minusDays(CONTACT_WINDOW_DAYS))) {
-            throw BizException.conflict("订单结束已超过 " + CONTACT_WINDOW_DAYS + " 天，不能再调取顾客号码");
+        if (terminalAt != null && terminalAt.isBefore(now.minusDays(windowDays))) {
+            throw BizException.conflict("订单结束已超过 " + windowDays + " 天，不能再调取顾客号码");
         }
 
         long inOrder = statusLogMapper.selectCount(Wrappers.<OrderStatusLog>lambdaQuery()
                 .eq(OrderStatusLog::getAction, OrderLogActions.EVENT_CONTACT_PHONE)
                 .eq(OrderStatusLog::getOrderId, orderId)
                 .ge(OrderStatusLog::getCreatedAt, now.minusHours(24)));
-        if (inOrder >= CONTACT_MAX_PER_ORDER_24H) {
-            throw BizException.conflict("这单 24 小时内已调取 " + CONTACT_MAX_PER_ORDER_24H
+        if (inOrder >= maxPerOrder) {
+            throw BizException.conflict("这单 24 小时内已调取 " + maxPerOrder
                     + " 次号码，先看订单备注或稍后再试");
         }
 
@@ -585,8 +602,8 @@ public class OrderAdminService {
                 .eq(OrderStatusLog::getAction, OrderLogActions.EVENT_CONTACT_PHONE)
                 .eq(OrderStatusLog::getOperatorId, operatorId)
                 .ge(OrderStatusLog::getCreatedAt, LocalDate.now().atStartOfDay()));
-        if (today >= CONTACT_MAX_PER_OPERATOR_DAY) {
-            throw BizException.conflict("今天调取号码已达上限 " + CONTACT_MAX_PER_OPERATOR_DAY + " 次");
+        if (today >= maxPerOperatorDay) {
+            throw BizException.conflict("今天调取号码已达上限 " + maxPerOperatorDay + " 次");
         }
 
         String phone = contactNumberOf(order);

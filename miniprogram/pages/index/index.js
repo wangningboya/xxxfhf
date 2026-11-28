@@ -501,6 +501,13 @@ Page({
     if (cartUtil.isStale(cart)) {
       cart = cartUtil.empty();
     }
+    // 单个盒饭合计上限：快捷加购每点一次 +1，不拦就能一路点到超限，
+    // 到提交才被服务端打回。配置读不到（0）就不拦，交服务端判。
+    const perItem = Number((app.globalData.config || {}).orderMaxQtyPerItem) || 0;
+    if (perItem > 0 && cartUtil.qtyOfCombo(cart, line.comboId) + line.qty > perItem) {
+      wx.showToast({ title: '单个盒饭最多 ' + perItem + ' 份', icon: 'none' });
+      return;
+    }
     const next = cartUtil.addLine(cart, line);
     next.serveDate = this.data.activeDate;
     cartUtil.save(next);

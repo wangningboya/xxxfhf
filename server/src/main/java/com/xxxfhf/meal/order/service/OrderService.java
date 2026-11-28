@@ -67,10 +67,6 @@ public class OrderService {
 
     private static final Logger log = LoggerFactory.getLogger(OrderService.class);
 
-    /** 一单最多几种盒饭、每种最多几份。都是防误操作的合理上限，不是业务规则 */
-    private static final int MAX_ITEM_KINDS = 20;
-    private static final int MAX_QTY_PER_ITEM = 20;
-
     /** 订单号 / 取餐码撞唯一索引时的重试次数 */
     private static final int INSERT_RETRY = 5;
 
@@ -121,7 +117,7 @@ public class OrderService {
     @Transactional
     public OrderView create(Long userId, CreateCommand cmd) {
         accessGuard.requireApproved(userId);
-        return doCreate(userId, cmd, false, false);
+        return doCreate(userId, cmd, false, false, false);
     }
 
     /**
@@ -134,13 +130,16 @@ public class OrderService {
      * 3. **可以强制下单**（{@code force}，N-44）—— 地址已停用或所在区域已停用时仍然放行。
      *    商家在电话里已经和顾客确认过送哪，拦死等于用系统规则否定线下判断；
      *    放行会在时间轴留一条「商家强制下单：<原因>」，事后能复盘。
+     * 4. **不卡份数**（{@code proxy=true}）—— 三种份数上限（几种 / 每种几份 / 一单总份数）
+     *    全部不校验。团餐一单几十份是正常需求，数量由商家对着电话自己把关；
+     *    系统只兜住当日剩余份数这一条物理约束。
      *
      * 停业、限量、菜单发布状态一概照旧校验 —— 这几条是「有没有得卖」，与谁来下单无关。
      */
     @Transactional
     public OrderView createForUser(Long targetUserId, CreateCommand cmd, boolean force) {
         accessGuard.requireApproved(targetUserId);
-        OrderView view = doCreate(targetUserId, cmd, true, force);
+        OrderView view = doCreate(targetUserId, cmd, true, force, true);
         // 代客下单的对象多半是不会用小程序的人：不主动说一声，他既不知道单已下上，
         // 也不知道几点取、多少钱。只落站内消息，不推订阅（多半没授权）—— v3.50
         if (view != null && view.orderId() != null) {
@@ -149,7 +148,8 @@ public class OrderService {
         return view;
     }
 
-    private OrderView doCreate(Long userId, CreateCommand cmd, boolean skipCutoff, boolean force) {
+    private OrderView doCreate(Long userId, CreateCommand cmd, boolean skipCutoff, boolean force,
+                               boolean proxy) {
         String requestId = trimToNull(cmd.requestId());
         if (requestId != null && requestId.length() > 64) {
             throw BizException.param("请求号过长");
@@ -184,7 +184,7 @@ public class OrderService {
             throw BizException.conflict("该供餐日门店暂停供应");
         }
 
-        List<OrderItem> items = buildItems(serveDate, cmd.items());
+        List<OrderItem> items = buildItems(serveDate, cmd.items(), proxy);
 
         String deliveryType = normalizeDeliveryType(cmd.deliveryType());
         AddressSnapshot addressSnapshot = null;
@@ -298,13 +298,34 @@ public class OrderService {
         throw BizException.conflict("下单人数较多，请稍后重试");
     }
 
-    /** 明细校验与快照组装。只认**已发布**菜单里的盒饭。 */
-    private List<OrderItem> buildItems(LocalDate serveDate, List<ItemInput> inputs) {
+    /**
+     * 明细校验与快照组装。只认**已发布**菜单里的盒饭。
+     *
+     * @param proxy 代客下单时为 true，跳过三种份数上限（见 {@link #createForUser}）。
+     *              当日剩余份数不在此列，由占份语句的条件更新把关，代客下单照样受它约束。
+     */
+    private List<OrderItem> buildItems(LocalDate serveDate, List<ItemInput> inputs, boolean proxy) {
         if (inputs == null || inputs.isEmpty()) {
             throw BizException.param("请先选择盒饭");
         }
-        if (inputs.size() > MAX_ITEM_KINDS) {
-            throw BizException.param("一单最多 " + MAX_ITEM_KINDS + " 种盒饭");
+        // 上限每次现读：ConfigService 不缓存，商家在后台改完，下一单就按新值走
+        int maxKinds = proxy ? Integer.MAX_VALUE : configService.getPositiveInt(
+                ConfigKey.ORDER_MAX_ITEM_KINDS, ConfigKey.ORDER_MAX_ITEM_KINDS_DEFAULT);
+        int maxQtyPerItem = proxy ? Integer.MAX_VALUE : configService.getPositiveInt(
+                ConfigKey.ORDER_MAX_QTY_PER_ITEM, ConfigKey.ORDER_MAX_QTY_PER_ITEM_DEFAULT);
+        int maxQtyTotal = proxy ? Integer.MAX_VALUE : configService.getPositiveInt(
+                ConfigKey.ORDER_MAX_QTY_TOTAL, ConfigKey.ORDER_MAX_QTY_TOTAL_DEFAULT);
+
+        // 「种」按盒饭去重，不是明细行数：同一盒饭选白米饭 / 杂粮饭是两行明细，
+        // 但只是同一种盒饭。拿行数当种类数，会把「2 种盒饭各配 2 种主食」误判成 4 种。
+        Set<Long> kinds = new HashSet<>();
+        for (ItemInput input : inputs) {
+            if (input != null && input.comboId() != null) {
+                kinds.add(input.comboId());
+            }
+        }
+        if (kinds.size() > maxKinds) {
+            throw BizException.param("一单最多 " + maxKinds + " 种盒饭");
         }
 
         Map<Long, DailyMenu> byCombo = new HashMap<>();
@@ -316,6 +337,8 @@ public class OrderService {
 
         List<OrderItem> result = new ArrayList<>(inputs.size());
         Set<String> seen = new HashSet<>();
+        int totalQty = 0;
+        Map<Long, Integer> qtyByCombo = new HashMap<>();
         for (ItemInput input : inputs) {
             Long comboId = input == null ? null : input.comboId();
             if (comboId == null) {
@@ -334,9 +357,10 @@ public class OrderService {
             if (qty < 1) {
                 throw BizException.param("份数至少为 1");
             }
-            if (qty > MAX_QTY_PER_ITEM) {
-                throw BizException.param("单个盒饭一次最多 " + MAX_QTY_PER_ITEM + " 份");
-            }
+            totalQty += qty;
+            // 「单个盒饭最多 N 份」是**按盒饭合计**，不是按行：同一盒饭选白米饭 + 杂粮饭是两行，
+            // 逐行各校验 N 份，加起来就是 2N，拆规格就能绕过。先按盒饭汇总，循环外统一判。
+            qtyByCombo.merge(comboId, qty, Integer::sum);
 
             ComboSnapshot snapshot = menu.getComboSnapshot();
             if (snapshot == null) {
@@ -345,6 +369,17 @@ public class OrderService {
             List<OrderItem.Spec> specs = resolveSpecs(snapshot, input.optionIds());
             result.add(new OrderItem(comboId, snapshot.name(), menu.getPriceSnapshot(), qty,
                     snapshot.dishes() == null ? List.of() : snapshot.dishes(), specs));
+        }
+        // 单个盒饭合计：同一盒饭跨规格相加后不能超过 N 份
+        for (Map.Entry<Long, Integer> entry : qtyByCombo.entrySet()) {
+            if (entry.getValue() > maxQtyPerItem) {
+                throw BizException.param("单个盒饭最多 " + maxQtyPerItem + " 份");
+            }
+        }
+        // 总份数放在逐项校验之后：先报「这种盒饭太多」比先报「总共太多」更贴近用户的操作，
+        // 两种都超时用户先看到的是自己刚加的那一项。
+        if (totalQty > maxQtyTotal) {
+            throw BizException.param("一单最多 " + maxQtyTotal + " 份");
         }
         return result;
     }

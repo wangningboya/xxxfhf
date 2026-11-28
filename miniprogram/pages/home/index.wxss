@@ -374,6 +374,19 @@ page {
   color: #a86b00;
 }
 
+/* 截单时间行：主文案 + 倒计时折两行，倒计时用强调色 */
+.status-cutoff {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.5;
+}
+
+.cutoff-left {
+  color: #a86b00;
+  font-weight: 600;
+}
+
 .status-address {
   max-width: 66%;
   font-weight: 500;
